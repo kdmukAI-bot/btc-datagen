@@ -149,6 +149,38 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   const paused = await page.textContent('#qr-progress');
   await page.waitForTimeout(500);
   if ((await page.textContent('#qr-progress')) !== paused) fail(name, 'pause did not stop playback');
+
+  // Once a UR animation reaches the fountain parts it must STAY there — a real
+  // encoder never returns to the pure prefix.
+  //
+  // Rewind to frame 0 first: by this point free playback has already run past
+  // the pure parts, and stepping from wherever it landed sees no pure frames at
+  // all, which makes the assertion below pass without testing anything.
+  // Re-selecting a density reloads the payload, which resets to frame 0 and
+  // leaves playback paused.
+  await page.click('#density-seg button >> nth=1');
+  await page.waitForTimeout(400);
+
+  const seen = [];
+  for (let i = 0; i < 45; i++) {
+    seen.push((await page.textContent('#qr-progress')).trim());
+    await page.click('#step-frame');
+  }
+  const pureHits = seen.filter((s) => /^Part \d+ of/.test(s));
+  const uniquePure = new Set(pureHits);
+  if (pureHits.length === 0) {
+    fail(name, 'stepped 45 frames from the start without seeing one pure part — '
+      + 'the fountain assertion would be vacuous');
+  } else if (pureHits.length !== uniquePure.size) {
+    fail(name, 'animation looped back to the pure fragments '
+      + `(${pureHits.length} pure frames, only ${uniquePure.size} distinct)`);
+  }
+  if (!seen.some((s) => /mixed/.test(s))) {
+    fail(name, 'never reached a fountain (mixed) part');
+  }
+  console.log(`  fountain: ${uniquePure.size} pure part(s), each shown once, `
+    + 'then stays mixed');
+
   await page.click('#step-frame');
   if ((await page.textContent('#qr-progress')) === paused) fail(name, 'step-frame did not advance');
   await page.click('#playpause');

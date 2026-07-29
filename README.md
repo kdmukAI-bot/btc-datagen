@@ -70,7 +70,7 @@ python3 -m venv .venv
 
 ```bash
 .venv/bin/python -m tools.build_fixtures     # once, or after changing fixtures
-.venv/bin/python -m tools.build_site         # both networks, ~1 min, 3.8 MiB
+.venv/bin/python -m tools.build_site         # both networks, ~1-2 min
 .venv/bin/python -m tools.serve 8777         # prints a LAN URL for your phone
 ```
 
@@ -119,23 +119,38 @@ packs less in and is easier to scan. Density is sticky per format:
 | Frame rate | 5 fps, adjustable 0.5–10 |
 | SeedQR type | CompactSeedQR |
 
-### UR animations include fountain parts
+### UR animations include fountain parts, and never loop back
 
-The BC-UR multi-part encoder is **rateless**, and shipping only the obvious part
-of it is a trap. The first `seq_len` parts are the *pure* fragments (sequence
-numbers 1..N, plain slices of the message). Everything after that is a *mixed*
-part: an XOR of a pseudorandomly chosen fragment subset, numbered N+1, N+2, …
-forever. Sparrow just keeps calling `nextPart()`, so a real Sparrow animation
-never repeats.
+The BC-UR multi-part encoder is **rateless**. The first `seq_len` parts are the
+*pure* fragments (sequence numbers 1..N, plain slices of the message).
+Everything after that is a *mixed* part: an XOR of a pseudorandomly chosen
+fragment subset, numbered N+1, N+2, … forever. Sparrow just keeps calling
+`nextPart()`, so a real animation runs 1..N and then **stays in fountain mode
+indefinitely — it never returns to part 1**.
 
-Emitting only the pure fragments and looping them — which is what this did at
-first — produces a working animation that **never exercises the fountain
-XOR-decode path**, the most intricate part of any UR decoder. So the build ships
-the pure set plus up to 32 mixed parts and the browser cycles that; the frame
-counter distinguishes `Part 3 of 7` from `Fountain part 9 (mixed)`.
+Two shortcuts are tempting and both are wrong:
+
+- **Ship only the pure fragments and loop them.** Produces a working animation
+  that never exercises the fountain XOR-decode path — the most intricate part of
+  any UR decoder — so the test data silently fails to test the interesting half
+  of the implementation.
+- **Ship pure + mixed and cycle the whole list.** The animation jumps back to
+  part 1, which no real encoder does.
+
+So the build ships the pure set plus a mixed tail, and the browser plays the pure
+prefix once before looping *within the tail* (`QrPlayer.advance` in
+`site/app.js`). The frame counter distinguishes `Part 3 of 7` from
+`Fountain part 9 (mixed)`.
+
+That playback rule makes the tail's size load-bearing: a scanner that missed a
+pure fragment will only ever see mixed parts again, so if the tail held too few
+distinct parts to solve for what was missed, the animation would spin forever
+without completing — a hang at a demo table rather than a slow scan. A rateless
+code needs roughly `seq_len` distinct parts, so the tail targets 1:1 with the
+pure count (floor 16, ceiling 256).
 
 BBQR has no fountain coding — it really is a fixed set of slices that a sender
-loops, so every BBQR part is "pure".
+loops — so every BBQR part is "pure" and that case wraps normally.
 
 ### The transaction matrix
 
@@ -252,7 +267,8 @@ Low=80), uppercased per frame, EC-L, margin 2, 5 fps default:
 | Normal | 400 B | ~v16–17 (81–85) |
 | Low | 80 B | ~v7 (45×45) |
 
-A 100-input 2-of-3 PSBT is 39,197 bytes → 123 frames at Normal, 490 at Low.
+A 100-input 2-of-3 PSBT is 39,197 bytes → 98 pure frames at Normal, 490 at Low
+(plus the fountain tail).
 BBQR caps are in **chars** of the encoded body (Normal=2000, Low=1000).
 
 `sortedmulti`, not `multi` — these are UR script-expression tags **407** and

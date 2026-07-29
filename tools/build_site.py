@@ -47,8 +47,19 @@ STATIC_FILES = ["index.html", "app.js", "styles.css", "seedsigner-logo.svg"]
 MIN_FRAGMENT_BYTES = 10          # Sparrow MIN_FRAGMENT_LENGTH
 DEFAULT_FPS = 5                  # Sparrow ANIMATION_PERIOD_MILLIS = 200ms
 DEFAULT_SEEDQR = "compact"       # CompactSeedQR: smaller symbol, easier scan
-# Upper bound on the mixed (XOR fountain) parts appended after the pure set.
-MAX_MIXED_PARTS = 32
+
+# How many mixed (XOR fountain) parts to append after the pure set.
+#
+# This is sized so the mixed tail can complete a decode ON ITS OWN, which the
+# playback rule makes load-bearing: a real UR encoder never returns to the pure
+# prefix, so the browser loops the mixed tail forever once it gets there. If that
+# tail held too few distinct parts to solve for whatever fragments a scanner
+# missed, the animation would spin without ever completing — a hang at a demo
+# table rather than a slow scan. A rateless code needs roughly `seq_len` distinct
+# parts, hence the 1:1 target; the floor keeps tiny payloads interesting and the
+# ceiling stops the 490-frame stress case from doubling into absurdity.
+MIXED_PARTS_MIN = 16
+MIXED_PARTS_MAX = 256
 
 # Sparrow's two density presets per format. "normal" is the HIGHER-density
 # option (more data per frame); "low" packs less in and is easier to scan.
@@ -106,23 +117,25 @@ def ur_parts(raw_psbt: bytes, max_fragment_bytes: int) -> tuple:
     plain slice of the message). Every part after that is a *mixed* part: an XOR
     of a pseudorandomly chosen subset of fragments, with sequence numbers
     N+1, N+2, ... forever. Sparrow just keeps calling nextPart(), so a real
-    Sparrow animation never repeats.
+    Sparrow animation runs 1..N and then stays in fountain mode indefinitely —
+    it never returns to part 1.
 
-    We can't ship an infinite stream, so we ship the pure set plus a window of
-    mixed parts and let the browser cycle that. Emitting only the pure
-    fragments — the obvious shortcut — would mean a scanner never sees a mixed
-    part, leaving the fountain XOR-decode path (the most intricate part of any
-    UR decoder) completely unexercised by this test data.
+    We can't ship an infinite stream, so we ship the pure set plus a mixed tail
+    and the browser plays the pure prefix once before looping the tail (see
+    QrPlayer.advance in site/app.js). Two shortcuts were both wrong:
+
+      * emitting only the pure fragments leaves the fountain XOR-decode path —
+        the most intricate part of any UR decoder — entirely unexercised;
+      * cycling pure+mixed together makes the animation jump back to part 1,
+        which no real encoder does.
     """
     ur = UR("crypto-psbt", URPSBT(raw_psbt).to_cbor())
     encoder = UREncoder(ur, max_fragment_bytes, 0, MIN_FRAGMENT_BYTES)
     if encoder.is_single_part():
         return [encoder.next_part()], 1
     pure_count = encoder.fountain_encoder.seq_len()
-    # Double small animations; cap the tail on large ones so a 123-frame stress
-    # case doesn't double in file size for no extra coverage.
-    extra = min(pure_count, MAX_MIXED_PARTS)
-    return [encoder.next_part() for _ in range(pure_count + extra)], pure_count
+    mixed = max(MIXED_PARTS_MIN, min(pure_count, MIXED_PARTS_MAX))
+    return [encoder.next_part() for _ in range(pure_count + mixed)], pure_count
 
 
 def bbqr_parts(raw_psbt: bytes, max_fragment_chars: int) -> tuple:

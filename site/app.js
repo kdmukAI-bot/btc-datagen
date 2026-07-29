@@ -174,9 +174,32 @@ class QrPlayer {
     if (this.onFrame) this.onFrame(this.frame, payload.count);
   }
 
+  /* Once a UR animation reaches the fountain parts it STAYS there.
+   *
+   * A real encoder emits pure fragments 1..N and then mixed XOR parts N+1,
+   * N+2, … forever; it never returns to part 1. So when playback runs off the
+   * end of the shipped sequence it wraps to the start of the *mixed tail*, not
+   * to the beginning. The tail is built large enough to complete a decode on its
+   * own (see MIXED_PARTS_* in tools/build_site.py) precisely because this rule
+   * means a scanner that missed a pure fragment will only ever see mixed parts
+   * again.
+   *
+   * BBQR has no fountain coding — pureCount === count — and a BBQR sender really
+   * does loop its fixed set of slices, so that case wraps normally.
+   */
   advance(delta = 1) {
     if (!this.payload) return;
-    this.frame = (this.frame + delta + this.payload.count) % this.payload.count;
+    const { count, pureCount } = this.payload;
+    const hasFountainTail = pureCount < count;
+    let next = this.frame + delta;
+    if (next >= count) {
+      next = hasFountainTail
+        ? pureCount + ((next - pureCount) % (count - pureCount))
+        : next % count;
+    } else if (next < 0) {
+      next = (next % count + count) % count;
+    }
+    this.frame = next;
     this.draw();
   }
 
