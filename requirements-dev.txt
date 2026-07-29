@@ -1,0 +1,8 @@
+# Verification-only extras (tools/verify.py). Not needed to build the site.
+#
+# zbar, NOT OpenCV: OpenCV's built-in QRCodeDetector silently fails to read
+# dense symbols (it could not decode a v16 QR that zbar reads perfectly —
+# including one emitted by the reference encoder), which makes it useless as a
+# correctness gate.
+pyzbar
+numpy

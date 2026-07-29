@@ -1,0 +1,5 @@
+# Pinned to match SeedSigner's own versions for byte-identical output fidelity.
+embit==0.8.0
+urtypes==1.0.1
+qrcode==7.3.1
+pillow

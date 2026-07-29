@@ -1,0 +1,54 @@
+{
+  "_warning": "INSECURE TEST KEYS \u2014 deterministic, public, and stored in plain text. NEVER use for real funds.",
+  "seeds": [
+    {
+      "name": "alice",
+      "words": 24,
+      "entropy_hex": "5517aff3af1831ebc28038942ace28e431eba2c38fa6759d99592e586eab3ebd",
+      "mnemonic": "fence runway woman funny loan vote anxiety alpha neither filter mechanic silent burger sphere athlete visit intact under film frequent manage few wife round",
+      "master_fingerprint": "814d5ff8"
+    },
+    {
+      "name": "bob",
+      "words": 24,
+      "entropy_hex": "2d465e45cea1eaa004a0c48a50a4d2492e59296c59258df9ec4ed4aef82c0755",
+      "mnemonic": "coil cream multiply outer burger exotic barely blush medal lunch cruel myself tortoise net ramp caution mistake sorry beauty power usage bid bubble person",
+      "master_fingerprint": "02aaa648"
+    },
+    {
+      "name": "carol",
+      "words": 24,
+      "entropy_hex": "a3caef1a4e5295b46f6bfa1587327c292e2d4668fde6af078280d4c217ec66de",
+      "mnemonic": "phrase first shoot original citizen surface sad leg better define pair false tissue permit physical rubber pyramid despair parent praise cannon wage opinion script",
+      "master_fingerprint": "5142fc0d"
+    },
+    {
+      "name": "dave",
+      "words": 12,
+      "entropy_hex": "1ea9e9ed24136f0d7ba8d3eb90e1b3e7",
+      "mnemonic": "burger exercise kitten else dad mammal upgrade bounce twist mandate hollow sorry",
+      "master_fingerprint": "a196cc24"
+    },
+    {
+      "name": "erin",
+      "words": 12,
+      "entropy_hex": "97c2e947039d77b6aa05484c0f2284b3",
+      "mnemonic": "oak blanket fade already student swap pool poverty equal jungle patrol guilt",
+      "master_fingerprint": "5f8ad9dc"
+    },
+    {
+      "name": "frank",
+      "words": 24,
+      "entropy_hex": "f5131d00e9314cd0a9e845bf997c7d1a45aac13e2b798ba710f2bd0fcf82c7c0",
+      "mnemonic": "vital ocean dizzy sponsor below hair police anger sauce slogan butter cruel follow gauge weather hundred merry decade device key woman scrap business arena",
+      "master_fingerprint": "49068b26"
+    },
+    {
+      "name": "grace",
+      "words": 12,
+      "entropy_hex": "6532be761b452ae013b8d87d31c645eb",
+      "mnemonic": "gown nominee outside custom famous hybrid exclude brand large mixed multiply stock",
+      "master_fingerprint": "65489f9d"
+    }
+  ]
+}

@@ -1,0 +1,1121 @@
+{
+  "_warning": "INSECURE TEST KEYS \u2014 deterministic, public, and stored in plain text. NEVER use for real funds.",
+  "wallets": [
+    {
+      "name": "ss_native_segwit",
+      "sig_type": "single-sig",
+      "policy": "single sig",
+      "threshold": null,
+      "total": 1,
+      "script_type": "P2WPKH",
+      "script_label": "Native SegWit",
+      "network": "main",
+      "derivation": "m/84h/0h/0h",
+      "cosigners": [
+        "alice"
+      ],
+      "descriptor": "wpkh([814d5ff8/84h/0h/0h]xpub6CK8EpArrhUH6rXvXvKocdnY99uk2jig5S4zpQqNw36cSphQnwg9HWSq9AXqxPZPJ146fhPGHvRhfwaSLQbk7M1w71PUiNxBhYbi71EFB1K/<0;1>/*)",
+      "ur_crypto_output": "ur:crypto-output/taadmwtaaddloxaxhdclaxaovolutooshyjnhpotoldyfyatvdyalfsblfcewefgbapdlkqzfzroiezclfzoynaahdcxenzsjovodkcfndfngwineyctbaweltryechnkpbeihmortdyuojttehpimkefrqdamtaaddyotadlncsghykaeykaeykaocylygtheyaaxaxaycyhkytfglksgbtasgt",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmwtaaddloxaxhdclaxaovolutooshyjnhpotoldyfyatvdyalfsblfcewefgbapdlkqzfzroiezclfzoynaahdcxenzsjovodkcfndfngwineyctbaweltryechnkpbeihmortdyuojttehpimkefrqdamtaaddyotadlncsghykaeykaeykaocylygtheyaaxaxaycyhkytfglkzmlpcauo",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/84h/0h/0h",
+          "xpub": "xpub6CK8EpArrhUH6rXvXvKocdnY99uk2jig5S4zpQqNw36cSphQnwg9HWSq9AXqxPZPJ146fhPGHvRhfwaSLQbk7M1w71PUiNxBhYbi71EFB1K"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "bc1q4s0wfwxtaf53vtrg7avgy6n05zntg3u9kflejh"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "bc1qd8l7gajevfakd8jzeeuehfz8ejj9ahprmszj65"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "bc1qngw26y066j8urp7qntdwtg73gwux0qctg0mpvt"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "bc1qrvzkqptcvh9trl4seumytkd42e4w0yfxya948s"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "bc1q9wsrypcyxq67aey67n3agfdxlp0ns5hhl38dt7"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "bc1qu9fzpnyk4cw4frrg9nd7m5g0u3ccwxkenqm84g"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ss_native_segwit_testnet",
+      "sig_type": "single-sig",
+      "policy": "single sig",
+      "threshold": null,
+      "total": 1,
+      "script_type": "P2WPKH",
+      "script_label": "Native SegWit",
+      "network": "test",
+      "derivation": "m/84h/1h/0h",
+      "cosigners": [
+        "alice"
+      ],
+      "descriptor": "wpkh([814d5ff8/84h/1h/0h]tpubDDDR88jTt76jfLyiEicneHoyqBMPDUbpxXGQUctaZshfn3P4sm9Jq2D8Wv4sDDNYVmS462GP5SeZbReK9Ns5W93Z4XRcg5Buo8MAMtgpsLN/<0;1>/*)",
+      "ur_crypto_output": "ur:crypto-output/taadmwtaaddlonaxhdclaxmotirewdjkotwddraaimwlnbaemdmufhgukgzmpmdnnehtzeynwttkzscxatjyamaahdcxmuhdkiaospahtnfzcxmkwtdphyclaaolpamytyspqdiskbkoadeondgaiytteyhsahtaadehoyaoadamtaaddyotadlncsghykadykaeykaocylygtheyaaxaxaycyoyvwlffgenrejpwl",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmwtaaddlonaxhdclaxmotirewdjkotwddraaimwlnbaemdmufhgukgzmpmdnnehtzeynwttkzscxatjyamaahdcxmuhdkiaospahtnfzcxmkwtdphyclaaolpamytyspqdiskbkoadeondgaiytteyhsahtaadehoyaoadamtaaddyotadlncsghykadykaeykaocylygtheyaaxaxaycyoyvwlffgoydmrfdw",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/84h/1h/0h",
+          "xpub": "tpubDDDR88jTt76jfLyiEicneHoyqBMPDUbpxXGQUctaZshfn3P4sm9Jq2D8Wv4sDDNYVmS462GP5SeZbReK9Ns5W93Z4XRcg5Buo8MAMtgpsLN"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "tb1q8z744qerjqtry9mujekac3wcdfg2sjc2zqaglj"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "tb1qdtauemvv4f3keyuep9syqum7flzqdjzqw8s5hu"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "tb1qfxnekjmvca4mfsgn0k3uwsde577kuexcw0l86y"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "tb1q6hgnaaftmgkyr9f7c2vjgup7qpuns6n3es664q"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "tb1q76esfsvhar0vl9g6gpd4jyr22eqhww5n2w43qz"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "tb1q9agwsluarwdp53m3npsrrmtc2msukq5p5srnc5"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ss_nested_segwit",
+      "sig_type": "single-sig",
+      "policy": "single sig",
+      "threshold": null,
+      "total": 1,
+      "script_type": "P2SH-P2WPKH",
+      "script_label": "Nested SegWit",
+      "network": "main",
+      "derivation": "m/49h/0h/0h",
+      "cosigners": [
+        "alice"
+      ],
+      "descriptor": "sh(wpkh([814d5ff8/49h/0h/0h]xpub6CwsciKVSKVq8fAFqXvEMTMaaaUR1dNHqvGfjg21oammmM3DREuHjWLwEWoU3TnxSwstJJxa3nmDKPY7kkP5hSxxFJoMQDpBprfV9Fd8w2e/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmhtaadmwtaaddloxaxhdclaxrlytdrieaofgemvwlkryldfsaocynlaemttslphgihiasscskbwefszcbtfxzekgaahdcxdwfzaaveambzdeotdraoretololfkgiygedevokecxgsoxahjlmntntykpskvewfamtaaddyotadlncsehykaeykaeykaocylygtheyaaxaxaycypfdwjtamgwrkkpeo",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmhtaadmwtaaddloxaxhdclaxrlytdrieaofgemvwlkryldfsaocynlaemttslphgihiasscskbwefszcbtfxzekgaahdcxdwfzaaveambzdeotdraoretololfkgiygedevokecxgsoxahjlmntntykpskvewfamtaaddyotadlncsehykaeykaeykaocylygtheyaaxaxaycypfdwjtamkboskgln",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/49h/0h/0h",
+          "xpub": "xpub6CwsciKVSKVq8fAFqXvEMTMaaaUR1dNHqvGfjg21oammmM3DREuHjWLwEWoU3TnxSwstJJxa3nmDKPY7kkP5hSxxFJoMQDpBprfV9Fd8w2e"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "36dnPbcPn78ZoVTKiDgGEZs2MmNc7AMkkk"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "3J2yMMhvaYTq9M425UsBJ2Yspm4NDzVoHJ"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "35MHroD6mfvJg7vhoqL5sLMTBSVUK8BmLo"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "3Nue6itKs4uqXZbvXGsYVWD3rH4FVwx7gg"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "397EJCq7vNcvMRkxwUytokubZjv8vB9b6A"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "31u29wpDKhEbxLBkGazMPFiWc3KzQHu5C1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ss_nested_segwit_testnet",
+      "sig_type": "single-sig",
+      "policy": "single sig",
+      "threshold": null,
+      "total": 1,
+      "script_type": "P2SH-P2WPKH",
+      "script_label": "Nested SegWit",
+      "network": "test",
+      "derivation": "m/49h/1h/0h",
+      "cosigners": [
+        "alice"
+      ],
+      "descriptor": "sh(wpkh([814d5ff8/49h/1h/0h]tpubDCKX6GkFVUXYwi1XGDT97yHCv2FerCFocLcJ36WAoKFdrnup7vst6m3x6Toywy1bMAdngCbMUZUuCpVptVQwMdSajPAKQSpZW6t5nVbqiWo/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmhtaadmwtaaddlonaxhdclaofsdamdkiswtoheylbagebkaouodtosjtfljprkeytdlfyloxjejlmsamtnrlsgzsaahdcxfnfdbaatrfiofenblpwtimlfzocnwkbttybnjzqzfzonjedynlhlswuybnstpemuahtaadehoyaoadamtaaddyotadlncsehykadykaeykaocylygtheyaaxaxaycydedtfrdmaafnytol",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmhtaadmwtaaddlonaxhdclaofsdamdkiswtoheylbagebkaouodtosjtfljprkeytdlfyloxjejlmsamtnrlsgzsaahdcxfnfdbaatrfiofenblpwtimlfzocnwkbttybnjzqzfzonjedynlhlswuybnstpemuahtaadehoyaoadamtaaddyotadlncsehykadykaeykaocylygtheyaaxaxaycydedtfrdmoyztcamt",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/49h/1h/0h",
+          "xpub": "tpubDCKX6GkFVUXYwi1XGDT97yHCv2FerCFocLcJ36WAoKFdrnup7vst6m3x6Toywy1bMAdngCbMUZUuCpVptVQwMdSajPAKQSpZW6t5nVbqiWo"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "2NAEzvviWF6FV4VGiixdU78g1ZaS3jJoYzM"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "2N1ghmM9i4pUt5P32vyChiTn8wv176afRdx"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "2NAJJQM4Dw4MXqLKCQjSGifakHDhBUY6H6s"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "2MtLMAAE7eRUsBLgsxt8drigfcZukcVPc3m"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "2N18fZKHXiaqtSNgg4nkV5JfJe9fPVzuHQN"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "2NE9PoJ2ajUZgdgUMbCS7ArHMrQLDEyTQyx"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ss_taproot",
+      "sig_type": "single-sig",
+      "policy": "single sig",
+      "threshold": null,
+      "total": 1,
+      "script_type": "P2TR",
+      "script_label": "Taproot",
+      "network": "main",
+      "derivation": "m/86h/0h/0h",
+      "cosigners": [
+        "alice"
+      ],
+      "descriptor": "tr([814d5ff8/86h/0h/0h]xpub6ChntNGUbQzDhW5VTfyWQqns6qxW3T2CvXSzcb5Zia35enxFakpJtqTP76rerGW2QjiA8wDBFLtaH5kgMNZJiVkpeyrigyTvNgsGVQwVhvu/<0;1>/*)",
+      "ur_crypto_output": "ur:crypto-output/taadnltaaddloxaxhdclaxftesdwlsbtmhfhotcxnbbdcsotlnaepagtstrsbnyttakgaegowztsjebboehkjlaahdcxrecmchrsbnveespkjopejpmoingrpfweplbwsawlzcmoaodtjljtstfdregyasemamtaaddyotadlncshfykaeykaeykaocylygtheyaaxaxaycymydkjoieutuogltp",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadnltaaddloxaxhdclaxftesdwlsbtmhfhotcxnbbdcsotlnaepagtstrsbnyttakgaegowztsjebboehkjlaahdcxrecmchrsbnveespkjopejpmoingrpfweplbwsawlzcmoaodtjljtstfdregyasemamtaaddyotadlncshfykaeykaeykaocylygtheyaaxaxaycymydkjoievsghhtga",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/86h/0h/0h",
+          "xpub": "xpub6ChntNGUbQzDhW5VTfyWQqns6qxW3T2CvXSzcb5Zia35enxFakpJtqTP76rerGW2QjiA8wDBFLtaH5kgMNZJiVkpeyrigyTvNgsGVQwVhvu"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "bc1p5lqgjraps3vfelwn7vkg0hagxgfesxmtfs43fandux48fvhxrpyqmausup"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "bc1pmwwk7xzf4n7qfqaaq44h4gggzne8m9efthxl46pfms9ql5mh0qfqx3hrjs"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "bc1peld538wmfcfdlpaj32pvellkezxv0ywqfyj93mp4x86ycrdwkg2sd2yvvn"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "bc1ph4vgj3ya6ntt6ttjzlj0f3ns782euqunuly52hja3tuaymnxmneqt2c76e"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "bc1pt36j577q6kulcavfhmtlyd9f4mr97l38jsysy39xdhqd0mjvxn6s2l0fv3"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "bc1pgrxwa0p02j6035ksgftsgzka0eqep4gexvwukcjrgv83nmkzjktqxl7wc5"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ss_taproot_testnet",
+      "sig_type": "single-sig",
+      "policy": "single sig",
+      "threshold": null,
+      "total": 1,
+      "script_type": "P2TR",
+      "script_label": "Taproot",
+      "network": "test",
+      "derivation": "m/86h/1h/0h",
+      "cosigners": [
+        "alice"
+      ],
+      "descriptor": "tr([814d5ff8/86h/1h/0h]tpubDDj2f3aYVkRU4KFtcxzBh7M7NPunfSz1aS3EAyNTAi55F1jT96mo8SoxSjNfMgHPnDtda1NBTWiXKQX6h92SNg3P7kW4qXRzWoB48phQy3p/<0;1>/*)",
+      "ur_crypto_output": "ur:crypto-output/taadnltaaddlonaxhdclaotnisryprlrsklauyatfgloeswslykkflrneolupajogydpiokbtefhryzcdrpsktaahdcxeemnfgspcedktypmimnddrvllolyfnntnscmprhfjzsngycngyhsoyvlinmdrfoeahtaadehoyaoadamtaaddyotadlncshfykadykaeykaocylygtheyaaxaxaycyvdhpwsihuerkmkgu",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadnltaaddlonaxhdclaotnisryprlrsklauyatfgloeswslykkflrneolupajogydpiokbtefhryzcdrpsktaahdcxeemnfgspcedktypmimnddrvllolyfnntnscmprhfjzsngycngyhsoyvlinmdrfoeahtaadehoyaoadamtaaddyotadlncshfykadykaeykaocylygtheyaaxaxaycyvdhpwsihgacxhfmt",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/86h/1h/0h",
+          "xpub": "tpubDDj2f3aYVkRU4KFtcxzBh7M7NPunfSz1aS3EAyNTAi55F1jT96mo8SoxSjNfMgHPnDtda1NBTWiXKQX6h92SNg3P7kW4qXRzWoB48phQy3p"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "tb1p3d97dhhkaln59yt3480hg6qv4ne3rjx7vnl74w9a4uemt4p8r4ssavcsz9"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "tb1pghx9y8y7fmrakv5c4ha6u50xr7rnrpkgndtmuyq4xp862kqq2l9sx943ln"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "tb1pds4h8852fnscqydqmxwyac98ymldau4yhyrgq0e99lzk780rmzes4pufc5"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "tb1ph5qk04ctzs4gh4v76uy89vjraq4gevas67n3rjws2zac6dr7hj8sz6s20l"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "tb1pc454elhvv3skty7lfy7sfsxcdmqzudj3f2fw3ykze67756se9n6qg7sfg0"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "tb1pkqm9f8t4cqhrhzdr5yy8aw4sq2yat297fryd6jcm05g2w3er0prqsc68ve"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ss_legacy",
+      "sig_type": "single-sig",
+      "policy": "single sig",
+      "threshold": null,
+      "total": 1,
+      "script_type": "P2PKH",
+      "script_label": "Legacy",
+      "network": "main",
+      "derivation": "m/44h/0h/0h",
+      "cosigners": [
+        "alice"
+      ],
+      "descriptor": "pkh([814d5ff8/44h/0h/0h]xpub6Ca39dqBzwd1FmHdtKQxv7uG9HKe2xMvFZTxc8WhBvcuZpyLFTJmjok46RVprhFTZumRp6FikErX2G4ymXqTpxmvagidK7WVCiL6rpL4XjQ/<0;1>/*)",
+      "ur_crypto_output": "ur:crypto-output/taadmutaaddloxaxhdclaogrhpjnjelfnsingdtltdeechdymhskamvdjsghlnlniasgflpfemcyamdmottdchaahdcxrdnsditlehzoidbbmsaowssridrdpamhfpgydsgdcybsaaksgtgymkmkcsbagdfgamtaaddyotadlncsdwykaeykaeykaocylygtheyaaxaxaycykewkcyhpdwmegwms",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmutaaddloxaxhdclaogrhpjnjelfnsingdtltdeechdymhskamvdjsghlnlniasgflpfemcyamdmottdchaahdcxrdnsditlehzoidbbmsaowssridrdpamhfpgydsgdcybsaaksgtgymkmkcsbagdfgamtaaddyotadlncsdwykaeykaeykaocylygtheyaaxaxaycykewkcyhpcfcfhpam",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/44h/0h/0h",
+          "xpub": "xpub6Ca39dqBzwd1FmHdtKQxv7uG9HKe2xMvFZTxc8WhBvcuZpyLFTJmjok46RVprhFTZumRp6FikErX2G4ymXqTpxmvagidK7WVCiL6rpL4XjQ"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "1PYatQf3V3ZyD7h11rLRBzdDXg213R53Fv"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "1LKJ5eJ9V5KKyKjn13UTYLadh33RYTJp4z"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "18qvZeKw3qNpzRFQXQkTb4u7aja7w9nK1T"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "1G4Xak67ovc3HW58ZK6YT8kWx3pGPhz56J"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "13U8anf4BQ5bEeQfmWLefdC3Mj3pCYgAzN"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "1HC4jNSB2JyjHKRRRAsXaPRXe5GbA2J1TV"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ss_legacy_testnet",
+      "sig_type": "single-sig",
+      "policy": "single sig",
+      "threshold": null,
+      "total": 1,
+      "script_type": "P2PKH",
+      "script_label": "Legacy",
+      "network": "test",
+      "derivation": "m/44h/1h/0h",
+      "cosigners": [
+        "alice"
+      ],
+      "descriptor": "pkh([814d5ff8/44h/1h/0h]tpubDDBw5baLT4s5UzLdrQA9mMHdPvfvSMUzqJkRGMHUWUkNhYU91dL9GTimwU3XjaCV3PHDUoSoqoJQUUHd3St7xQ37QeXcbTL3KzBrpPXYgy3/<0;1>/*)",
+      "ur_crypto_output": "ur:crypto-output/taadmutaaddlonaxhdclaoplpdvshthgfdkizeskgdchgogwhggwvywtjzdwhhonwkwshhftbtlnnbonemvdfnaahdcxhpbaglsatndtistdnncwdplrrynybdsbfscmztpmdnoefhtseotnsteylfbtesctahtaadehoyaoadamtaaddyotadlncsdwykadykaeykaocylygtheyaaxaxaycynnimpdghrdisjzah",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmutaaddlonaxhdclaoplpdvshthgfdkizeskgdchgogwhggwvywtjzdwhhonwkwshhftbtlnnbonemvdfnaahdcxhpbaglsatndtistdnncwdplrrynybdsbfscmztpmdnoefhtseotnsteylfbtesctahtaadehoyaoadamtaaddyotadlncsdwykadykaeykaocylygtheyaaxaxaycynnimpdghdpwfoert",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/44h/1h/0h",
+          "xpub": "tpubDDBw5baLT4s5UzLdrQA9mMHdPvfvSMUzqJkRGMHUWUkNhYU91dL9GTimwU3XjaCV3PHDUoSoqoJQUUHd3St7xQ37QeXcbTL3KzBrpPXYgy3"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "n3dBBsiNJ8BE1XF6ajdpzE565GL8ocEXQv"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "mn4s2PVmvxF9cDcmfELL5rZct2aUZpk9zH"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "mrFBaRLBB1kXTdXWxTxg8SEWmkWr62ko1P"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "mrCc3a918HNzPXv1bYzibNNwmchmfxh1n9"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "mkdWwRYgVj5986yrRS33wVvWqYxRbhTaEH"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "moL6WWKeywx6go8eTzAotJbULxX6XvTxFa"
+          }
+        ]
+      }
+    },
+    {
+      "name": "2of3_p2wsh",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2WSH",
+      "script_label": "Native SegWit multisig",
+      "network": "main",
+      "derivation": "m/48h/0h/0h/2h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "wsh(sortedmulti(2,[814d5ff8/48h/0h/0h/2h]xpub6DnNaCBEvRdfHh3z4yRDJf8x92YNPgN2jEp3R8GYmyAz5ZjGzJrvmHJKzYrhx2DJY6fLrbwASgadKYHtVwPGuuRVodBKJkrdyKHn7PM3rsj/<0;1>/*,[02aaa648/48h/0h/0h/2h]xpub6EXwDPantTHcYbfjqiktdLvfMyMTBXFHxngKirzZuLRzJAZ4G2deEAZe6LzHGsASsyqxXTr7Ps5hyCWk6dnuHtq8ae64TafJeNU9qgtVTLH/<0;1>/*,[5142fc0d/48h/0h/0h/2h]xpub6F1uQ8D4mmxARaBQjXbznx9LZpbCpvFwo7J4sdghAQCG4mhs7EK7Tge7tz2Dw8Vhtz7zK5GGRqX35aGocxfg4icJyqMWwzaWUw5HTQLHPz9/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmetaadmsoeadaoaolstaaddloxaxhdclaxhsdyihvdfyoyfwmsrdgylrbdsgmulostlumeasylasprkolswpmskpidgmgumncmaahdcxoxlfgrbswtpsdwbgzcjljsmnwnrhkostfnguhtcpfxlgtlplfrswhetbidcetlnbamtaaddyotadlocsdyykaeykaeykaoykaocylygtheyaaxaaaycyclwtgepltaaddloxaxhdclaodliyurfghpzekghphkmtdpswdkuramfdjtjylttiwlfdaeeniobslgmocyhpheimaahdcxcswswsiagsjeammwbbcwfpatqdhslfkewsonndrthnoylrkksfdlcheswdbkytenamtaaddyotadlocsdyykaeykaeykaoykaocyaopkolfdaxaaaycyloctsfcptaaddloxaxhdclaxtpettirygtgwnbhtoxpeqzlujejpflpsoecwutfegohdaazskncaecdmethttlpaaahdcxbkttdlenfegddsmhversmylgjpldkbnblasaotlafhmoplstlfqdwmpebywpbegramtaaddyotadlocsdyykaeykaeykaoykaocygyfwztbtaxaaaycysorkbktpkkhebyad",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmetaadmsoeadaoaolstaaddloxaxhdclaxhsdyihvdfyoyfwmsrdgylrbdsgmulostlumeasylasprkolswpmskpidgmgumncmaahdcxoxlfgrbswtpsdwbgzcjljsmnwnrhkostfnguhtcpfxlgtlplfrswhetbidcetlnbamtaaddyotadlocsdyykaeykaeykaoykaocylygtheyaaxaaaycyclwtgepltaaddloxaxhdclaodliyurfghpzekghphkmtdpswdkuramfdjtjylttiwlfdaeeniobslgmocyhpheimaahdcxcswswsiagsjeammwbbcwfpatqdhslfkewsonndrthnoylrkksfdlcheswdbkytenamtaaddyotadlocsdyykaeykaeykaoykaocyaopkolfdaxaaaycyloctsfcptaaddloxaxhdclaxtpettirygtgwnbhtoxpeqzlujejpflpsoecwutfegohdaazskncaecdmethttlpaaahdcxbkttdlenfegddsmhversmylgjpldkbnblasaotlafhmoplstlfqdwmpebywpbegramtaaddyotadlocsdyykaeykaeykaoykaocygyfwztbtaxaaaycysorkbktprnhghejn",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/48h/0h/0h/2h",
+          "xpub": "xpub6DnNaCBEvRdfHh3z4yRDJf8x92YNPgN2jEp3R8GYmyAz5ZjGzJrvmHJKzYrhx2DJY6fLrbwASgadKYHtVwPGuuRVodBKJkrdyKHn7PM3rsj"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/48h/0h/0h/2h",
+          "xpub": "xpub6EXwDPantTHcYbfjqiktdLvfMyMTBXFHxngKirzZuLRzJAZ4G2deEAZe6LzHGsASsyqxXTr7Ps5hyCWk6dnuHtq8ae64TafJeNU9qgtVTLH"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/48h/0h/0h/2h",
+          "xpub": "xpub6F1uQ8D4mmxARaBQjXbznx9LZpbCpvFwo7J4sdghAQCG4mhs7EK7Tge7tz2Dw8Vhtz7zK5GGRqX35aGocxfg4icJyqMWwzaWUw5HTQLHPz9"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "bc1qecqflvqj6skhxxw7k0v863u0fgscjhkjnw3l3mc3n6hfxx6p9atsqqadwd"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "bc1qrk3thasp80j7g6syag557pe0w59c3xrqcdl5fuwf9hlly6qvq67qgd63ac"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "bc1qeepkdnlgug467reh7ywjy9z7lz8kc5684p3zk5k2s0hqwskh9uhsfettsu"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "bc1qeu3vsz2yfy9hrg72uwc8c7uufra75qgffqt54lf6s0zn7c45jatq4a6q8s"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "bc1quzt59klyjly6x0dp7ck2te0yjuz8wefp45uw76ggqgm69j8ysrzsntwkzl"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "bc1qp70t4u68vg66ackaa4fayandnnhnltjw3ddj4fl86uwnektyakjssgnm7r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "2of3_p2wsh_testnet",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2WSH",
+      "script_label": "Native SegWit multisig",
+      "network": "test",
+      "derivation": "m/48h/1h/0h/2h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "wsh(sortedmulti(2,[814d5ff8/48h/1h/0h/2h]tpubDDy79wPtBb2cJgz5wbA85e8D44CgKBTaXLgcWzkGJq7LC6q9CNwYjaxgYUwE3cHLzEumLSpcwfDXWcbpHSZej4Gu6tgpNgZo5mU3mhY3wPw/<0;1>/*,[02aaa648/48h/1h/0h/2h]tpubDEsUwSRxjWhhw7KsqhP2yLByx5rAL7eQCQ4oKb9gh9nTCNqMCNS5FPsAHtRA1SZDMSncdbceRuKu4LeNBUnX3jm4RCERNYyZcopJQQD6j24/<0;1>/*,[5142fc0d/48h/1h/0h/2h]tpubDEMsWXv5UygyBqmt1gT1f8Ch9FDXKKWGmtsxVi3n7mkLXBofumfeW2neGdXZ7GpSY32oXxLwJPpjZiV36oQ9PkyGKo44VjkwxZ33D6ugrhp/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmetaadmsoeadaoaolstaaddlonaxhdclaocswkjtdwldfltsjzwtbtbycmflbndpfdwfveztvwrkkbbswletckemctgsykcngaaahdcxwdiacwylvlgsmkutwfmyhedphpjoiarlosescnbtammnpdecntjyleltgmclztvsahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocylygtheyaaxaaaycyayhslnfdtaaddlonaxhdclaozodmetiscteokoglglbnlrwmwzsprfeefdehqdkkdsprhhprbkbtbgfprloybnoxaahdcxqzwfjpjkghmsgubsrkgduylrjkmwwesfsoksjlbwfwasmhbbckimtemysastcssrahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocyaopkolfdaxaaaycylsfscpsktaaddlonaxhdclaorscpsgbgihgtonttisfebeprgewksgintkemdnrttsenoxlpkoaoynztskgrjycaaahdcxuyhkyklnlpenjsytldfzvdsrstaamnjeghbsimbggeeonedkrpjtmhgmadhhzczcahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocygyfwztbtaxaaaycyfsstspcffhwzhdlp",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmetaadmsoeadaoaolstaaddlonaxhdclaocswkjtdwldfltsjzwtbtbycmflbndpfdwfveztvwrkkbbswletckemctgsykcngaaahdcxwdiacwylvlgsmkutwfmyhedphpjoiarlosescnbtammnpdecntjyleltgmclztvsahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocylygtheyaaxaaaycyayhslnfdtaaddlonaxhdclaozodmetiscteokoglglbnlrwmwzsprfeefdehqdkkdsprhhprbkbtbgfprloybnoxaahdcxqzwfjpjkghmsgubsrkgduylrjkmwwesfsoksjlbwfwasmhbbckimtemysastcssrahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocyaopkolfdaxaaaycylsfscpsktaaddlonaxhdclaorscpsgbgihgtonttisfebeprgewksgintkemdnrttsenoxlpkoaoynztskgrjycaaahdcxuyhkyklnlpenjsytldfzvdsrstaamnjeghbsimbggeeonedkrpjtmhgmadhhzczcahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocygyfwztbtaxaaaycyfsstspcfrkrhhgbe",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/48h/1h/0h/2h",
+          "xpub": "tpubDDy79wPtBb2cJgz5wbA85e8D44CgKBTaXLgcWzkGJq7LC6q9CNwYjaxgYUwE3cHLzEumLSpcwfDXWcbpHSZej4Gu6tgpNgZo5mU3mhY3wPw"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/48h/1h/0h/2h",
+          "xpub": "tpubDEsUwSRxjWhhw7KsqhP2yLByx5rAL7eQCQ4oKb9gh9nTCNqMCNS5FPsAHtRA1SZDMSncdbceRuKu4LeNBUnX3jm4RCERNYyZcopJQQD6j24"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/48h/1h/0h/2h",
+          "xpub": "tpubDEMsWXv5UygyBqmt1gT1f8Ch9FDXKKWGmtsxVi3n7mkLXBofumfeW2neGdXZ7GpSY32oXxLwJPpjZiV36oQ9PkyGKo44VjkwxZ33D6ugrhp"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "tb1qz0z4yu5w6xtq62sry44weqc40nymf3t6v25k8lcy7mu7cnpc8jjsj7kl6u"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "tb1q2y3v2zcu88kw3y3uefq6y5fxhff4utz97059wq5nwqu7sp422d5q0hg5an"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "tb1qqgtxw2a8g9v6sfqtfrywtjlq8ay5xtdm3p239a703n20wr5ud2rslwnple"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "tb1qlja6w94nhq7a558c863q9l345y32kuuhc808vjeyyamj5s3f99xszy2dat"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "tb1qaadm7grs4pr4algvghf6576733g38jn2v4er2cn78yt0px74lh3snsxlcj"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "tb1qg3hgpctkcaju7z55jawlk5s44u233sx05q3fw7meha5jxh906rhshwf9cn"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3of5_p2wsh",
+      "sig_type": "multisig",
+      "policy": "3-of-5",
+      "threshold": 3,
+      "total": 5,
+      "script_type": "P2WSH",
+      "script_label": "Native SegWit multisig",
+      "network": "main",
+      "derivation": "m/48h/0h/0h/2h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol",
+        "dave",
+        "erin"
+      ],
+      "descriptor": "wsh(sortedmulti(3,[814d5ff8/48h/0h/0h/2h]xpub6DnNaCBEvRdfHh3z4yRDJf8x92YNPgN2jEp3R8GYmyAz5ZjGzJrvmHJKzYrhx2DJY6fLrbwASgadKYHtVwPGuuRVodBKJkrdyKHn7PM3rsj/<0;1>/*,[02aaa648/48h/0h/0h/2h]xpub6EXwDPantTHcYbfjqiktdLvfMyMTBXFHxngKirzZuLRzJAZ4G2deEAZe6LzHGsASsyqxXTr7Ps5hyCWk6dnuHtq8ae64TafJeNU9qgtVTLH/<0;1>/*,[5142fc0d/48h/0h/0h/2h]xpub6F1uQ8D4mmxARaBQjXbznx9LZpbCpvFwo7J4sdghAQCG4mhs7EK7Tge7tz2Dw8Vhtz7zK5GGRqX35aGocxfg4icJyqMWwzaWUw5HTQLHPz9/<0;1>/*,[a196cc24/48h/0h/0h/2h]xpub6EYk9ntVPTf1Zre2yGo8dk4CZN5ACYRmA6tjXaKW7YzEmWDQPkJN6ZTHdHiPxfJu8qCF427UUBRzwNVZW4otJEwcD1wzz8X2YF3h1XPpJmF/<0;1>/*,[5f8ad9dc/48h/0h/0h/2h]xpub6DaAMNEVvE6vyxf9ZQxZPVCY3cXFtN2HmWnvLiAEKNjsT4wqSZVfsotPgmzN3KtvjfYarWjN8CNUjmdd5Jdy52diKgmm6pznN1VJPWbaTw5/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmetaadmsoeadaxaolptaaddloxaxhdclaxhsdyihvdfyoyfwmsrdgylrbdsgmulostlumeasylasprkolswpmskpidgmgumncmaahdcxoxlfgrbswtpsdwbgzcjljsmnwnrhkostfnguhtcpfxlgtlplfrswhetbidcetlnbamtaaddyotadlocsdyykaeykaeykaoykaocylygtheyaaxaaaycyclwtgepltaaddloxaxhdclaodliyurfghpzekghphkmtdpswdkuramfdjtjylttiwlfdaeeniobslgmocyhpheimaahdcxcswswsiagsjeammwbbcwfpatqdhslfkewsonndrthnoylrkksfdlcheswdbkytenamtaaddyotadlocsdyykaeykaeykaoykaocyaopkolfdaxaaaycyloctsfcptaaddloxaxhdclaxtpettirygtgwnbhtoxpeqzlujejpflpsoecwutfegohdaazskncaecdmethttlpaaahdcxbkttdlenfegddsmhversmylgjpldkbnblasaotlafhmoplstlfqdwmpebywpbegramtaaddyotadlocsdyykaeykaeykaoykaocygyfwztbtaxaaaycysorkbktptaaddloxaxhdclaxwfplfnbnrykesfptvogrtncxcwrkgsaeeefhsshybtkobnbyhfkngugajovtcyytaahdcxknurdyolvdfrvldtbwdlfmsncahtonbdwpwyttmonsinvtnnrnzocwgtkkdslngsamtaaddyotadlocsdyykaeykaeykaoykaocyoymtsfdkaxaaaycyleahsspdtaaddloxaxhdclaxdyuyfrdtwkvtaxswcagybwoxmdtydmwemyfhadfdsnykstbdsetnwnjscxlgnsstaahdcxsskegaeyttwsftfdaawlrnlkaawftntahnzsfrhpeeeedluobztiwzhyynmwjsfnamtaaddyotadlocsdyykaeykaeykaoykaocyheletauoaxaaaycyahgrrnsaltettddk",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmetaadmsoeadaxaolptaaddloxaxhdclaxhsdyihvdfyoyfwmsrdgylrbdsgmulostlumeasylasprkolswpmskpidgmgumncmaahdcxoxlfgrbswtpsdwbgzcjljsmnwnrhkostfnguhtcpfxlgtlplfrswhetbidcetlnbamtaaddyotadlocsdyykaeykaeykaoykaocylygtheyaaxaaaycyclwtgepltaaddloxaxhdclaodliyurfghpzekghphkmtdpswdkuramfdjtjylttiwlfdaeeniobslgmocyhpheimaahdcxcswswsiagsjeammwbbcwfpatqdhslfkewsonndrthnoylrkksfdlcheswdbkytenamtaaddyotadlocsdyykaeykaeykaoykaocyaopkolfdaxaaaycyloctsfcptaaddloxaxhdclaxtpettirygtgwnbhtoxpeqzlujejpflpsoecwutfegohdaazskncaecdmethttlpaaahdcxbkttdlenfegddsmhversmylgjpldkbnblasaotlafhmoplstlfqdwmpebywpbegramtaaddyotadlocsdyykaeykaeykaoykaocygyfwztbtaxaaaycysorkbktptaaddloxaxhdclaxwfplfnbnrykesfptvogrtncxcwrkgsaeeefhsshybtkobnbyhfkngugajovtcyytaahdcxknurdyolvdfrvldtbwdlfmsncahtonbdwpwyttmonsinvtnnrnzocwgtkkdslngsamtaaddyotadlocsdyykaeykaeykaoykaocyoymtsfdkaxaaaycyleahsspdtaaddloxaxhdclaxdyuyfrdtwkvtaxswcagybwoxmdtydmwemyfhadfdsnykstbdsetnwnjscxlgnsstaahdcxsskegaeyttwsftfdaawlrnlkaawftntahnzsfrhpeeeedluobztiwzhyynmwjsfnamtaaddyotadlocsdyykaeykaeykaoykaocyheletauoaxaaaycyahgrrnsasagucxas",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/48h/0h/0h/2h",
+          "xpub": "xpub6DnNaCBEvRdfHh3z4yRDJf8x92YNPgN2jEp3R8GYmyAz5ZjGzJrvmHJKzYrhx2DJY6fLrbwASgadKYHtVwPGuuRVodBKJkrdyKHn7PM3rsj"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/48h/0h/0h/2h",
+          "xpub": "xpub6EXwDPantTHcYbfjqiktdLvfMyMTBXFHxngKirzZuLRzJAZ4G2deEAZe6LzHGsASsyqxXTr7Ps5hyCWk6dnuHtq8ae64TafJeNU9qgtVTLH"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/48h/0h/0h/2h",
+          "xpub": "xpub6F1uQ8D4mmxARaBQjXbznx9LZpbCpvFwo7J4sdghAQCG4mhs7EK7Tge7tz2Dw8Vhtz7zK5GGRqX35aGocxfg4icJyqMWwzaWUw5HTQLHPz9"
+        },
+        {
+          "name": "dave",
+          "master_fingerprint": "a196cc24",
+          "derivation": "m/48h/0h/0h/2h",
+          "xpub": "xpub6EYk9ntVPTf1Zre2yGo8dk4CZN5ACYRmA6tjXaKW7YzEmWDQPkJN6ZTHdHiPxfJu8qCF427UUBRzwNVZW4otJEwcD1wzz8X2YF3h1XPpJmF"
+        },
+        {
+          "name": "erin",
+          "master_fingerprint": "5f8ad9dc",
+          "derivation": "m/48h/0h/0h/2h",
+          "xpub": "xpub6DaAMNEVvE6vyxf9ZQxZPVCY3cXFtN2HmWnvLiAEKNjsT4wqSZVfsotPgmzN3KtvjfYarWjN8CNUjmdd5Jdy52diKgmm6pznN1VJPWbaTw5"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "bc1qcnhhd7vmpc42v22cz0dr6heu4wtt2ftj727yem73uq006p346qgqg9xmcn"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "bc1qtf3ppl9zyar9hygygauksg9qxa6rgcl3fng9x0jjw3pcf9k64qzqfegvrh"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "bc1qvvsfuaa9jhrlrl3jj4qrckz3q80shfccvk2m9k3rshwechtgjtrqu6kmew"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "bc1q93fk05ha9muezf0k65dxsrr5mahex2m5np26v0prpwxghqdnjt7q7pppzm"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "bc1qhthfflymu2qpxjjm0hv8mxdskmr6a6vtlh8fyh4qaleux67jyvfqxuyzr0"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "bc1q7vpssrtxheg4e29kacuz0lcv2gpfuyjqlpjtxrke6t50thx0c5dshjd8yh"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3of5_p2wsh_testnet",
+      "sig_type": "multisig",
+      "policy": "3-of-5",
+      "threshold": 3,
+      "total": 5,
+      "script_type": "P2WSH",
+      "script_label": "Native SegWit multisig",
+      "network": "test",
+      "derivation": "m/48h/1h/0h/2h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol",
+        "dave",
+        "erin"
+      ],
+      "descriptor": "wsh(sortedmulti(3,[814d5ff8/48h/1h/0h/2h]tpubDDy79wPtBb2cJgz5wbA85e8D44CgKBTaXLgcWzkGJq7LC6q9CNwYjaxgYUwE3cHLzEumLSpcwfDXWcbpHSZej4Gu6tgpNgZo5mU3mhY3wPw/<0;1>/*,[02aaa648/48h/1h/0h/2h]tpubDEsUwSRxjWhhw7KsqhP2yLByx5rAL7eQCQ4oKb9gh9nTCNqMCNS5FPsAHtRA1SZDMSncdbceRuKu4LeNBUnX3jm4RCERNYyZcopJQQD6j24/<0;1>/*,[5142fc0d/48h/1h/0h/2h]tpubDEMsWXv5UygyBqmt1gT1f8Ch9FDXKKWGmtsxVi3n7mkLXBofumfeW2neGdXZ7GpSY32oXxLwJPpjZiV36oQ9PkyGKo44VjkwxZ33D6ugrhp/<0;1>/*,[a196cc24/48h/1h/0h/2h]tpubDEyihhLfue12ZtDbTebuACB7Z1WmaWJ7rexzrvWwWQWHiUs5RjGWtv3pE3nne238iAGSB18qtQBy1sYR32uLb9E1HU6Af5KC83JuMBaEFqU/<0;1>/*,[5f8ad9dc/48h/1h/0h/2h]tpubDFLLGcRcyJTXejAbeewMSda14HFUVtaK9xi7G85ChDSHroCFW4fJ9zCXwWftMZxnPPfXNwZv1fRvQPiVCg66mSqgSktm61Fgvxki3ff78bf/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmetaadmsoeadaxaolptaaddlonaxhdclaocswkjtdwldfltsjzwtbtbycmflbndpfdwfveztvwrkkbbswletckemctgsykcngaaahdcxwdiacwylvlgsmkutwfmyhedphpjoiarlosescnbtammnpdecntjyleltgmclztvsahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocylygtheyaaxaaaycyayhslnfdtaaddlonaxhdclaozodmetiscteokoglglbnlrwmwzsprfeefdehqdkkdsprhhprbkbtbgfprloybnoxaahdcxqzwfjpjkghmsgubsrkgduylrjkmwwesfsoksjlbwfwasmhbbckimtemysastcssrahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocyaopkolfdaxaaaycylsfscpsktaaddlonaxhdclaorscpsgbgihgtonttisfebeprgewksgintkemdnrttsenoxlpkoaoynztskgrjycaaahdcxuyhkyklnlpenjsytldfzvdsrstaamnjeghbsimbggeeonedkrpjtmhgmadhhzczcahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocygyfwztbtaxaaaycyfsstspcftaaddlonaxhdclaocwpflpeskbrfkpptlykenytibnherlmnenzetpiaeyztinbnrpfgrkeoktlrsrfsaahdcxoymhbbsrhfpeenbddymwkkjzdywepdgemhtnctkeytrhctfnbgttlesbehcxgsdaahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocyoymtsfdkaxaaaycymeueotldtaaddlonaxhdclaxeydpntsgcsdinnpktobbspuysknnwtnsutpkbwjlnsnyotuocfmwlaesismuryhnaahdcxiegrfxnsfywzsgiawlidnsghytmwrkaxrnnlttierpcxatwebasrlulptdlnvyndahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocyheletauoaxaaaycysaetwlgwcwktmejs",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmetaadmsoeadaxaolptaaddlonaxhdclaocswkjtdwldfltsjzwtbtbycmflbndpfdwfveztvwrkkbbswletckemctgsykcngaaahdcxwdiacwylvlgsmkutwfmyhedphpjoiarlosescnbtammnpdecntjyleltgmclztvsahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocylygtheyaaxaaaycyayhslnfdtaaddlonaxhdclaozodmetiscteokoglglbnlrwmwzsprfeefdehqdkkdsprhhprbkbtbgfprloybnoxaahdcxqzwfjpjkghmsgubsrkgduylrjkmwwesfsoksjlbwfwasmhbbckimtemysastcssrahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocyaopkolfdaxaaaycylsfscpsktaaddlonaxhdclaorscpsgbgihgtonttisfebeprgewksgintkemdnrttsenoxlpkoaoynztskgrjycaaahdcxuyhkyklnlpenjsytldfzvdsrstaamnjeghbsimbggeeonedkrpjtmhgmadhhzczcahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocygyfwztbtaxaaaycyfsstspcftaaddlonaxhdclaocwpflpeskbrfkpptlykenytibnherlmnenzetpiaeyztinbnrpfgrkeoktlrsrfsaahdcxoymhbbsrhfpeenbddymwkkjzdywepdgemhtnctkeytrhctfnbgttlesbehcxgsdaahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocyoymtsfdkaxaaaycymeueotldtaaddlonaxhdclaxeydpntsgcsdinnpktobbspuysknnwtnsutpkbwjlnsnyotuocfmwlaesismuryhnaahdcxiegrfxnsfywzsgiawlidnsghytmwrkaxrnnlttierpcxatwebasrlulptdlnvyndahtaadehoyaoadamtaaddyotadlocsdyykadykaeykaoykaocyheletauoaxaaaycysaetwlgwecwmglgu",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/48h/1h/0h/2h",
+          "xpub": "tpubDDy79wPtBb2cJgz5wbA85e8D44CgKBTaXLgcWzkGJq7LC6q9CNwYjaxgYUwE3cHLzEumLSpcwfDXWcbpHSZej4Gu6tgpNgZo5mU3mhY3wPw"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/48h/1h/0h/2h",
+          "xpub": "tpubDEsUwSRxjWhhw7KsqhP2yLByx5rAL7eQCQ4oKb9gh9nTCNqMCNS5FPsAHtRA1SZDMSncdbceRuKu4LeNBUnX3jm4RCERNYyZcopJQQD6j24"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/48h/1h/0h/2h",
+          "xpub": "tpubDEMsWXv5UygyBqmt1gT1f8Ch9FDXKKWGmtsxVi3n7mkLXBofumfeW2neGdXZ7GpSY32oXxLwJPpjZiV36oQ9PkyGKo44VjkwxZ33D6ugrhp"
+        },
+        {
+          "name": "dave",
+          "master_fingerprint": "a196cc24",
+          "derivation": "m/48h/1h/0h/2h",
+          "xpub": "tpubDEyihhLfue12ZtDbTebuACB7Z1WmaWJ7rexzrvWwWQWHiUs5RjGWtv3pE3nne238iAGSB18qtQBy1sYR32uLb9E1HU6Af5KC83JuMBaEFqU"
+        },
+        {
+          "name": "erin",
+          "master_fingerprint": "5f8ad9dc",
+          "derivation": "m/48h/1h/0h/2h",
+          "xpub": "tpubDFLLGcRcyJTXejAbeewMSda14HFUVtaK9xi7G85ChDSHroCFW4fJ9zCXwWftMZxnPPfXNwZv1fRvQPiVCg66mSqgSktm61Fgvxki3ff78bf"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "tb1qr9yxrg2du5yeufxyjd7yt9p4gv9ajpfjjpu49t6crej6da0etseq24qqzq"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "tb1qcmg3wecp79g7majkq967rkmvjvnyp2pr3sq3gadjxnsvj3dr2lsqxjn7zw"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "tb1qaugp4nm4km3e7pdngg4473znk48z34sjyvefmhk2qs7976cse95sla3s87"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "tb1qawwmx72dk0kht325emv40qhjyp3wfr4n0238h8tsahsm4ze7pfhshp5u53"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "tb1q77r2qqcr6j7yhdruff0yhf54ys96xhkpgcd2x0kdawejy2a93k4q5rqgh4"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "tb1qw5qz9vmlafa7xy4rz7anh5kpk4sgca8nl2wg8ff62052q2ra9u9qmtj92n"
+          }
+        ]
+      }
+    },
+    {
+      "name": "2of3_p2sh_p2wsh",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2SH-P2WSH",
+      "script_label": "Nested SegWit multisig",
+      "network": "main",
+      "derivation": "m/48h/0h/0h/1h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "sh(wsh(sortedmulti(2,[814d5ff8/48h/0h/0h/1h]xpub6DnNaCBEvRdfFdT3xbzUoHqrYpyrCKBsFuX4KMSreCtSo8uYLhHu3pviYham6ppK8r1WQNtk5Pze5xmHJwjoxZ6VyJyP3DNMMwdow35U3GD/<0;1>/*,[02aaa648/48h/0h/0h/1h]xpub6EXwDPantTHcYB3EZxvqTGabK36xWvXf8EaSgwkhywCV8xviEoV4YJBnJEZvJU9JRNthZPivQDCei3XyPPRHDVXxGAkc7KGs9hwwFfE6baf/<0;1>/*,[5142fc0d/48h/0h/0h/1h]xpub6F1uQ8D4mmxAPdQ1a1zmmU8xqi3nF2r93pirHWptQcbmG26Y2CVNbiQZXicDcyHFjUVLDhvvn5Sr2BAdatav8DeQcJmcDa5ruj6RLPTvk4N/<0;1>/*)))",
+      "ur_crypto_output": "ur:crypto-output/taadmhtaadmetaadmsoeadaoaolstaaddloxaxhdclaxsnfzenbsswctplvwrysasrrsintyhsjpmksahlhhvdstlsgslbvowynefhcwfgdeaahdcxtliadpykkegelanncalsfemydigaemongdpaaxiezslywmtlpamwcndptskobzonamtaaddyotadlocsdyykaeykaeykadykaocylygtheyaaxaaaycyclwtgepltaaddloxaxhdclaxadhgfzdrmkkiptgdnntepkosgtoycslbgyetaopdtlttsgkgdnfhlbdmhktbnnhsaahdcxwygaahpagysnjtgdbtrttygstdahgtoxflhtwyvwlsfhchrysplagrgottgscnkeamtaaddyotadlocsdyykaeykaeykadykaocyaopkolfdaxaaaycyloctsfcptaaddloxaxhdclaxtdgrnslsjkbwsnsnhspabtneiedlzekioxynkpbzbywmgudkrenbhyvtpdbwpsfhaahdcxfllyhymurfyannwncpbyplsphlrloxihcplrwscadyztfysbhnmuskkkpkjkplzsamtaaddyotadlocsdyykaeykaeykadykaocygyfwztbtaxaaaycysorkbktphpaebylr",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmhtaadmetaadmsoeadaoaolstaaddloxaxhdclaxsnfzenbsswctplvwrysasrrsintyhsjpmksahlhhvdstlsgslbvowynefhcwfgdeaahdcxtliadpykkegelanncalsfemydigaemongdpaaxiezslywmtlpamwcndptskobzonamtaaddyotadlocsdyykaeykaeykadykaocylygtheyaaxaaaycyclwtgepltaaddloxaxhdclaxadhgfzdrmkkiptgdnntepkosgtoycslbgyetaopdtlttsgkgdnfhlbdmhktbnnhsaahdcxwygaahpagysnjtgdbtrttygstdahgtoxflhtwyvwlsfhchrysplagrgottgscnkeamtaaddyotadlocsdyykaeykaeykadykaocyaopkolfdaxaaaycyloctsfcptaaddloxaxhdclaxtdgrnslsjkbwsnsnhspabtneiedlzekioxynkpbzbywmgudkrenbhyvtpdbwpsfhaahdcxfllyhymurfyannwncpbyplsphlrloxihcplrwscadyztfysbhnmuskkkpkjkplzsamtaaddyotadlocsdyykaeykaeykadykaocygyfwztbtaxaaaycysorkbktpknwpsorn",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/48h/0h/0h/1h",
+          "xpub": "xpub6DnNaCBEvRdfFdT3xbzUoHqrYpyrCKBsFuX4KMSreCtSo8uYLhHu3pviYham6ppK8r1WQNtk5Pze5xmHJwjoxZ6VyJyP3DNMMwdow35U3GD"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/48h/0h/0h/1h",
+          "xpub": "xpub6EXwDPantTHcYB3EZxvqTGabK36xWvXf8EaSgwkhywCV8xviEoV4YJBnJEZvJU9JRNthZPivQDCei3XyPPRHDVXxGAkc7KGs9hwwFfE6baf"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/48h/0h/0h/1h",
+          "xpub": "xpub6F1uQ8D4mmxAPdQ1a1zmmU8xqi3nF2r93pirHWptQcbmG26Y2CVNbiQZXicDcyHFjUVLDhvvn5Sr2BAdatav8DeQcJmcDa5ruj6RLPTvk4N"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "3Qzhs5zKVeSJUKTmECvvq3ZEuuZkZQcMYq"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "327DQKxGpcosRQY621RDJLFAjy2xtRxPL7"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "3NDPQhseZcoxFUhCpUitCKjdEuMGwyRC2C"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "3FjQwAcYTZBcPrDHUx86Hqfg9m5tXU7a3u"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "33C1TwQSCnqS88M17jMifoWQJfkkeZQABP"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "3PpqfAomM4har6hhnchuQPtgXWM8MPVHbg"
+          }
+        ]
+      }
+    },
+    {
+      "name": "2of3_p2sh_p2wsh_testnet",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2SH-P2WSH",
+      "script_label": "Nested SegWit multisig",
+      "network": "test",
+      "derivation": "m/48h/1h/0h/1h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "sh(wsh(sortedmulti(2,[814d5ff8/48h/1h/0h/1h]tpubDDy79wPtBb2cEiipdEAfiYuZbdXg9yn4NXwNqXyEBzjkpFaaaC1U9E6fRxV9cUa2QtLVMfZBwveRxSF4zEyG7xtp99sEH4Sz6jCyXH71thr/<0;1>/*,[02aaa648/48h/1h/0h/1h]tpubDEsUwSRxjWhhsx6VeezByJuDWNCG7YKPBnCXW4dzNkjWNakm3A65p7rw1Z8jr5KeYUnJcCVr9cAkVVxsKWCmSyNks1TvXg2tCat9sVVWFdB/<0;1>/*,[5142fc0d/48h/1h/0h/1h]tpubDEMsWXv5Uygy85rRHyVHsx7cxWcH3bhWZxMbdbCDrjmFrAbcg37JrB8v7XWEd8NNrYMi7mY1oBLqZrZh2FSg9ZGwLG7Jf8y4hgBNZnQdMSg/<0;1>/*)))",
+      "ur_crypto_output": "ur:crypto-output/taadmhtaadmetaadmsoeadaoaolstaaddlonaxhdclaxvadlbdesemaholnecwluqztsynaoyltlztndtoylgdzorsvwfmvyrnzesrhsltmsaahdcxhpnbutgegmayseotisldjzvamhrtwtinjobwdthtnnhetyuepscsltrpkidtrklbahtaadehoyaoadamtaaddyotadlocsdyykadykaeykadykaocylygtheyaaxaaaycyayhslnfdtaaddlonaxhdclaoamhfwtghlbsohsryhdrnstjsestdutbkgtcnylloluettaneftdasospkitajsstaahdcxktoxamtkzolanddrvtfrlstsrfjoaajocmrpzsrnienecnmndrfeiasgnnlsidpdahtaadehoyaoadamtaaddyotadlocsdyykadykaeykadykaocyaopkolfdaxaaaycylsfscpsktaaddlonaxhdclaxgmtlrfmsfryljzpajpwmahwlmnnncwzmwptewskkcwfhwdcfbzfsmeaotptlmefxaahdcxhsylamseguzsbtlncnnyahpeckskchsnlunlbbfwpdswecswmyzovecnnldpmotiahtaadehoyaoadamtaaddyotadlocsdyykadykaeykadykaocygyfwztbtaxaaaycyfsstspcftnhdgwmn",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmhtaadmetaadmsoeadaoaolstaaddlonaxhdclaxvadlbdesemaholnecwluqztsynaoyltlztndtoylgdzorsvwfmvyrnzesrhsltmsaahdcxhpnbutgegmayseotisldjzvamhrtwtinjobwdthtnnhetyuepscsltrpkidtrklbahtaadehoyaoadamtaaddyotadlocsdyykadykaeykadykaocylygtheyaaxaaaycyayhslnfdtaaddlonaxhdclaoamhfwtghlbsohsryhdrnstjsestdutbkgtcnylloluettaneftdasospkitajsstaahdcxktoxamtkzolanddrvtfrlstsrfjoaajocmrpzsrnienecnmndrfeiasgnnlsidpdahtaadehoyaoadamtaaddyotadlocsdyykadykaeykadykaocyaopkolfdaxaaaycylsfscpsktaaddlonaxhdclaxgmtlrfmsfryljzpajpwmahwlmnnncwzmwptewskkcwfhwdcfbzfsmeaotptlmefxaahdcxhsylamseguzsbtlncnnyahpeckskchsnlunlbbfwpdswecswmyzovecnnldpmotiahtaadehoyaoadamtaaddyotadlocsdyykadykaeykadykaocygyfwztbtaxaaaycyfsstspcfflcmpasw",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/48h/1h/0h/1h",
+          "xpub": "tpubDDy79wPtBb2cEiipdEAfiYuZbdXg9yn4NXwNqXyEBzjkpFaaaC1U9E6fRxV9cUa2QtLVMfZBwveRxSF4zEyG7xtp99sEH4Sz6jCyXH71thr"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/48h/1h/0h/1h",
+          "xpub": "tpubDEsUwSRxjWhhsx6VeezByJuDWNCG7YKPBnCXW4dzNkjWNakm3A65p7rw1Z8jr5KeYUnJcCVr9cAkVVxsKWCmSyNks1TvXg2tCat9sVVWFdB"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/48h/1h/0h/1h",
+          "xpub": "tpubDEMsWXv5Uygy85rRHyVHsx7cxWcH3bhWZxMbdbCDrjmFrAbcg37JrB8v7XWEd8NNrYMi7mY1oBLqZrZh2FSg9ZGwLG7Jf8y4hgBNZnQdMSg"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "2NCdtdKfUMhyXfTQGdoY84wTaY7PFMCnwsx"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "2MybYqeQeGh4tEku8uYMhsr1C2NTFeYQYRP"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "2NEAaWu6JCEKzpV5KZSSbStTMfiLg6C6Jza"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "2MyYuB8j8KgxbNAWtYY2PJnsBsCSYAhCpJ5"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "2NEWsQ2rYhwnBx85KSitHvHuWqngzESjLp6"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "2NEJruKXxAFfFZShN2XPG33aevjJWQfmb3R"
+          }
+        ]
+      }
+    },
+    {
+      "name": "2of3_p2sh",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2SH",
+      "script_label": "Legacy multisig",
+      "network": "main",
+      "derivation": "m/45h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "sh(sortedmulti(2,[814d5ff8/45h]xpub68qcxbnQintybLg6UhXGBwhS111UZPjUSkcRKV28S38fuiqr9Tu2V9fntWQGsSru3suEdyLne6pUwuiFH3mRq5voNcVjgnoVNc6RRgAz5Ge/<0;1>/*,[02aaa648/45h]xpub67udmLg8isjmMny7vJQemJK6kDrLtTzpqRCPG3Jzm7CsSPoJjg5Y6LjYYeVgsdDSvcyituU4yVwB9HqZ5xZxp24GysyUx8D3KmQzsvaeVkm/<0;1>/*,[5142fc0d/45h]xpub68V97Bf1WRwWgLHet1bUuyABWKa1qj26rNXo9SqR6K2S1zCH4HVTT4YYGcNaUh1qYfR4t54UjFKYSSJoVvMUC8dHfktqHFy613LEkZ964vA/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmhtaadmsoeadaoaolstaaddloxaxhdclaxmovymogtdttbjzbsiytdtidtvdjofhltosdmlflokerkgmaadwgrgajopridatskaahdcxzssalkurztiaseprihqdengmcpghqzotengwpmaysezcescpcalgzorllytpvessamtaaddyotadlfcsdpykaocylygtheyaaxadaycylygtheyataaddloxaxhdclaxsapdwkimkboecsgrlbmkpfdmmnketihpjzrftttkssaaflhkqdptsnssbysoassaaahdcxdykkgtbknewtbnksdevogdhhhsoxetsnrftlmecainzcltlfswjylecneygeoscsamtaaddyotadlfcsdpykaocyaopkolfdaxadaycyaopkolfdtaaddloxaxhdclaoprdrvoaepecpwnroeemolpltltdacyregsfnolsfaytbbkzeihhtbbnyiamyqzlgaahdcxsfdmrdpaesgmpshekklftaontoldemjngofyueryvoldpdwzsohlsshtplhnmuesamtaaddyotadlfcsdpykaocygyfwztbtaxadaycygyfwztbtvypeosfh",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmhtaadmsoeadaoaolstaaddloxaxhdclaxmovymogtdttbjzbsiytdtidtvdjofhltosdmlflokerkgmaadwgrgajopridatskaahdcxzssalkurztiaseprihqdengmcpghqzotengwpmaysezcescpcalgzorllytpvessamtaaddyotadlfcsdpykaocylygtheyaaxadaycylygtheyataaddloxaxhdclaxsapdwkimkboecsgrlbmkpfdmmnketihpjzrftttkssaaflhkqdptsnssbysoassaaahdcxdykkgtbknewtbnksdevogdhhhsoxetsnrftlmecainzcltlfswjylecneygeoscsamtaaddyotadlfcsdpykaocyaopkolfdaxadaycyaopkolfdtaaddloxaxhdclaoprdrvoaepecpwnroeemolpltltdacyregsfnolsfaytbbkzeihhtbbnyiamyqzlgaahdcxsfdmrdpaesgmpshekklftaontoldemjngofyueryvoldpdwzsohlsshtplhnmuesamtaaddyotadlfcsdpykaocygyfwztbtaxadaycygyfwztbtweidcwfm",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/45h",
+          "xpub": "xpub68qcxbnQintybLg6UhXGBwhS111UZPjUSkcRKV28S38fuiqr9Tu2V9fntWQGsSru3suEdyLne6pUwuiFH3mRq5voNcVjgnoVNc6RRgAz5Ge"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/45h",
+          "xpub": "xpub67udmLg8isjmMny7vJQemJK6kDrLtTzpqRCPG3Jzm7CsSPoJjg5Y6LjYYeVgsdDSvcyituU4yVwB9HqZ5xZxp24GysyUx8D3KmQzsvaeVkm"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/45h",
+          "xpub": "xpub68V97Bf1WRwWgLHet1bUuyABWKa1qj26rNXo9SqR6K2S1zCH4HVTT4YYGcNaUh1qYfR4t54UjFKYSSJoVvMUC8dHfktqHFy613LEkZ964vA"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "3CFhMzgtrHbSdC8UsjSW9QJS7xqPocFSv3"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "3LgbeLcVcY3mF55CJ5tMdR6KfoYDc1DQ36"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "3Mv6r66P9Sr3NkL2WhhYruRTDcYpN9crEV"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "34avVJTrjuN3UbFt7zRkAZKXTCcMLeQ2tC"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "3Kk8ZxpM4cdRUgmrwsV6CnKJKMD15XDUd7"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "3MFmM2efwooF1zwU3R7Bip3qsocYh8YFyB"
+          }
+        ]
+      }
+    },
+    {
+      "name": "2of3_p2sh_testnet",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2SH",
+      "script_label": "Legacy multisig",
+      "network": "test",
+      "derivation": "m/45h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "sh(sortedmulti(2,[814d5ff8/45h]tpubD9DFUqc6S4rRs8rwvtWMPs2oL878YnEXzPCig35GmwtZf1WZDgk7dbLd8YV4Pwp8qnS9FYrfBCeXe6CrfucfiXP6SDF3NKTixZgqBdyT6qi/<0;1>/*,[02aaa648/45h]tpubD8HGHaVpS9hDdb9yNVPjyDeU5LwzsrVtP3ngcbN971xmBgU1otvdEnQNngaUQ8AgiXWdWUywWbmDqULAUpRChTWa3UindesGuj1QdxWwSqs/<0;1>/*,[5142fc0d/45h]tpubD8rmdRUhDhtxx8UWLCaa7tVYqSffq7XAQ186VztZSDnKmGrz8WLYbWDNWeTN1By5LZwyVeaMGM9b8coQtnCi5a5ajMe8xndKazveWXHnvVr/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmhtaadmsoeadaoaolstaaddlonaxhdclaxmovymogtdttbjzbsiytdtidtvdjofhltosdmlflokerkgmaadwgrgajopridatskaahdcxzssalkurztiaseprihqdengmcpghqzotengwpmaysezcescpcalgzorllytpvessahtaadehoyaoadamtaaddyotadlfcsdpykaocylygtheyaaxadaycylygtheyataaddlonaxhdclaxsapdwkimkboecsgrlbmkpfdmmnketihpjzrftttkssaaflhkqdptsnssbysoassaaahdcxdykkgtbknewtbnksdevogdhhhsoxetsnrftlmecainzcltlfswjylecneygeoscsahtaadehoyaoadamtaaddyotadlfcsdpykaocyaopkolfdaxadaycyaopkolfdtaaddlonaxhdclaoprdrvoaepecpwnroeemolpltltdacyregsfnolsfaytbbkzeihhtbbnyiamyqzlgaahdcxsfdmrdpaesgmpshekklftaontoldemjngofyueryvoldpdwzsohlsshtplhnmuesahtaadehoyaoadamtaaddyotadlfcsdpykaocygyfwztbtaxadaycygyfwztbtjnrhchfr",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmhtaadmsoeadaoaolstaaddlonaxhdclaxmovymogtdttbjzbsiytdtidtvdjofhltosdmlflokerkgmaadwgrgajopridatskaahdcxzssalkurztiaseprihqdengmcpghqzotengwpmaysezcescpcalgzorllytpvessahtaadehoyaoadamtaaddyotadlfcsdpykaocylygtheyaaxadaycylygtheyataaddlonaxhdclaxsapdwkimkboecsgrlbmkpfdmmnketihpjzrftttkssaaflhkqdptsnssbysoassaaahdcxdykkgtbknewtbnksdevogdhhhsoxetsnrftlmecainzcltlfswjylecneygeoscsahtaadehoyaoadamtaaddyotadlfcsdpykaocyaopkolfdaxadaycyaopkolfdtaaddlonaxhdclaoprdrvoaepecpwnroeemolpltltdacyregsfnolsfaytbbkzeihhtbbnyiamyqzlgaahdcxsfdmrdpaesgmpshekklftaontoldemjngofyueryvoldpdwzsohlsshtplhnmuesahtaadehoyaoadamtaaddyotadlfcsdpykaocygyfwztbtaxadaycygyfwztbtgsgotkad",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/45h",
+          "xpub": "tpubD9DFUqc6S4rRs8rwvtWMPs2oL878YnEXzPCig35GmwtZf1WZDgk7dbLd8YV4Pwp8qnS9FYrfBCeXe6CrfucfiXP6SDF3NKTixZgqBdyT6qi"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/45h",
+          "xpub": "tpubD8HGHaVpS9hDdb9yNVPjyDeU5LwzsrVtP3ngcbN971xmBgU1otvdEnQNngaUQ8AgiXWdWUywWbmDqULAUpRChTWa3UindesGuj1QdxWwSqs"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/45h",
+          "xpub": "tpubD8rmdRUhDhtxx8UWLCaa7tVYqSffq7XAQ186VztZSDnKmGrz8WLYbWDNWeTN1By5LZwyVeaMGM9b8coQtnCi5a5ajMe8xndKazveWXHnvVr"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "2N3ouRjcvTk6npym2Ys4NmMHhLK3ZbD9Uh4"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "2NCEoi5YXDzZ7SrhjyDWEFN5at9kPTohBYr"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "2NDUJuq2QkuMPaXxaBqKRUrQiRxkzCRfzey"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "2Mv98Z3PtMMsPgNtRo83cnWJnfYpXCcfs4V"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "2NBJLdhkNg58mgUQQd16xpjJZXhRArfcGfo"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "2NCoyQmahZGJbDna1iYj4Lm3769piXFf2Dd"
+          }
+        ]
+      }
+    }
+  ]
+}

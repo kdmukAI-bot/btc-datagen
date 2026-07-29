@@ -1,0 +1,12 @@
+{
+  "name": "btc-datagen-site-tests",
+  "private": true,
+  "description": "Headless-browser smoke test for the demo site. The Python build and tools/verify.py are the primary toolchain; node is only here to drive a real browser, because DOM/CSS failures are invisible to data-level checks.",
+  "type": "module",
+  "scripts": {
+    "smoke": "node tools/smoke_site.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.49.0"
+  }
+}

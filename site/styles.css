@@ -1,0 +1,406 @@
+/* Mobile-first. The QR is the point of the page, so it gets the width and
+   everything else gets out of its way.
+
+   One hard rule: the QR card is ALWAYS black-on-white, in every colour scheme.
+   A dark-mode-inverted QR is unscannable, and the quiet zone has to be real
+   white pixels sitting on real white background or it gets visually clipped. */
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #14181d;
+  --muted: #5c6672;
+  --line: #dfe3e8;
+  --accent: #1a56db;
+  --accent-text: #ffffff;
+  --warn-bg: #fff4e5;
+  --warn-line: #f0b429;
+  --warn-text: #6b4708;
+  --radius: 12px;
+  --pad: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161b;
+    --surface: #1a1f26;
+    --text: #e8ecf1;
+    --muted: #97a3b0;
+    --line: #2c343d;
+    --accent: #5b8def;
+    --accent-text: #0b1017;
+    --warn-bg: #3a2c0c;
+    --warn-line: #b9821a;
+    --warn-text: #ffd88a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+/* The `hidden` attribute must actually hide things.
+   The UA stylesheet's `[hidden] { display: none }` lives in the user-agent
+   origin, so ANY author-origin `display` declaration beats it regardless of
+   specificity — and .gate/.sheet/.fs/.chooser all set `display: flex`. Without
+   this rule the fullscreen overlay (fixed, inset 0, white, z-index 80) renders
+   permanently over the page as a blank white screen. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+}
+
+body { padding-bottom: env(safe-area-inset-bottom); }
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; }
+
+h1, h2, h3 { line-height: 1.25; margin: 0; }
+
+/* --- persistent banner / site title -------------------------------------- */
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px var(--pad);
+  background: var(--warn-bg);
+  border-bottom: 1px solid var(--warn-line);
+  color: var(--warn-text);
+  font-size: .8rem;
+}
+.banner-home {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 3px 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  min-height: 32px;
+}
+.banner-logo { display: block; width: 24px; height: 24px; border-radius: 5px; flex: none; }
+.banner-title { font-weight: 700; letter-spacing: .01em; }
+.banner-text {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.banner-warn { font-size: 1rem; line-height: 1; flex: none; }
+
+/* --- layout -------------------------------------------------------------- */
+main { max-width: 40rem; margin: 0 auto; padding: var(--pad); }
+
+.scenario-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.scenario-head-text { flex: 1; min-width: 0; }
+.scenario-head h1 { font-size: 1.2rem; }
+.scenario-head p { margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
+
+/* --- landing page activities --------------------------------------------- */
+.activities { display: grid; gap: 10px; margin-bottom: 8px; }
+.activities-head {
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+  margin: 24px 0 10px;
+}
+.activity {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 16px;
+  cursor: pointer;
+}
+.activity-lead {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+.activity-name {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.activity-lead .activity-name { color: var(--accent); font-size: 1.15rem; }
+.activity-desc {
+  display: block;
+  color: var(--muted);
+  font-size: .85rem;
+  margin-top: 5px;
+}
+
+.view-title { font-size: 1.25rem; margin-bottom: 8px; }
+.view-intro { color: var(--muted); font-size: .9rem; margin: 0 0 14px; }
+.view-intro-warn {
+  border-left: 3px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  padding: 12px 14px;
+  border-radius: 0 8px 8px 0;
+}
+.view-intro-warn strong { font-weight: 700; }
+
+/* Sticky banner would otherwise cover a scrolled-to heading. */
+.step { margin-bottom: 28px; scroll-margin-top: 52px; }
+.step-title { font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6em; height: 1.6em;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: .8rem;
+  flex: none;
+}
+.step-hint { color: var(--muted); font-size: .9rem; margin: 6px 0 12px; }
+.sub { font-size: .95rem; margin: 20px 0 8px; color: var(--muted); }
+
+/* --- the QR itself ------------------------------------------------------- */
+.qr-stage { margin-bottom: 14px; }
+
+/* Always white, never themed. The padding is the *visual* margin; the module
+   quiet zone is drawn inside the canvas itself. */
+.qr-card {
+  background: #ffffff;
+  border-radius: var(--radius);
+  padding: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+}
+.qr-card canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  max-width: 100%;
+}
+
+.qr-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: .85rem;
+  color: var(--muted);
+}
+.qr-note { font-size: .8rem; color: var(--muted); margin: 4px 0 12px; }
+
+/* --- controls ------------------------------------------------------------ */
+.controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.control-wide { grid-column: 1 / -1; }
+.control label {
+  display: flex;
+  justify-content: space-between;
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.segmented button {
+  flex: 1;
+  padding: 9px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: .85rem;
+  cursor: pointer;
+  min-height: 40px;
+}
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+
+input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
+
+.btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: .9rem;
+  cursor: pointer;
+  min-height: 40px;
+}
+.btn-block { width: 100%; }
+.btn-primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+.btn-ghost { flex: none; }
+.btn-tiny { padding: 5px 10px; font-size: .78rem; min-height: 0; }
+.btn:disabled { opacity: .45; cursor: default; }
+
+/* --- call to action ------------------------------------------------------ */
+/* The one thing to do next, impossible to miss and big enough to hit with a
+   thumb while holding a SeedSigner in the other hand. */
+.cta { margin-top: 20px; }
+.btn-cta {
+  width: 100%;
+  padding: 16px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  border-radius: 10px;
+  min-height: 54px;
+}
+.cta-sub {
+  text-align: center;
+  color: var(--muted);
+  font-size: .78rem;
+  margin: 7px 0 0;
+}
+
+/* --- details / tables ---------------------------------------------------- */
+.details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 0 12px;
+  margin-top: 12px;
+}
+.details summary { padding: 12px 0; cursor: pointer; font-size: .9rem; }
+.details > div { padding-bottom: 12px; }
+
+.kv { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.kv th, .kv td { text-align: left; padding: 6px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.kv th { color: var(--muted); font-weight: 500; white-space: nowrap; padding-right: 10px; }
+.kv td.num { text-align: right; font-family: ui-monospace, monospace; white-space: nowrap; }
+.addr { font-family: ui-monospace, monospace; font-size: .78rem; word-break: break-all; }
+
+.pill {
+  display: inline-block;
+  font-size: .7rem;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  margin-right: 4px;
+}
+.pill-change { border-color: var(--accent); color: var(--accent); }
+.pill-external { border-color: var(--warn-line); color: var(--warn-text); background: var(--warn-bg); }
+
+.words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; font-size: .82rem; }
+.words span { font-family: ui-monospace, monospace; }
+.words i { color: var(--muted); font-style: normal; width: 1.6em; display: inline-block; }
+
+/* --- choosers ------------------------------------------------------------ */
+.chooser { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chooser button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 99px;
+  padding: 7px 13px;
+  font-size: .85rem;
+  cursor: pointer;
+  min-height: 38px;
+}
+.chooser button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* --- picker sheet -------------------------------------------------------- */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet-card {
+  background: var(--bg);
+  width: 100%;
+  max-width: 40rem;
+  max-height: 88vh;
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--pad);
+  padding-bottom: calc(var(--pad) + env(safe-area-inset-bottom));
+}
+.sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.sheet-head h2 { font-size: 1.05rem; }
+.filters { display: grid; gap: 10px; margin-bottom: 12px; }
+.filters .control label { margin-bottom: 4px; }
+.sheet-list { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.scenario-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 11px 12px;
+  margin-bottom: 7px;
+  cursor: pointer;
+  color: var(--text);
+}
+.scenario-item[aria-current="true"] { border-color: var(--accent); }
+.scenario-item strong { display: block; font-size: .9rem; font-weight: 600; }
+.scenario-item span { display: block; color: var(--muted); font-size: .78rem; margin-top: 2px; }
+.empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: .9rem; }
+
+/* --- fullscreen QR ------------------------------------------------------- */
+.fs {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #ffffff;   /* white all the way to the edges: no clipped quiet zone */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.fs canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+.fs-bar {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  color: #333;
+}
+
+.foot { color: var(--muted); font-size: .78rem; border-top: 1px solid var(--line); padding-top: 12px; }
+.foot p { margin: 0 0 4px; }
+
+@media (min-width: 34rem) {
+  .controls { grid-template-columns: repeat(4, 1fr); }
+  .filters { grid-template-columns: repeat(2, 1fr); }
+}
