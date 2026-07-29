@@ -19,9 +19,8 @@ Two jobs:
    its exact QR output format** — verified against the Sparrow source. See
    [docs/knowledge/sparrow-qr-formats.md](docs/knowledge/sparrow-qr-formats.md).
 2. **A demo site.** At a conference table you want to hand someone a URL, not a
-   laptop. The site walks a first-timer through scanning a transaction, loading a
-   seed, signing, and optionally verifying an address — with the QRs sized to be
-   scannable off a phone screen.
+   laptop — and they may only have the device in their hands for twenty seconds.
+   The site is four big buttons and QRs sized to be scanned off a phone screen.
 
 Nothing here is broadcastable. Inputs reference synthetic funding transactions
 that exist on no chain; the PSBTs are structurally valid and fully signable, and
@@ -45,13 +44,15 @@ common/
   fixtures.py         fixture loaders
   ur2/                vendored UR2 codec (from SeedSigner; byte-identical fountain)
 generators/           standalone artifact generators (PNG/GIF into output/)
-site/                 the demo site's source (index.html, app.js, styles.css)
+site/                 the demo site's source (index.html, app.js, styles.css,
+                      seedsigner-logo.svg)
 site/dist/            built site — gitignored, produced by tools/build_site.py
 tools/
   build_fixtures.py   (re)generate fixtures deterministically
   build_site.py       build the static site into site/dist/
   serve.py            local dev server (binds all interfaces, for phone testing)
   verify.py           end-to-end verification of the BUILT artifacts
+  smoke_site.mjs      headless-browser check of the page itself
 docs/knowledge/       reverse-engineering notes & format references
 ```
 
@@ -79,28 +80,31 @@ builds one network only.
 
 ### What the site does
 
-Two paths, because they're two different device features.
+Someone at a demo table may have the device in their hands for twenty seconds, so
+the site is built for one glance and one tap. The landing page is a warning line
+and four buttons, nothing else:
 
-**Sign a transaction** (the default) — a guided flow with progressive disclosure:
-each step ends in one big call to action that reveals the next, so a first-timer
-never has to work out what to do.
+- **Sign a transaction** — the main event. One scrolling page: *Scan the
+  transaction* (QR first, right under the banner), then *Load the seed*, then for
+  multisig *Load the wallet descriptor*. Numbered headings and hard dividers mark
+  the sections; there are no next-step buttons, because those were only
+  re-implementing the scrollbar.
+- **Load a seed** — the SeedQRs on their own, CompactSeedQR by default.
+- **Verify an address** — a descriptor plus an address to check against it.
+- **Sign a message** — `signmessage {path} ascii:{message}`.
 
-1. **Scan the transaction** — animated (or static) QR, with format, density and
-   speed controls.
-2. **Load the seed** — CompactSeedQR by default, standard SeedQR available, plus
-   the words in plain text. For multisig, pick which cosigner you're signing as.
-3. **Load the wallet descriptor** — multisig only, and only when the transaction
-   has a change or self-transfer output. This is *not* address verification: it's
-   what lets the device recognise its own change while you review the
-   transaction. Offered as both `ur:crypto-output` and `ur:crypto-account`.
+Every optional control (format, density, speed, pause, UR type) is folded into a
+collapsed *QR options* disclosure. The defaults are what a demo wants; the knobs
+are there for when something won't scan.
 
-**Verify an address** — a separate SeedSigner tool, so a separate view. Load a
-descriptor, then point *Tools › Verify Address* at an address QR. In the signing
-flow above the device verifies change **on board**; you never scan an address at
-it there. Conflating the two is the easy mistake.
+The wallet-descriptor step belongs to **signing**, not address verification, and
+the distinction is easy to get wrong: during signing the device verifies its own
+change **on board** — it needs the wallet policy to recognise a change output,
+and you never scan an address at it. *Verify Address* is a separate device tool,
+so it gets a separate view.
 
-The banner doubles as the site title — tap it to get back to the start — and a
-short dialog lands the test-data point once on first load.
+The banner doubles as the site title; tapping the SeedSigner logo returns to the
+landing page.
 
 ### Playback defaults
 
@@ -183,6 +187,20 @@ serialization bug can't hide behind correct intermediate values. Per scenario it
    reconstructed PSBT is byte-identical;
 3. asserts the PSBT still signs with its intended seed;
 4. parses it with **SeedSigner's own `PSBTParser`** and checks policy and amounts.
+
+And because correct data can still be served by a broken page:
+
+```bash
+npm install && npx playwright install chromium   # one-off
+node tools/smoke_site.mjs http://localhost:8777/
+```
+
+That drives the real page in headless Chromium at desktop and phone sizes. It is
+not decoration — the first run caught two bugs that no data-level check could
+see: an author-origin `display: flex` beating the UA stylesheet's
+`[hidden] { display: none }`, which left a white fullscreen overlay covering the
+whole page; and a step of the guided flow that was marked `hidden` in the markup
+with nothing ever unhiding it.
 
 > Use zbar, not OpenCV. OpenCV's built-in `QRCodeDetector` silently fails on
 > dense symbols — it could not read a v16 QR that zbar reads perfectly,

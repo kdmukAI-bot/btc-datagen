@@ -30,7 +30,6 @@ const state = {
   mode: 'home',
   scenario: null,
   scenarioData: null,
-  revealed: 1,                  // how many signing steps are on screen
   format: 'ur',
   density: {},                  // per-format sticky density
   fps: 5,
@@ -321,14 +320,14 @@ function renderTxSummary() {
   }).join('');
 
   $('tx-summary').innerHTML = `
+    <p class="qr-note" style="margin-top:0">${state.scenario.blurb}</p>
     <table class="kv">
       <tr><th>Inputs</th><td class="num">${s.num_inputs} · ${sats(s.input_amount)}</td></tr>
       ${rows}
       <tr><th>Network fee</th><td class="num">${sats(s.fee)}</td></tr>
       <tr><th>PSBT size</th><td class="num">${state.scenarioData.psbt_bytes.toLocaleString()} bytes</td></tr>
     </table>
-    <p class="qr-note">These inputs reference transactions that do not exist on any
-    chain. The PSBT is structurally valid and fully signable, but unbroadcastable.</p>`;
+    <p class="qr-note">Signable, but unbroadcastable — these UTXOs do not exist.</p>`;
 }
 
 /* ---------- signing path: the seed step ----------------------------------- */
@@ -339,9 +338,9 @@ async function renderSeedStep() {
 
   const multi = seeds.length > 1;
   $('seed-hint').textContent = multi
-    ? `This is a ${state.scenario.threshold}-of-${seeds.length} multisig. `
-      + `Sign with any ${state.scenario.threshold} of these seeds, one at a time.`
-    : 'Scan this SeedQR into the SeedSigner, or type the words in by hand.';
+    ? `${state.scenario.threshold}-of-${seeds.length} multisig — sign with any `
+      + `${state.scenario.threshold}, one at a time.`
+    : '';
 
   const chooser = $('seed-chooser');
   chooser.hidden = !multi;
@@ -384,9 +383,7 @@ async function renderDescriptorStep() {
   const data = await getJSON(entry.file);
 
   $('descriptor-hint').textContent =
-    `Without the ${entry.policy} wallet policy the SeedSigner can't tell that this `
-    + `transaction's change output belongs to the wallet, so it can't verify the `
-    + `change on board. It does that itself — you never scan an address at it here.`;
+    `So the device can recognise this ${entry.policy} wallet's own change output.`;
 
   const urs = data.descriptor_urs;
   if (!Object.keys(urs).includes(state.descriptorUr)) {
@@ -401,76 +398,22 @@ async function renderDescriptorStep() {
   $('descriptor-text').innerHTML = `<div class="addr">${data.descriptor}</div>`;
 }
 
-/* ---------- signing path: guided flow ------------------------------------- */
+/* ---------- signing path: which steps apply ------------------------------- */
 
-function flowSteps() {
-  const steps = [
-    { section: 'step-tx', cta: 'cta-tx', action: 'Scan the transaction' },
-    { section: 'step-seed', cta: 'cta-seed', action: 'Load the seed' },
-  ];
-  if (state.scenario.needs_descriptor) {
-    steps.push({ section: 'step-descriptor', cta: 'cta-descriptor',
-                 action: 'Load the wallet descriptor' });
-  }
-  return steps;
-}
-
-/* Progressive disclosure: show the revealed steps, and give the last visible
-   one a big call to action. Someone handed this at a demo table should never
-   have to work out what to do next. */
+/* Every applicable step is on the page at once and the user just scrolls. A
+   "next step" button was only ever re-implementing the scrollbar; the numbered
+   section headings already say what order to do things in. The descriptor step
+   is the one that genuinely comes and goes, since it only applies to a multisig
+   transaction that has change to recognise. */
 function renderFlow() {
-  const steps = flowSteps();
-  state.revealed = Math.max(1, Math.min(state.revealed, steps.length));
-
-  steps.forEach((step, i) => {
-    const revealed = i < state.revealed;
-    $(step.section).hidden = !revealed;
-    const cta = $(step.cta);
-    cta.innerHTML = '';
-    if (!revealed || i !== state.revealed - 1) return;
-
-    if (i + 1 < steps.length) {
-      const next = steps[i + 1];
-      cta.appendChild(ctaButton(`Next: ${next.action}`,
-        `Step ${i + 2} of ${steps.length}`,
-        () => { state.revealed = i + 2; renderFlow(); scrollToStep(next.section); }));
-    } else {
-      cta.appendChild(ctaButton('Try another transaction',
-        'Then sign it on the device', openPicker));
-    }
-  });
-
-  // Hide the descriptor section entirely for single sig, even if a previous
-  // multisig scenario had revealed it.
-  if (!state.scenario.needs_descriptor) $('step-descriptor').hidden = true;
+  $('step-descriptor').hidden = !state.scenario.needs_descriptor;
 }
 
-function ctaButton(label, sublabel, onClick) {
-  const wrap = document.createElement('div');
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.className = 'btn btn-primary btn-cta';
-  b.textContent = label;
-  b.addEventListener('click', onClick);
-  wrap.appendChild(b);
-  if (sublabel) {
-    const s = document.createElement('p');
-    s.className = 'cta-sub';
-    s.textContent = sublabel;
-    wrap.appendChild(s);
-  }
-  return wrap;
-}
+/* ---------- "verify an address" view -------------------------------------- */
 
-function scrollToStep(sectionId) {
-  // Wait a frame so the newly-revealed section has a layout to scroll to.
-  requestAnimationFrame(() => {
-    $(sectionId).scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-}
-
-/* ---------- verify path --------------------------------------------------- */
-
+/* A separate SeedSigner tool from signing: you load a wallet descriptor, then
+   point Verify Address at an address. During signing the device checks its own
+   change on board instead, which is why this isn't a step of that flow. */
 async function renderVerifyView() {
   const wallets = state.index.wallets.filter((w) => w.network === state.filters.network);
   const select = $('verify-wallet');
@@ -545,10 +488,8 @@ async function renderOnlySeedView() {
   const variant = data[state.onlySeedVariant];
   onlySeedPlayer.setPayload(prepare(variant.qr));
   $('only-seed-note').textContent = state.onlySeedVariant === 'compact'
-    ? `CompactSeedQR: the raw ${data.words === 24 ? 32 : 16}-byte entropy in QR byte `
-      + `mode — a smaller symbol than the standard SeedQR, so it scans more easily.`
-    : `Standard SeedQR: each word's 4-digit wordlist index in QR numeric mode `
-      + `(${variant.payload.length} digits).`;
+    ? `${data.words === 24 ? 32 : 16} bytes of entropy — a smaller, easier scan.`
+    : `${variant.payload.length} digits, numeric mode.`;
 
   const words = data.mnemonic.split(' ')
     .map((w, i) => `<span><i>${i + 1}</i>${w}</span>`).join('');
@@ -577,10 +518,7 @@ async function renderMessageView() {
   messagePlayer.setPayload(prepare(data.qr));
   $('message-meta').textContent =
     `${entry.chars} characters · ${scriptLabel(entry.script_type)}`;
-  $('message-note').textContent =
-    `Load seed "${data.seed}" first, then Tools › Sign Message. Unlike the UR `
-    + `payloads this QR is NOT upper-cased — SeedSigner detects it by a lowercase `
-    + `"signmessage" prefix.`;
+  $('message-note').textContent = `Load seed "${data.seed}" first.`;
 
   $('message-detail').innerHTML = `
     <table class="kv">
@@ -617,11 +555,10 @@ async function selectScenario(id) {
   state.scenario = scenario;
   state.scenarioData = await getJSON(`data/scenario/${id}.json`);
 
+  // The blurb lives behind the "What's in this transaction?" accordion — above
+  // the fold it was three lines of prose between the QR and the next step.
   $('scenario-title').textContent = scenario.title;
-  $('scenario-blurb').textContent = scenario.blurb;
 
-  // Every scenario change restarts the walkthrough at step 1.
-  state.revealed = 1;
   renderFlow();
   await loadQr();
   renderTxSummary();

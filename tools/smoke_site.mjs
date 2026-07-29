@@ -72,13 +72,21 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   page.on('console', (m) => { if (m.type() === 'error') fail(name, `console: ${m.text()}`); });
   page.on('pageerror', (e) => fail(name, `pageerror: ${e.message}`));
 
+  // Optional controls live in collapsed <details>; open them all so the control
+  // assertions can reach them.
+  const openAll = async () => {
+    await page.evaluate(() => document.querySelectorAll('details')
+      .forEach((d) => { d.open = true; }));
+    await page.waitForTimeout(150);
+  };
+
   await page.goto(BASE, { waitUntil: 'networkidle' });
 
   // No interstitial by design: the warning lives in the sticky banner and the
   // landing paragraph, both of which stay on screen.
   if (await page.locator('#gate').count()) fail(name, 'a disclaimer dialog is back');
   const warnText = (await page.textContent('.view-intro-warn')).toLowerCase();
-  for (const phrase of ['fake', 'not secure', 'never use', 'real bitcoin']) {
+  for (const phrase of ['fake', 'demo keys', 'never use', 'real bitcoin']) {
     if (!warnText.includes(phrase)) fail(name, `landing warning is missing "${phrase}"`);
   }
   for (const sel of ['#fs', '#picker']) {
@@ -92,7 +100,7 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   const activities = await page.locator('.activity').count();
   console.log(`  landing lists ${activities} activities`);
   if (activities < 4) fail(name, `expected 4 activities, found ${activities}`);
-  const lead = (await page.textContent('.activity-lead .activity-name')).trim();
+  const lead = (await page.textContent('.activity-lead')).trim();
   if (!/sign a transaction/i.test(lead)) {
     fail(name, `landing should lead with signing, leads with "${lead}"`);
   }
@@ -104,21 +112,21 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   await page.waitForFunction(() => document.getElementById('qr-canvas').width > 50,
     { timeout: 5000 }).catch(() => fail(name, 'transaction canvas never sized'));
 
+  // The QR must be the first thing, with the knobs tucked away.
+  for (const sel of ['#format-seg', '#density-seg', '#fps-slider']) {
+    if (await page.isVisible(sel)) fail(name, `${sel} should start collapsed`);
+  }
   const tx = await checkCanvas(page, name, 'qr-canvas', 'transaction');
+  await openAll();
   const title = (await page.textContent('#scenario-title')).trim();
   console.log(`${name}: ${tx.w}px device / ${tx.cssW}px css `
     + `(${((tx.cssW / viewport.width) * 100).toFixed(0)}% of viewport), `
     + `dark ${(tx.ratio * 100).toFixed(1)}%`);
   console.log(`  ${title} | ${(await page.textContent('#qr-progress')).trim()}`);
 
-  // --- signing path: progressive reveal via the call to action -------------
-  if (!(await page.isHidden('#step-seed'))) fail(name, 'seed step visible before its CTA');
-  if (!(await page.isVisible('#cta-tx button'))) fail(name, 'step 1 has no call to action');
-  console.log(`  step 1 CTA: "${(await page.textContent('#cta-tx button')).trim()}"`);
-
-  await page.click('#cta-tx button');
-  await page.waitForTimeout(600);
-  if (await page.isHidden('#step-seed')) fail(name, 'CTA did not reveal the seed step');
+  // --- signing path: one scrolling page, no next-step buttons ---------------
+  if (await page.locator('.cta').count()) fail(name, 'a next-step CTA is back');
+  if (await page.isHidden('#step-seed')) fail(name, 'seed step should be on the page');
   await checkCanvas(page, name, 'seed-canvas', 'seed');
 
   // CompactSeedQR must be the default selection.
@@ -128,12 +136,15 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
     fail(name, `SeedQR default is not CompactSeedQR (first=${seedLabel}, pressed=${seedSel})`);
   }
 
-  // Animation advances, pause/step work.
+  // Animation advances. Poll rather than sample once: the frame clock is
+  // requestAnimationFrame-driven, and a single 700ms window is thin enough that
+  // one throttled rAF (or a slow getImageData just before it) reads as a
+  // failure when playback is fine.
   const before = await page.textContent('#qr-progress');
-  await page.waitForTimeout(700);
-  if ((await page.textContent('#qr-progress')) === before) {
-    fail(name, `animation did not advance in 700ms (${before})`);
-  }
+  await page.waitForFunction(
+    (prev) => document.getElementById('qr-progress').textContent !== prev,
+    before, { timeout: 4000 },
+  ).catch(() => fail(name, `animation did not advance within 4s (stuck at ${before})`));
   await page.click('#playpause');
   const paused = await page.textContent('#qr-progress');
   await page.waitForTimeout(500);
@@ -151,6 +162,7 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   if (await page.isVisible('#fs')) fail(name, 'fullscreen did not close');
 
   // --- picker: friendly script-type names, and a multisig scenario ---------
+  await openAll();
   await page.click('#open-picker');
   if (!(await page.isVisible('#picker'))) fail(name, 'picker did not open');
   const listed = await page.locator('.scenario-item').count();
@@ -173,21 +185,12 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   } else {
     await page.locator('.scenario-item').first().click();
     await page.waitForTimeout(900);
-    // Restarts at step 1, and the descriptor step is step 3 of the signing flow.
-    if (!(await page.isHidden('#step-seed'))) fail(name, 'new scenario did not reset to step 1');
-    await page.click('#cta-tx button');
-    await page.waitForTimeout(500);
-    const seedCta = (await page.textContent('#cta-seed button')).trim();
-    if (!/descriptor/i.test(seedCta)) {
-      fail(name, `multisig step-2 CTA should lead to the descriptor, got "${seedCta}"`);
-    }
-    await page.click('#cta-seed button');
-    await page.waitForTimeout(600);
+    await openAll();
     if (await page.isHidden('#step-descriptor')) {
       fail(name, 'descriptor step missing on a multisig scenario');
     }
     await checkCanvas(page, name, 'descriptor-canvas', 'wallet descriptor');
-    console.log('  multisig signing flow reaches the descriptor step');
+    console.log('  multisig scenario shows the descriptor step');
   }
 
   // --- the other activities, each reached from the landing page ------------

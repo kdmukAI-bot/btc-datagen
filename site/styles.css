@@ -13,6 +13,8 @@
   --line: #dfe3e8;
   --accent: #1a56db;
   --accent-text: #ffffff;
+  --btn2-bg: #e5ebf6;
+  --btn2-text: #1b2d4d;
   --warn-bg: #fff4e5;
   --warn-line: #f0b429;
   --warn-text: #6b4708;
@@ -29,6 +31,8 @@
     --line: #2c343d;
     --accent: #5b8def;
     --accent-text: #0b1017;
+    --btn2-bg: #262f3d;
+    --btn2-text: #dbe5f4;
     --warn-bg: #3a2c0c;
     --warn-line: #b9821a;
     --warn-text: #ffd88a;
@@ -50,7 +54,7 @@ html, body {
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
 }
 
@@ -88,14 +92,17 @@ h1, h2, h3 { line-height: 1.25; margin: 0; }
   cursor: pointer;
   min-height: 32px;
 }
-.banner-logo { display: block; width: 24px; height: 24px; border-radius: 5px; flex: none; }
+/* The pill logo stands in for the word "SeedSigner". It's ~3:1, so height
+   drives the size and width follows. */
+.banner-logo { display: block; height: 22px; width: auto; flex: none; }
 .banner-title { font-weight: 700; letter-spacing: .01em; }
+/* Wraps rather than truncates: an ellipsised warning ("...real fu") is worse
+   than a banner one line taller on a narrow phone. */
 .banner-text {
   display: flex;
   align-items: center;
   gap: 5px;
-  overflow: hidden;
-  white-space: nowrap;
+  text-align: right;
   font-weight: 600;
 }
 .banner-warn { font-size: 1rem; line-height: 1; flex: none; }
@@ -105,76 +112,81 @@ main { max-width: 40rem; margin: 0 auto; padding: var(--pad); }
 
 .scenario-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin: 4px 0 14px;
 }
 .scenario-head-text { flex: 1; min-width: 0; }
-.scenario-head h1 { font-size: 1.2rem; }
-.scenario-head p { margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
+.scenario-head h1 { font-size: 1rem; font-weight: 600; }
+.scenario-head p { margin: 5px 0 0; color: var(--muted); font-size: .95rem; }
 
 /* --- landing page activities --------------------------------------------- */
-.activities { display: grid; gap: 10px; margin-bottom: 8px; }
-.activities-head {
-  font-size: .8rem;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  color: var(--muted);
-  margin: 24px 0 10px;
-}
+/* Real buttons, not selectable cards: big, filled, thumb-sized, title only. */
+.activities { display: grid; gap: 12px; margin-top: 18px; }
 .activity {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
+  text-align: center;
+  border: 0;
   border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  padding: 16px;
+  background: var(--btn2-bg);
+  color: var(--btn2-text);
+  font-size: 1.15rem;
+  font-weight: 600;
+  padding: 20px 16px;
+  min-height: 66px;
   cursor: pointer;
 }
 .activity-lead {
-  border-color: var(--accent);
-  border-width: 2px;
-}
-.activity-name {
-  display: block;
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-.activity-lead .activity-name { color: var(--accent); font-size: 1.15rem; }
-.activity-desc {
-  display: block;
-  color: var(--muted);
-  font-size: .85rem;
-  margin-top: 5px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 1.3rem;
+  min-height: 82px;
 }
 
-.view-title { font-size: 1.25rem; margin-bottom: 8px; }
-.view-intro { color: var(--muted); font-size: .9rem; margin: 0 0 14px; }
+.view-title { font-size: 1.3rem; margin-bottom: 10px; }
+.view-intro { color: var(--muted); margin: 0 0 14px; }
 .view-intro-warn {
-  border-left: 3px solid var(--warn-line);
+  border-left: 4px solid var(--warn-line);
   background: var(--warn-bg);
   color: var(--warn-text);
-  padding: 12px 14px;
+  font-weight: 600;
+  padding: 13px 15px;
+  margin: 0;
   border-radius: 0 8px 8px 0;
 }
-.view-intro-warn strong { font-weight: 700; }
 
 /* Sticky banner would otherwise cover a scrolled-to heading. */
-.step { margin-bottom: 28px; scroll-margin-top: 52px; }
-.step-title { font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
+.step { margin-bottom: 8px; scroll-margin-top: 56px; }
+/* Everything is on one scrolling page now, so each step gets a hard divider —
+   that boundary is what tells you where the next thing to do starts. */
+.step + .step {
+  border-top: 2px solid var(--line);
+  padding-top: 26px;
+  margin-top: 26px;
+}
+/* The step name is the instruction — it should read as a callout, not a label. */
+.step-title {
+  font-size: 1.45rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
 .step-num {
   display: inline-grid;
   place-items: center;
-  width: 1.6em; height: 1.6em;
+  width: 1.5em; height: 1.5em;
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-text);
-  font-size: .8rem;
+  font-size: .95rem;
+  font-weight: 700;
   flex: none;
 }
-.step-hint { color: var(--muted); font-size: .9rem; margin: 6px 0 12px; }
+.step-hint { color: var(--muted); margin: 6px 0 14px; }
 .sub { font-size: .95rem; margin: 20px 0 8px; color: var(--muted); }
 
 /* --- the QR itself ------------------------------------------------------- */
@@ -203,10 +215,10 @@ main { max-width: 40rem; margin: 0 auto; padding: var(--pad); }
   justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
-  font-size: .85rem;
+  font-size: .95rem;
   color: var(--muted);
 }
-.qr-note { font-size: .8rem; color: var(--muted); margin: 4px 0 12px; }
+.qr-note { font-size: .9rem; color: var(--muted); margin: 6px 0 12px; }
 
 /* --- controls ------------------------------------------------------------ */
 .controls {
@@ -235,13 +247,13 @@ main { max-width: 40rem; margin: 0 auto; padding: var(--pad); }
 }
 .segmented button {
   flex: 1;
-  padding: 9px 6px;
+  padding: 10px 6px;
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: .85rem;
+  font-size: .92rem;
   cursor: pointer;
-  min-height: 40px;
+  min-height: 42px;
 }
 .segmented button + button { border-left: 1px solid var(--line); }
 .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); font-weight: 600; }
@@ -264,25 +276,6 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .btn-tiny { padding: 5px 10px; font-size: .78rem; min-height: 0; }
 .btn:disabled { opacity: .45; cursor: default; }
 
-/* --- call to action ------------------------------------------------------ */
-/* The one thing to do next, impossible to miss and big enough to hit with a
-   thumb while holding a SeedSigner in the other hand. */
-.cta { margin-top: 20px; }
-.btn-cta {
-  width: 100%;
-  padding: 16px;
-  font-size: 1.05rem;
-  font-weight: 600;
-  border-radius: 10px;
-  min-height: 54px;
-}
-.cta-sub {
-  text-align: center;
-  color: var(--muted);
-  font-size: .78rem;
-  margin: 7px 0 0;
-}
-
 /* --- details / tables ---------------------------------------------------- */
 .details {
   border: 1px solid var(--line);
@@ -291,14 +284,14 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
   padding: 0 12px;
   margin-top: 12px;
 }
-.details summary { padding: 12px 0; cursor: pointer; font-size: .9rem; }
+.details summary { padding: 13px 0; cursor: pointer; }
 .details > div { padding-bottom: 12px; }
 
-.kv { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.kv { width: 100%; border-collapse: collapse; font-size: .95rem; }
 .kv th, .kv td { text-align: left; padding: 6px 0; border-top: 1px solid var(--line); vertical-align: top; }
 .kv th { color: var(--muted); font-weight: 500; white-space: nowrap; padding-right: 10px; }
 .kv td.num { text-align: right; font-family: ui-monospace, monospace; white-space: nowrap; }
-.addr { font-family: ui-monospace, monospace; font-size: .78rem; word-break: break-all; }
+.addr { font-family: ui-monospace, monospace; font-size: .85rem; word-break: break-all; }
 
 .pill {
   display: inline-block;
@@ -312,21 +305,21 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .pill-change { border-color: var(--accent); color: var(--accent); }
 .pill-external { border-color: var(--warn-line); color: var(--warn-text); background: var(--warn-bg); }
 
-.words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; font-size: .82rem; }
+.words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 10px; font-size: .95rem; }
 .words span { font-family: ui-monospace, monospace; }
 .words i { color: var(--muted); font-style: normal; width: 1.6em; display: inline-block; }
 
 /* --- choosers ------------------------------------------------------------ */
 .chooser { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .chooser button {
+  font-size: .95rem;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
   border-radius: 99px;
   padding: 7px 13px;
-  font-size: .85rem;
   cursor: pointer;
-  min-height: 38px;
+  min-height: 40px;
 }
 .chooser button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
@@ -370,8 +363,8 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
   color: var(--text);
 }
 .scenario-item[aria-current="true"] { border-color: var(--accent); }
-.scenario-item strong { display: block; font-size: .9rem; font-weight: 600; }
-.scenario-item span { display: block; color: var(--muted); font-size: .78rem; margin-top: 2px; }
+.scenario-item strong { display: block; font-weight: 600; }
+.scenario-item span { display: block; color: var(--muted); font-size: .88rem; margin-top: 3px; }
 .empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: .9rem; }
 
 /* --- fullscreen QR ------------------------------------------------------- */
@@ -397,7 +390,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
   color: #333;
 }
 
-.foot { color: var(--muted); font-size: .78rem; border-top: 1px solid var(--line); padding-top: 12px; }
+.foot { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); padding-top: 12px; }
 .foot p { margin: 0 0 4px; }
 
 @media (min-width: 34rem) {

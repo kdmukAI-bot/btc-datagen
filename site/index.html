@@ -15,8 +15,8 @@
 <!-- Doubles as the site title: the logo makes it read as tappable. -->
 <header class="banner">
   <button type="button" id="home" class="banner-home" title="Back to the start">
-    <img class="banner-logo" src="seedsigner-logo.svg" alt="" width="24" height="24">
-    <span class="banner-title">SeedSigner test data</span>
+    <img class="banner-logo" src="seedsigner-logo.svg" alt="SeedSigner">
+    <span class="banner-title">test data</span>
   </button>
   <span class="banner-text">
     <span class="banner-warn" aria-hidden="true">⚠︎</span>
@@ -27,60 +27,39 @@
 <main id="app">
 
   <!-- ============ LANDING ============ -->
+  <!-- One warning line and four buttons. Nobody reads body copy on a phone at a
+       demo table, and someone may only have the device for 20 seconds — so this
+       is one glance and one tap, with no prose to wade through. -->
   <section id="view-home">
-    <h1 class="view-title">What do you want to try?</h1>
-    <p class="view-intro view-intro-warn">
-      All the transaction data here is fake, using demo keys that are published
-      on this site and are <strong>not secure</strong>. Practise on a real
-      SeedSigner as much as you like — but never use any of it with real bitcoin.
+    <p class="view-intro-warn">
+      Fake data, public demo keys. Never use with real bitcoin.
     </p>
-    <p class="view-intro">Start with a transaction — that's the main event.</p>
 
     <div class="activities">
       <button type="button" class="activity activity-lead" data-goto="sign">
-        <span class="activity-name">Sign a transaction</span>
-        <span class="activity-desc">Scan a PSBT, load a seed, sign it on the device.
-          80 transactions to choose from — every script type, from 1 input to 100.</span>
+        Sign a transaction
       </button>
-
       <button type="button" class="activity" data-goto="seed">
-        <span class="activity-name">Load a seed</span>
-        <span class="activity-desc">Just the SeedQRs, on their own — practise getting
-          a seed onto the device.</span>
+        Load a seed
       </button>
-    </div>
-
-    <h2 class="activities-head">Other tools</h2>
-    <div class="activities">
       <button type="button" class="activity" data-goto="verify">
-        <span class="activity-name">Verify an address</span>
-        <span class="activity-desc">Prove an address belongs to a wallet, using the
-          wallet's descriptor. Separate from signing.</span>
+        Verify an address
       </button>
-
       <button type="button" class="activity" data-goto="message">
-        <span class="activity-name">Sign a message</span>
-        <span class="activity-desc">Sign arbitrary text with the key at a given
-          derivation path.</span>
+        Sign a message
       </button>
     </div>
   </section>
 
   <!-- ============ SIGN A TRANSACTION ============ -->
+  <!-- The QR comes FIRST, above the scenario name and all the controls: once
+       someone taps in, the thing they need to point a camera at should already
+       be on screen, not below a heading and a paragraph. -->
   <section id="view-sign" hidden>
-
-    <div class="scenario-head">
-      <div class="scenario-head-text">
-        <h1 id="scenario-title">—</h1>
-        <p id="scenario-blurb"></p>
-      </div>
-      <button id="open-picker" class="btn btn-ghost">Change<span aria-hidden="true"> ▾</span></button>
-    </div>
 
     <!-- STEP 1 — the transaction -->
     <section class="step" id="step-tx">
       <h2 class="step-title"><span class="step-num">1</span> Scan the transaction</h2>
-      <p class="step-hint">Point your SeedSigner's camera at the code below.</p>
 
       <div class="qr-stage" id="qr-stage">
         <div class="qr-card">
@@ -92,38 +71,51 @@
         </div>
       </div>
 
-      <div class="controls">
-        <div class="control">
-          <label>Format</label>
-          <div class="segmented" id="format-seg"></div>
+      <div class="scenario-head">
+        <div class="scenario-head-text">
+          <h1 id="scenario-title">—</h1>
         </div>
-        <div class="control">
-          <label>Density</label>
-          <div class="segmented" id="density-seg"></div>
-        </div>
-        <div class="control control-wide" id="fps-control">
-          <label>Speed <span id="fps-value" class="mono">5 fps</span></label>
-          <input type="range" id="fps-slider" min="0.5" max="10" step="0.5" value="5">
-        </div>
-        <div class="control">
-          <button id="playpause" class="btn btn-block">Pause</button>
-        </div>
-        <div class="control">
-          <button id="step-frame" class="btn btn-block" disabled>Next frame</button>
-        </div>
+        <button id="open-picker" class="btn btn-ghost">Change<span aria-hidden="true"> ▾</span></button>
       </div>
-      <p class="qr-note" id="qr-note"></p>
+
+      <!-- Everything optional is folded away. Default is UR / Normal / 5 fps,
+           which is what a demo wants; the knobs are for when it won't scan. -->
+      <details class="details">
+        <summary>QR options</summary>
+        <div>
+          <div class="controls">
+            <div class="control">
+              <label>Format</label>
+              <div class="segmented" id="format-seg"></div>
+            </div>
+            <div class="control">
+              <label>Density</label>
+              <div class="segmented" id="density-seg"></div>
+            </div>
+            <div class="control control-wide" id="fps-control">
+              <label>Speed <span id="fps-value" class="mono">5 fps</span></label>
+              <input type="range" id="fps-slider" min="0.5" max="10" step="0.5" value="5">
+            </div>
+            <div class="control">
+              <button id="playpause" class="btn btn-block">Pause</button>
+            </div>
+            <div class="control">
+              <button id="step-frame" class="btn btn-block" disabled>Next frame</button>
+            </div>
+          </div>
+          <p class="qr-note" id="qr-note"></p>
+        </div>
+      </details>
 
       <details class="details">
         <summary>What's in this transaction?</summary>
         <div id="tx-summary"></div>
       </details>
 
-      <div class="cta" id="cta-tx"></div>
     </section>
 
-    <!-- STEP 2 — the seed. Revealed by step 1's call to action. -->
-    <section class="step" id="step-seed" hidden>
+    <!-- STEP 2 — the seed -->
+    <section class="step" id="step-seed">
       <h2 class="step-title"><span class="step-num">2</span> Load the seed</h2>
       <p class="step-hint" id="seed-hint"></p>
 
@@ -133,17 +125,21 @@
         <div class="qr-card">
           <canvas id="seed-canvas" aria-label="SeedQR code"></canvas>
         </div>
-        <div class="qr-meta">
+      </div>
+
+      <details class="details">
+        <summary>QR options</summary>
+        <div class="control">
+          <label>SeedQR type</label>
           <div class="segmented" id="seedqr-seg"></div>
         </div>
-      </div>
+      </details>
 
       <details class="details">
         <summary>Show the words in plain text</summary>
         <div id="seed-words"></div>
       </details>
 
-      <div class="cta" id="cta-seed"></div>
     </section>
 
     <!-- STEP 3 — the wallet descriptor. Multisig only, and NOT address
@@ -153,10 +149,6 @@
       <h2 class="step-title"><span class="step-num">3</span> Load the wallet descriptor</h2>
       <p class="step-hint" id="descriptor-hint"></p>
 
-      <div class="control">
-        <label>UR type</label>
-        <div class="segmented" id="descriptor-seg"></div>
-      </div>
       <div class="qr-stage">
         <div class="qr-card">
           <canvas id="descriptor-canvas" aria-label="Wallet descriptor QR code"></canvas>
@@ -165,21 +157,25 @@
       </div>
 
       <details class="details">
+        <summary>QR options</summary>
+        <div class="control">
+          <label>UR type</label>
+          <div class="segmented" id="descriptor-seg"></div>
+        </div>
+      </details>
+
+      <details class="details">
         <summary>Show the descriptor text</summary>
         <div id="descriptor-text"></div>
       </details>
 
-      <div class="cta" id="cta-descriptor"></div>
     </section>
   </section>
 
   <!-- ============ LOAD A SEED ============ -->
   <section id="view-seed" hidden>
     <h1 class="view-title">Load a seed</h1>
-    <p class="view-intro">
-      Seven throwaway seeds, a mix of 12- and 24-word. On the device:
-      <em>Seeds &rsaquo; Load a seed &rsaquo; Scan</em>.
-    </p>
+    <p class="view-intro">On the device: <em>Seeds &rsaquo; Load a seed &rsaquo; Scan</em>.</p>
 
     <div class="chooser" id="only-seed-chooser"></div>
 
@@ -187,13 +183,20 @@
       <div class="qr-card">
         <canvas id="only-seed-canvas" aria-label="SeedQR code"></canvas>
       </div>
-      <div class="qr-meta">
-        <div class="segmented" id="only-seedqr-seg"></div>
-      </div>
     </div>
-    <p class="qr-note" id="only-seed-note"></p>
 
-    <details class="details" open>
+    <details class="details">
+      <summary>QR options</summary>
+      <div>
+        <div class="control">
+          <label>SeedQR type</label>
+          <div class="segmented" id="only-seedqr-seg"></div>
+        </div>
+        <p class="qr-note" id="only-seed-note"></p>
+      </div>
+    </details>
+
+    <details class="details">
       <summary>Show the words in plain text</summary>
       <div id="only-seed-words"></div>
     </details>
@@ -202,13 +205,7 @@
   <!-- ============ VERIFY AN ADDRESS ============ -->
   <section id="view-verify" hidden>
     <h1 class="view-title">Verify an address</h1>
-    <p class="view-intro">
-      A separate SeedSigner tool from signing. You give the device a wallet
-      descriptor, then point its <em>Verify Address</em> tool at an address, and
-      it derives through the wallet's addresses to prove that one belongs to it.
-      No transaction involved — and note that during <em>signing</em> the device
-      verifies change on board, so you never scan an address at it there.
-    </p>
+    <p class="view-intro">Load the wallet, then check an address against it.</p>
 
     <div class="control">
       <label>Wallet</label>
@@ -217,16 +214,19 @@
 
     <section class="step">
       <h2 class="step-title"><span class="step-num">1</span> Load the wallet descriptor</h2>
-      <div class="control">
-        <label>UR type</label>
-        <div class="segmented" id="verify-descriptor-seg"></div>
-      </div>
       <div class="qr-stage">
         <div class="qr-card">
           <canvas id="verify-descriptor-canvas" aria-label="Wallet descriptor QR code"></canvas>
         </div>
         <div class="qr-meta"><span id="verify-descriptor-meta"></span></div>
       </div>
+      <details class="details">
+        <summary>QR options</summary>
+        <div class="control">
+          <label>UR type</label>
+          <div class="segmented" id="verify-descriptor-seg"></div>
+        </div>
+      </details>
       <details class="details">
         <summary>Show the descriptor text</summary>
         <div id="verify-descriptor-text"></div>
@@ -235,9 +235,6 @@
 
     <section class="step">
       <h2 class="step-title"><span class="step-num">2</span> Scan an address to check</h2>
-      <p class="step-hint">
-        Open <em>Tools &rsaquo; Verify Address</em> and scan one of these.
-      </p>
       <div class="chooser" id="verify-address-chooser"></div>
       <div class="qr-stage">
         <div class="qr-card">
@@ -245,21 +242,13 @@
         </div>
         <div class="qr-meta"><span id="verify-address-meta" class="mono"></span></div>
       </div>
-      <p class="qr-note">
-        Address QRs are encoded verbatim — not upper-cased like the UR payloads,
-        because that would destroy a base58 address.
-      </p>
     </section>
   </section>
 
   <!-- ============ SIGN A MESSAGE ============ -->
   <section id="view-message" hidden>
     <h1 class="view-title">Sign a message</h1>
-    <p class="view-intro">
-      Signs arbitrary text with the key at one derivation path, rather than
-      spending anything. The QR carries the path and the message together, so the
-      device knows which key to use.
-    </p>
+    <p class="view-intro">On the device: <em>Tools &rsaquo; Sign Message</em>.</p>
 
     <div class="chooser" id="message-chooser"></div>
 
@@ -271,15 +260,15 @@
     </div>
     <p class="qr-note" id="message-note"></p>
 
-    <details class="details" open>
-      <summary>What exactly is being signed?</summary>
+    <details class="details">
+      <summary>What is being signed?</summary>
       <div id="message-detail"></div>
     </details>
   </section>
 
+  <!-- The banner and the landing warning already say this; no need for a third
+       copy in prose. -->
   <footer class="foot">
-    <p><strong>Test data only.</strong> Keys are deterministic and public;
-       transactions reference UTXOs that do not exist.</p>
     <p id="foot-build" class="mono"></p>
   </footer>
 </main>
