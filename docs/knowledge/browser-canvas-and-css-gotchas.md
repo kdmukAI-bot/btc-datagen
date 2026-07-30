@@ -100,3 +100,58 @@ cell. `save:3 / restore:2` in a counter found it in seconds.
 
 Assert the anchors exist and that `start < end` before splicing, and keep a
 `save`/`restore` balance check in any nontrivial canvas routine.
+
+## Derive the URL from the view; never accumulate into it
+
+The site preloads a default transaction on boot so the signing view opens
+instantly. `selectScenario()` wrote `?tx=<id>` into the URL unconditionally, so
+*merely opening the root* rewrote the address bar to `?tx=<default>` while the
+landing page was still showing. Refreshing then landed on the signing view.
+
+The interesting part is what that did to the Back button. It did not make Back
+buggy — it made Back **unfixable in principle**, because the history entry the
+user started from no longer described the page they had started on. No amount of
+`pushState` repairs a stack whose entries lie about their own contents. The fix
+had to be upstream of the history work: build the URL from the current view in
+one place, as a pure function of state, so a deep link, a fresh load and a
+`popstate` cannot disagree about what a URL means.
+
+Two rules that fell out and are worth keeping:
+
+- **Preloading must not announce itself.** Anything loaded speculatively, for
+  responsiveness, has to stay invisible to the URL, the history stack and the
+  title.
+- **One function decides what a URL means.** `modeFromUrl(params)` is read by
+  boot, by `popstate`, and by nothing else. When that logic was inlined twice it
+  had already drifted — `?tx=` alone meant "signing view" on first load and
+  "home" on popstate.
+
+Also: only push an entry when the URL actually changes. Re-selecting the current
+view otherwise stacks duplicates that Back has to chew through one at a time,
+which reads as a broken Back button.
+
+## Ellipsis inside a table needs `max-width: 0`
+
+A 62-character bech32 address in a `<th>` that the stylesheet had given
+`white-space: nowrap` (right for short labels) could not wrap, so the table grew
+past the viewport and the amounts sat off the right edge of the phone with
+nothing to scroll to.
+
+The auto table layout sizes a column to its content, which gives a flex child
+inside it no definite width to ellipsize against. `max-width: 0` combined with
+`width: 100%` on the cell is the standard escape: it asks for zero and then for
+everything, so the column takes exactly the space the other columns leave.
+
+`table-layout: fixed` also fixes the overflow and was tried first — but it
+divides width evenly unless *every* column is given an explicit size, which
+silently degraded the other `.kv` tables on the page.
+
+End-truncation is the wrong shape for an address: the tail is what you check
+against the device screen, so `bc1q…` alone is useless. CSS cannot ellipsize in
+the middle, so the address is split into two spans — the head takes the slack
+and ellipsizes, the tail is `flex: none` and never shrinks.
+
+**Test it by measuring, not by looking.** `scrollWidth > clientWidth` on the
+containers, plus `documentElement.scrollWidth - clientWidth` for the page, is the
+only reliable check: horizontal overflow is off-camera by definition, so it looks
+perfect in every screenshot.

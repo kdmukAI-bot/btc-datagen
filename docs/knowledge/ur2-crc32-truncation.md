@@ -76,10 +76,28 @@ serialization code.
 ## Blast radius beyond this repo
 
 SeedSigner's own vendored copy — `src/seedsigner/helpers/ur2/crc32.py` — has the
-**identical** `crc32n`. Where the Python UR encoder is the one in use (the Pi
-Zero path; the ESP32 build uses cUR instead), that means roughly 1 in 256 of the
-frames a device puts on screen when displaying a signed PSBT is malformed and
-will be discarded by whatever is scanning it. The visible cost is a slightly
-slower scan, never a failure, which is precisely why it has gone unnoticed.
+**identical** `crc32n`, and **the current release is affected**. Every
+SeedSigner in the wild today displays a signed PSBT through the pure-Python
+encoder, so roughly 1 frame in 256 is malformed and gets discarded by whatever
+is scanning it. The visible cost is a slightly slower scan, never a failure,
+which is precisely why it has gone unnoticed.
 
-cUR is unaffected — it writes the checksum as four bytes.
+The native path that avoids it is **not in the released code**.
+`helpers/ur2/encoder.py` is a selector — it does `__import__("uUR")` and uses
+the native C module when present — but that module only exists in this fork's
+unmerged work: cUR baked into the ESP32 firmware, and `seedsigner-raspi-lvgl`'s
+`setup.py` building cUR into a `uUR` CPython extension for the Pi. Upstream has
+adopted neither. So the selector always falls through to pure Python there.
+
+Fix it upstream. The fork will grow out of the bug when the native modules land;
+released hardware will not.
+
+cUR is unaffected in every copy: it writes the checksum as four bytes.
+
+> Two drafts of this section were wrong in opposite directions. The first said
+> "the Pi Zero path is the Python one", assumed from the ESP32/CPython split
+> rather than checked. The second over-corrected on finding raspi-lvgl's `uUR`
+> build and framed the bug as something this fork merely masks — true of the
+> fork, badly misleading about released devices, because that build is unmerged
+> work. Checking *which* code is deployed matters as much as checking which code
+> exists.
