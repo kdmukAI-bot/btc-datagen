@@ -453,9 +453,12 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   // --- the other activities, each reached from the landing page ------------
   for (const [goto, view, canvases] of [
     ['seed', '#view-seed', [['only-seed-canvas', 'standalone seed']]],
-    ['verify', '#view-verify', [['verify-descriptor-canvas', 'verify descriptor'],
-                               ['verify-address-canvas', 'verify address']]],
-    ['message', '#view-message', [['message-canvas', 'sign message']]],
+    // Only the address canvas: the descriptor step is multisig-only and the
+    // default wallet is single-sig, so asserting it renders here would be
+    // asserting the bug.
+    ['verify', '#view-verify', [['verify-address-canvas', 'verify address']]],
+    ['message', '#view-message', [['message-canvas', 'sign message'],
+                                  ['message-seed-canvas', 'message seed']]],
   ]) {
     await page.click('#home');
     await page.waitForTimeout(300);
@@ -505,6 +508,55 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
     console.log(`  activity "${goto}" renders`);
   }
 
+  // --- verify-address: descriptor step is multisig-only ---------------------
+  //
+  // SeedSigner cannot import a single-sig wallet descriptor, so offering one
+  // sends people looking for a device screen that does not exist. The address
+  // is also the FIRST step, matching the device: you scan the address, and only
+  // then does it need to know what to check it against.
+  await page.click('#home');
+  await page.waitForTimeout(250);
+  await page.click('[data-goto="verify"]');
+  await page.waitForTimeout(700);
+
+  const firstVerifyStep = (await page.textContent('#view-verify .step .step-title')).trim();
+  if (!/scan the address/i.test(firstVerifyStep)) {
+    fail(name, `verify should start with the address, starts with "${firstVerifyStep}"`);
+  }
+
+  // Classify from the page's own catalog rather than by reading the option
+  // labels. Parsing "2-of-3 · Native SegWit multisig" for a policy is guessing
+  // at presentation, and the first attempt at it silently matched nothing.
+  const walletOptions = await page.evaluate(() => {
+    const offered = [...document.querySelectorAll('#verify-wallet option')].map((o) => o.value);
+    return state.index.wallets
+      .filter((w) => offered.includes(w.name))
+      .map((w) => ({ value: w.name, text: w.policy, sig: w.sig_type }));
+  });
+  const single = walletOptions.find((o) => o.sig === 'single-sig');
+  const multi = walletOptions.find((o) => o.sig === 'multisig');
+
+  if (single) {
+    await page.selectOption('#verify-wallet', single.value);
+    await page.waitForTimeout(500);
+    if (!(await page.isHidden('#verify-step-descriptor'))) {
+      fail(name, `single-sig wallet "${single.text}" still offers a descriptor step`);
+    }
+  } else {
+    fail(name, 'no single-sig wallet in the verify picker to test with');
+  }
+  if (multi) {
+    await page.selectOption('#verify-wallet', multi.value);
+    await page.waitForTimeout(600);
+    if (await page.isHidden('#verify-step-descriptor')) {
+      fail(name, `multisig wallet "${multi.text}" is missing its descriptor step`);
+    }
+    await checkCanvas(page, name, 'verify-descriptor-canvas', 'verify descriptor');
+  } else {
+    fail(name, 'no multisig wallet in the verify picker to test with');
+  }
+  console.log('  verify: address first, descriptor only for multisig');
+
   // --- nothing may overflow the viewport horizontally ----------------------
   //
   // A 62-character bech32 address in a table cell whose column is `nowrap`
@@ -535,8 +587,41 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   // used replaceState — so the history stack stayed one entry deep and Back
   // from inside the signing flow left the site entirely. That reads as a crash,
   // not as navigation.
+  // The root URL must stay clean. A default transaction is preloaded so the
+  // signing view opens instantly, and it used to announce itself by rewriting
+  // the URL to ?tx=<default> while the landing page was still showing — so a
+  // refresh landed on the signing view, and the history entry the user started
+  // from no longer described the page they started on. That makes Back
+  // unfixable in principle, not merely broken.
   await page.click('#home');
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
+  const homeUrl = new URL(page.url());
+  if (homeUrl.search !== '') {
+    fail(name, `landing page rewrote the URL to "${homeUrl.search}" — a refresh `
+      + 'here would not come back to the landing page');
+  }
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(600);
+  if (await page.isHidden('#view-home')) {
+    fail(name, 'reloading the root did not come back to the landing page');
+  }
+
+  // Entering the signing view is what puts `tx` in the URL.
+  await page.click('[data-goto="sign"]');
+  await page.waitForTimeout(600);
+  const deep = new URL(page.url()).searchParams.get('tx');
+  if (!deep) fail(name, 'opening the signing view did not put ?tx= in the URL');
+
+  // A deep link still has to work, and still has to be the short form.
+  await page.goto(`${BASE}?tx=${deep || ''}`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(700);
+  if (await page.isHidden('#view-sign')) fail(name, '?tx= deep link did not open the sign view');
+  if (new URL(page.url()).searchParams.get('do')) {
+    fail(name, `?tx= link was rewritten to include do= (${page.url()})`);
+  }
+
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(500);
   await page.click('[data-goto="verify"]');
   await page.waitForTimeout(500);
   if (await page.isHidden('#view-verify')) fail(name, 'verify view did not open');

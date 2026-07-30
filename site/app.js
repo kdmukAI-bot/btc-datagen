@@ -801,9 +801,10 @@ const verifyDescriptorPlayer = new QrPlayer();
 const verifyAddressPlayer = new QrPlayer();
 const onlySeedPlayer = new QrPlayer();
 const messagePlayer = new QrPlayer();
+const messageSeedPlayer = new QrPlayer();
 const allPlayers = [player, seedPlayer, descriptorPlayer,
                     verifyDescriptorPlayer, verifyAddressPlayer,
-                    onlySeedPlayer, messagePlayer];
+                    onlySeedPlayer, messagePlayer, messageSeedPlayer];
 
 /* ---------- small UI builders --------------------------------------------- */
 
@@ -1049,15 +1050,16 @@ async function renderDescriptorStep() {
    transaction that has change to recognise. */
 function renderFlow() {
   $('step-descriptor').hidden = !state.scenario.needs_descriptor;
-  renumberSteps();
+  renumberSteps('view-sign');
 }
 
-/* The descriptor step comes and goes with the wallet policy, so step numbers
-   are assigned at render time. Hardcoding them left single-sig showing
-   "1, 2, 4", which reads as a missing step rather than an omitted one. */
-function renumberSteps() {
+/* Steps that come and go with the wallet policy — the descriptor, in both the
+   signing and the verify flows — mean numbers have to be assigned at render
+   time. Hardcoding them left single-sig showing "1, 2, 4", which reads as a
+   missing step rather than an omitted one. */
+function renumberSteps(viewId) {
   let n = 0;
-  document.querySelectorAll('#view-sign > .step').forEach((step) => {
+  document.querySelectorAll(`#${viewId} > .step`).forEach((step) => {
     if (step.hidden) return;
     const badge = step.querySelector('.step-num');
     if (badge) badge.textContent = String(++n);
@@ -1335,9 +1337,17 @@ function showScanError(message) {
 
 /* ---------- "verify an address" view -------------------------------------- */
 
-/* A separate SeedSigner tool from signing: you load a wallet descriptor, then
-   point Verify Address at an address. During signing the device checks its own
-   change on board instead, which is why this isn't a step of that flow. */
+/* A separate SeedSigner tool from signing: you point Verify Address at an
+   address and the device tells you whether it belongs to a wallet it knows.
+   During signing the device checks its own change on board instead, which is
+   why this isn't a step of that flow.
+ *
+ * The ADDRESS comes first, matching the device: you scan the address, and only
+ * then does the device need to know what to check it against. And the
+ * descriptor step is multisig-only — a single-sig address is verified against a
+ * loaded seed, and there is no single-sig wallet descriptor to scan, because
+ * SeedSigner does not support importing one. Offering it anyway sent people
+ * looking for a device screen that does not exist. */
 async function renderVerifyView() {
   const wallets = state.index.wallets.filter((w) => w.network === state.filters.network);
   const select = $('verify-wallet');
@@ -1356,17 +1366,23 @@ async function renderVerifyView() {
   const entry = wallets.find((w) => w.name === state.verifyWallet);
   const data = await getJSON(entry.file);
 
-  const urs = data.descriptor_urs;
-  if (!Object.keys(urs).includes(state.verifyDescriptorUr)) {
-    state.verifyDescriptorUr = Object.keys(urs)[0];
-  }
-  buildDescriptorSeg('verify-descriptor-seg', urs, state.verifyDescriptorUr,
-    (v) => { state.verifyDescriptorUr = v; renderVerifyView(); });
+  const isMultisig = entry.sig_type === 'multisig';
+  $('verify-step-descriptor').hidden = !isMultisig;
+  if (isMultisig) {
+    const urs = data.descriptor_urs;
+    if (!Object.keys(urs).includes(state.verifyDescriptorUr)) {
+      state.verifyDescriptorUr = Object.keys(urs)[0];
+    }
+    buildDescriptorSeg('verify-descriptor-seg', urs, state.verifyDescriptorUr,
+      (v) => { state.verifyDescriptorUr = v; renderVerifyView(); });
 
-  verifyDescriptorPlayer.setPayload(prepare(urs[state.verifyDescriptorUr].qr));
-  $('verify-descriptor-meta').textContent =
-    `${entry.policy} ${entry.script_label} · ur:${state.verifyDescriptorUr}`;
-  $('verify-descriptor-text').innerHTML = `<div class="addr">${data.descriptor}</div>`;
+    $('verify-descriptor-hint').textContent =
+      `So the device knows what a ${entry.policy} address of this wallet should look like.`;
+    verifyDescriptorPlayer.setPayload(prepare(urs[state.verifyDescriptorUr].qr));
+    $('verify-descriptor-meta').textContent =
+      `${entry.policy} ${entry.script_label} · ur:${state.verifyDescriptorUr}`;
+    $('verify-descriptor-text').innerHTML = `<div class="addr">${data.descriptor}</div>`;
+  }
 
   const options = [];
   ['receive', 'change'].forEach((branch) => {
@@ -1387,6 +1403,7 @@ async function renderVerifyView() {
     .find((a) => a.index === state.verifyAddress.index);
   verifyAddressPlayer.setPayload(prepare(chosen.qr));
   $('verify-address-meta').textContent = chosen.address;
+  renumberSteps('view-verify');
 }
 
 /* ---------- standalone "load a seed" view --------------------------------- */
@@ -1430,6 +1447,13 @@ async function renderOnlySeedView() {
 
 /* ---------- "sign a message" view ---------------------------------------- */
 
+/* Two steps, in the device's order: scan the message, then load the seed.
+ *
+ * The seed used to be a one-line note under the QR ("Load seed alice first"),
+ * which is the same mistake as leaving it out — signing needs the key on board,
+ * the device asks for a seed immediately after the scan, and a demo that stops
+ * at the message stops before anything happens. It gets the same handmade
+ * SeedQR treatment as the signing flow, for the same reason. */
 async function renderMessageView() {
   const msgs = state.index.messages.filter((m) => m.network === state.filters.network);
   if (!state.messageName || !msgs.some((m) => m.name === state.messageName)) {
@@ -1446,14 +1470,43 @@ async function renderMessageView() {
   messagePlayer.setPayload(prepare(data.qr));
   $('message-meta').textContent =
     `${entry.chars} characters · ${scriptLabel(entry.script_type)}`;
-  $('message-note').textContent = `Load seed "${data.seed}" first.`;
 
   $('message-detail').innerHTML = `
     <table class="kv">
-      <tr><th>Message</th><td>${data.message}</td></tr>
+      <tr><th class="kv-wide">Message</th><td></td></tr>
+      <tr><td colspan="2">${data.message}</td></tr>
       <tr><th>Derivation</th><td class="mono">${data.derivation}</td></tr>
-      <tr><th>Signing address</th><td class="addr">${data.address}</td></tr>
-      <tr><th>Seed</th><td>${data.seed}</td></tr>
+      <tr><th class="kv-wide">Signing address</th><td>${truncatedAddr(data.address)}</td></tr>
+    </table>`;
+
+  await renderMessageSeed(data.seed);
+  renumberSteps('view-message');
+}
+
+async function renderMessageSeed(seedName) {
+  const seedEntry = state.index.seeds.find((s) => s.name === seedName);
+  const seed = await getJSON(seedEntry.file);
+
+  $('message-seed-hint').textContent =
+    `The device asks which seed to sign with — this message is signed by ${seedName}.`;
+
+  buildSegmented($('message-seedqr-seg'), [
+    { value: 'compact', label: 'CompactSeedQR' },
+    { value: 'standard', label: `SeedQR (${seed.words}w)` },
+  ], state.seedVariant, (v) => { state.seedVariant = v; renderMessageView(); });
+
+  messageSeedPlayer.label = possessive(seed.name);
+  messageSeedPlayer.marker = markerFor(seed.name);
+  messageSeedPlayer.fingerprint = seed.master_fingerprint.toUpperCase();
+  messageSeedPlayer.setPayload(prepare(seed[state.seedVariant].qr));
+
+  const wordList = seed.mnemonic.split(' ');
+  const wordRows = Math.ceil(wordList.length / 3);
+  const words = wordList.map((w, i) => `<span><i>${i + 1}</i>${w}</span>`).join('');
+  $('message-seed-words').innerHTML = `
+    <div class="words" style="grid-template-rows: repeat(${wordRows}, auto)">${words}</div>
+    <table class="kv" style="margin-top:10px">
+      <tr><th>Master fingerprint</th><td class="mono">${seed.master_fingerprint}</td></tr>
     </table>`;
 }
 
@@ -1551,6 +1604,42 @@ function lockFolds() {
  * restoring state on first load; pushing there would either loop or bury the
  * entry the user came from.
  */
+/* The URL is DERIVED from the current view, never accumulated into.
+ *
+ * It used to be accumulated: selectScenario() wrote `?tx=` unconditionally,
+ * including while the landing page was showing, so merely opening the root
+ * rewrote the URL to `?tx=<default>`. Refreshing then landed on the signing
+ * view instead of the menu — and that made Back unfixable in principle rather
+ * than merely broken, because the history entry the user started from no longer
+ * described the page they had started on. No amount of pushState fixes a stack
+ * whose entries lie.
+ *
+ * `tx` implies the signing view rather than sitting alongside `do=sign`, which
+ * keeps the shareable deep link short (`?tx=<id>`) — that shape is documented
+ * and already in use.
+ */
+function syncUrl({ push = false } = {}) {
+  const url = new URL(window.location);
+  url.searchParams.delete('do');
+  url.searchParams.delete('tx');
+  if (state.mode === 'sign') {
+    if (state.scenario) url.searchParams.set('tx', state.scenario.id);
+  } else if (state.mode !== 'home') {
+    url.searchParams.set('do', state.mode);
+  }
+  // Only a genuine change earns an entry; re-selecting the current view would
+  // otherwise stack duplicates that Back has to chew through one at a time.
+  if (url.href === window.location.href) return;
+  if (push) history.pushState({ mode: state.mode }, '', url);
+  else history.replaceState({ mode: state.mode }, '', url);
+}
+
+/** Which view a URL describes. The one place that decides, so a deep link, a
+    fresh load and a popstate cannot disagree about it. */
+function modeFromUrl(params) {
+  return params.get('do') || (params.get('tx') ? 'sign' : 'home');
+}
+
 async function setMode(mode, { push = true } = {}) {
   if (!VIEWS.includes(mode)) mode = 'home';
   lockFolds();
@@ -1562,27 +1651,26 @@ async function setMode(mode, { push = true } = {}) {
   if (mode === 'verify') await renderVerifyView();
   if (mode === 'message') await renderMessageView();
 
-  const url = new URL(window.location);
-  if (mode === 'home') url.searchParams.delete('do');
-  else url.searchParams.set('do', mode);
-  // Only a genuine change earns an entry; re-selecting the current view would
-  // otherwise stack duplicates that Back has to chew through one at a time.
-  if (push && url.href !== window.location.href) history.pushState({ mode }, '', url);
-  else history.replaceState({ mode }, '', url);
+  syncUrl({ push });
   window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
-/* Back/forward: rebuild the view from the URL, without writing history again. */
+/* Back/forward: rebuild the view from the URL, without writing history again.
+   selectScenario skips its own URL write here — setMode is about to derive the
+   whole URL a line later, and letting both write means a transient state where
+   the URL describes neither the old view nor the new one. */
 async function onPopState() {
   const params = new URL(window.location).searchParams;
   const tx = params.get('tx');
-  if (tx && (!state.scenario || state.scenario.id !== tx)) await selectScenario(tx);
-  await setMode(params.get('do') || 'home', { push: false });
+  if (tx && (!state.scenario || state.scenario.id !== tx)) {
+    await selectScenario(tx, { updateUrl: false });
+  }
+  await setMode(modeFromUrl(params), { push: false });
 }
 
 /* ---------- scenario selection -------------------------------------------- */
 
-async function selectScenario(id) {
+async function selectScenario(id, { updateUrl = true } = {}) {
   const scenario = state.index.scenarios.find((s) => s.id === id);
   if (!scenario) return;
   state.scenario = scenario;
@@ -1606,9 +1694,12 @@ async function selectScenario(id) {
   await renderDescriptorStep();
   renderFlow();
 
-  const url = new URL(window.location);
-  url.searchParams.set('tx', id);
-  history.replaceState(null, '', url);
+  // Replace, never push: picking a different transaction is a parameter change
+  // within the signing view, so Back should return to the menu rather than walk
+  // backwards through every transaction that was browsed. And on the landing
+  // page this writes nothing at all — syncUrl only emits `tx` when the signing
+  // view is the one actually showing.
+  if (updateUrl) syncUrl();
 }
 
 /* ---------- picker -------------------------------------------------------- */
@@ -1827,6 +1918,10 @@ async function main() {
   onlySeedPlayer.onRendered = (c) => refreshFold($('only-seed-fold'), c, onlySeedPlayer);
   onlySeedPlayer.setCanvas($('only-seed-canvas'));
   messagePlayer.setCanvas($('message-canvas'));
+  messageSeedPlayer.renderStyle = 'handmade';
+  messageSeedPlayer.onRendered = (c) =>
+    refreshFold($('message-seed-fold'), c, messageSeedPlayer);
+  messageSeedPlayer.setCanvas($('message-seed-canvas'));
 
   wireControls();
   setupFolds();
@@ -1858,22 +1953,25 @@ async function main() {
   const fallback = state.index.scenarios.find((s) => s.is_default) || state.index.scenarios[0];
   const start = state.index.scenarios.find((s) => s.id === params.get('tx')) || fallback;
   state.filters.network = start.network;
-  await selectScenario(start.id);
+  // updateUrl:false — a default transaction is preloaded so the signing view is
+  // instant when it IS opened, but preloading must not announce itself in the
+  // URL. Writing `?tx=` here is what made a refresh of the root land on the
+  // signing view.
+  await selectScenario(start.id, { updateUrl: false });
   // A ?tx= link means someone wants that transaction, not the landing page.
   // push:false — the first view IS the entry the browser already has. Pushing
   // here would put a duplicate on the stack, so the first Back would appear to
   // do nothing.
-  await setMode(params.get('do') || (params.get('tx') ? 'sign' : 'home'),
-                { push: false });
+  await setMode(modeFromUrl(params), { push: false });
 }
 
 // Test hook: lets the scannability harness force a render style on the seed QRs.
 window.__tuneHandmade = (patch) => {
   Object.assign(HAND, patch);
-  [seedPlayer, onlySeedPlayer].forEach((p) => p.draw());
+  [seedPlayer, onlySeedPlayer, messageSeedPlayer].forEach((p) => p.draw());
 };
 window.__setStyle = (style) => {
-  [seedPlayer, onlySeedPlayer].forEach((p) => { p.renderStyle = style; p.draw(); });
+  [seedPlayer, onlySeedPlayer, messageSeedPlayer].forEach((p) => { p.renderStyle = style; p.draw(); });
 };
 
 main().catch((err) => {
