@@ -177,6 +177,14 @@ round-trips its UR back through SeedSigner's `DecodeQR` to confirm fidelity.
 
 - Script type / derivation: `wsh(sortedmulti(...))`, BIP48 `m/48h/<coin>h/0h/2h`
   (P2WSH); nested would be `.../1h` with `sh(wsh(...))`.
-- `sortedmulti` (not `multi`) — Sparrow's default.
+- `sortedmulti` (not `multi`) — Sparrow's default. **This one is a trap in the
+  CBOR:** in `crypto-output`'s script-expression tag map, **406 is `multi` and 407
+  is `sortedmulti`**. They are not interchangeable — `multi` preserves the given
+  key order while `sortedmulti` sorts lexicographically, so the same key set
+  derives *different addresses*. btc-datagen shipped 406 for a while: the
+  descriptor QR imported a wallet whose addresses did not match the PSBTs, and
+  nothing failed loudly. Round-tripping the UR and asserting the tags is not
+  enough on its own; assert that the descriptor derives the **same first receive
+  address** as the PSBT builder.
 - Key expression suffix `/<0;1>/*` (multipath, receive+change).
 - Error correction **L**, quiet zone **2**, **uppercased** payload, smallest version.
