@@ -536,26 +536,38 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   const single = walletOptions.find((o) => o.sig === 'single-sig');
   const multi = walletOptions.find((o) => o.sig === 'multisig');
 
+  // Step 2 exists for both policies, but is a different thing: a single-sig
+  // address is derived from the seed, a multisig one only means something
+  // against the wallet policy. Each must be present for its own case and absent
+  // for the other — checking only one direction would pass with both shown.
   if (single) {
     await page.selectOption('#verify-wallet', single.value);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(600);
     if (!(await page.isHidden('#verify-step-descriptor'))) {
       fail(name, `single-sig wallet "${single.text}" still offers a descriptor step`);
     }
+    if (await page.isHidden('#verify-step-seed')) {
+      fail(name, `single-sig wallet "${single.text}" is missing its seed step`);
+    }
+    await checkCanvas(page, name, 'verify-seed-canvas', 'verify seed');
   } else {
     fail(name, 'no single-sig wallet in the verify picker to test with');
   }
   if (multi) {
     await page.selectOption('#verify-wallet', multi.value);
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(700);
     if (await page.isHidden('#verify-step-descriptor')) {
       fail(name, `multisig wallet "${multi.text}" is missing its descriptor step`);
+    }
+    if (!(await page.isHidden('#verify-step-seed'))) {
+      fail(name, `multisig wallet "${multi.text}" offers a seed step, but no single `
+        + 'seed can answer for a multisig address');
     }
     await checkCanvas(page, name, 'verify-descriptor-canvas', 'verify descriptor');
   } else {
     fail(name, 'no multisig wallet in the verify picker to test with');
   }
-  console.log('  verify: address first, descriptor only for multisig');
+  console.log('  verify: address first, then seed (single-sig) or descriptor (multisig)');
 
   // --- nothing may overflow the viewport horizontally ----------------------
   //

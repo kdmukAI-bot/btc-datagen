@@ -325,9 +325,52 @@
       </div>
     </section>
 
-    <!-- Multisig only. A single-sig address is checked against a loaded seed;
-         there is no single-sig wallet descriptor to scan — SeedSigner does not
-         support importing one. -->
+    <!-- Single-sig only: the device derives addresses from the seed itself, so
+         that is what it asks for after the scan. There is no single-sig wallet
+         descriptor to load — SeedSigner does not support importing one. -->
+    <section class="step" id="verify-step-seed" hidden>
+      <h2 class="step-title"><span class="step-num"></span> Load the seed</h2>
+      <p class="step-hint" id="verify-seed-hint"></p>
+
+      <div class="qr-stage">
+        <div class="fold" id="verify-seed-fold">
+          <div class="qr-card qr-card-paper">
+            <canvas id="verify-seed-canvas" aria-label="SeedQR code"></canvas>
+          </div>
+          <div class="fold-stage" aria-hidden="true">
+            <div class="fold-half fold-upper"></div>
+            <div class="fold-flap">
+              <div class="fold-face fold-front"></div>
+              <div class="fold-face fold-back">
+                <div class="fold-back-note">
+                  <span class="fold-back-name"></span>
+                  <span class="fold-back-fp"></span>
+                </div>
+              </div>
+            </div>
+            <div class="fold-prompt">
+              <button type="button" class="btn btn-primary fold-open">Unfold the paper</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <details class="details">
+        <summary>QR options</summary>
+        <div class="control">
+          <label>SeedQR type</label>
+          <div class="segmented" id="verify-seedqr-seg"></div>
+        </div>
+      </details>
+
+      <details class="details">
+        <summary>Show the words in plain text</summary>
+        <div id="verify-seed-words"></div>
+      </details>
+    </section>
+
+    <!-- Multisig only: the wallet policy is what says whether an address
+         belongs to it, and no single seed can answer that. -->
     <section class="step" id="verify-step-descriptor" hidden>
       <h2 class="step-title"><span class="step-num"></span> Load the wallet descriptor</h2>
       <p class="step-hint" id="verify-descriptor-hint"></p>

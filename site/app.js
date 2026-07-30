@@ -802,9 +802,11 @@ const verifyAddressPlayer = new QrPlayer();
 const onlySeedPlayer = new QrPlayer();
 const messagePlayer = new QrPlayer();
 const messageSeedPlayer = new QrPlayer();
+const verifySeedPlayer = new QrPlayer();
 const allPlayers = [player, seedPlayer, descriptorPlayer,
                     verifyDescriptorPlayer, verifyAddressPlayer,
-                    onlySeedPlayer, messagePlayer, messageSeedPlayer];
+                    onlySeedPlayer, messagePlayer, messageSeedPlayer,
+                    verifySeedPlayer];
 
 /* ---------- small UI builders --------------------------------------------- */
 
@@ -1366,8 +1368,26 @@ async function renderVerifyView() {
   const entry = wallets.find((w) => w.name === state.verifyWallet);
   const data = await getJSON(entry.file);
 
+  // Step 2 is whatever the device asks for after the address scan, and that
+  // differs by policy: a single-sig address is derived from the seed, while a
+  // multisig address only means something against the wallet policy — no single
+  // seed can answer for it.
   const isMultisig = entry.sig_type === 'multisig';
   $('verify-step-descriptor').hidden = !isMultisig;
+  $('verify-step-seed').hidden = isMultisig;
+
+  if (!isMultisig) {
+    await renderHandmadeSeed(entry.cosigners[0], {
+      player: verifySeedPlayer,
+      hintId: 'verify-seed-hint',
+      segId: 'verify-seedqr-seg',
+      wordsId: 'verify-seed-words',
+      hint: 'So the device can derive this wallet’s addresses and see whether '
+        + 'the one you scanned is among them.',
+      rerender: renderVerifyView,
+    });
+  }
+
   if (isMultisig) {
     const urs = data.descriptor_urs;
     if (!Object.keys(urs).includes(state.verifyDescriptorUr)) {
@@ -1479,31 +1499,46 @@ async function renderMessageView() {
       <tr><th class="kv-wide">Signing address</th><td>${truncatedAddr(data.address)}</td></tr>
     </table>`;
 
-  await renderMessageSeed(data.seed);
+  await renderHandmadeSeed(data.seed, {
+    player: messageSeedPlayer,
+    hintId: 'message-seed-hint',
+    segId: 'message-seedqr-seg',
+    wordsId: 'message-seed-words',
+    hint: `The device asks which seed to sign with — this message is signed by ${data.seed}.`,
+    rerender: renderMessageView,
+  });
   renumberSteps('view-message');
 }
 
-async function renderMessageSeed(seedName) {
+/* Render a "load the seed" step: handmade SeedQR, type picker, word list.
+ *
+ * Three views need this now — signing, message signing, and verifying a
+ * single-sig address — because on the device they all reach the same point:
+ * whatever you scanned, it cannot do anything until a key is on board. Shared
+ * rather than copied, so the SeedQR presentation (which carries a fair amount
+ * of deliberate design: the handmade look, the folded sheet, the per-key ink)
+ * cannot drift between them. */
+async function renderHandmadeSeed(seedName, opts) {
   const seedEntry = state.index.seeds.find((s) => s.name === seedName);
   const seed = await getJSON(seedEntry.file);
 
-  $('message-seed-hint').textContent =
-    `The device asks which seed to sign with — this message is signed by ${seedName}.`;
+  $(opts.hintId).textContent = opts.hint;
 
-  buildSegmented($('message-seedqr-seg'), [
+  buildSegmented($(opts.segId), [
     { value: 'compact', label: 'CompactSeedQR' },
     { value: 'standard', label: `SeedQR (${seed.words}w)` },
-  ], state.seedVariant, (v) => { state.seedVariant = v; renderMessageView(); });
+  ], state.seedVariant, (v) => { state.seedVariant = v; opts.rerender(); });
 
-  messageSeedPlayer.label = possessive(seed.name);
-  messageSeedPlayer.marker = markerFor(seed.name);
-  messageSeedPlayer.fingerprint = seed.master_fingerprint.toUpperCase();
-  messageSeedPlayer.setPayload(prepare(seed[state.seedVariant].qr));
+  const player = opts.player;
+  player.label = possessive(seed.name);
+  player.marker = markerFor(seed.name);
+  player.fingerprint = seed.master_fingerprint.toUpperCase();
+  player.setPayload(prepare(seed[state.seedVariant].qr));
 
   const wordList = seed.mnemonic.split(' ');
   const wordRows = Math.ceil(wordList.length / 3);
   const words = wordList.map((w, i) => `<span><i>${i + 1}</i>${w}</span>`).join('');
-  $('message-seed-words').innerHTML = `
+  $(opts.wordsId).innerHTML = `
     <div class="words" style="grid-template-rows: repeat(${wordRows}, auto)">${words}</div>
     <table class="kv" style="margin-top:10px">
       <tr><th>Master fingerprint</th><td class="mono">${seed.master_fingerprint}</td></tr>
@@ -1922,6 +1957,10 @@ async function main() {
   messageSeedPlayer.onRendered = (c) =>
     refreshFold($('message-seed-fold'), c, messageSeedPlayer);
   messageSeedPlayer.setCanvas($('message-seed-canvas'));
+  verifySeedPlayer.renderStyle = 'handmade';
+  verifySeedPlayer.onRendered = (c) =>
+    refreshFold($('verify-seed-fold'), c, verifySeedPlayer);
+  verifySeedPlayer.setCanvas($('verify-seed-canvas'));
 
   wireControls();
   setupFolds();
@@ -1968,10 +2007,10 @@ async function main() {
 // Test hook: lets the scannability harness force a render style on the seed QRs.
 window.__tuneHandmade = (patch) => {
   Object.assign(HAND, patch);
-  [seedPlayer, onlySeedPlayer, messageSeedPlayer].forEach((p) => p.draw());
+  [seedPlayer, onlySeedPlayer, messageSeedPlayer, verifySeedPlayer].forEach((p) => p.draw());
 };
 window.__setStyle = (style) => {
-  [seedPlayer, onlySeedPlayer, messageSeedPlayer].forEach((p) => { p.renderStyle = style; p.draw(); });
+  [seedPlayer, onlySeedPlayer, messageSeedPlayer, verifySeedPlayer].forEach((p) => { p.renderStyle = style; p.draw(); });
 };
 
 main().catch((err) => {
