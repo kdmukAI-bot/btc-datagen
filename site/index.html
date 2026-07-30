@@ -304,15 +304,33 @@
   <!-- ============ VERIFY AN ADDRESS ============ -->
   <section id="view-verify" hidden>
     <h1 class="view-title">Verify an address</h1>
-    <p class="view-intro">Load the wallet, then check an address against it.</p>
+    <p class="view-intro">On the device: <em>Tools &rsaquo; Verify Address</em>.</p>
 
     <div class="control">
       <label>Wallet</label>
       <select id="verify-wallet" class="btn btn-block"></select>
     </div>
 
+    <!-- The address comes FIRST — that is the device's own order: you point
+         Verify Address at an address, and only then does it need to know what
+         to check it against. -->
     <section class="step">
-      <h2 class="step-title"><span class="step-num">1</span> Load the wallet descriptor</h2>
+      <h2 class="step-title"><span class="step-num"></span> Scan the address</h2>
+      <div class="chooser" id="verify-address-chooser"></div>
+      <div class="qr-stage">
+        <div class="qr-card">
+          <canvas id="verify-address-canvas" aria-label="Bitcoin address QR code"></canvas>
+        </div>
+        <div class="qr-meta"><span id="verify-address-meta" class="mono"></span></div>
+      </div>
+    </section>
+
+    <!-- Multisig only. A single-sig address is checked against a loaded seed;
+         there is no single-sig wallet descriptor to scan — SeedSigner does not
+         support importing one. -->
+    <section class="step" id="verify-step-descriptor" hidden>
+      <h2 class="step-title"><span class="step-num"></span> Load the wallet descriptor</h2>
+      <p class="step-hint" id="verify-descriptor-hint"></p>
       <div class="qr-stage">
         <div class="qr-card">
           <canvas id="verify-descriptor-canvas" aria-label="Wallet descriptor QR code"></canvas>
@@ -331,17 +349,6 @@
         <div id="verify-descriptor-text"></div>
       </details>
     </section>
-
-    <section class="step">
-      <h2 class="step-title"><span class="step-num">2</span> Scan an address to check</h2>
-      <div class="chooser" id="verify-address-chooser"></div>
-      <div class="qr-stage">
-        <div class="qr-card">
-          <canvas id="verify-address-canvas" aria-label="Bitcoin address QR code"></canvas>
-        </div>
-        <div class="qr-meta"><span id="verify-address-meta" class="mono"></span></div>
-      </div>
-    </section>
   </section>
 
   <!-- ============ SIGN A MESSAGE ============ -->
@@ -351,18 +358,63 @@
 
     <div class="chooser" id="message-chooser"></div>
 
-    <div class="qr-stage">
-      <div class="qr-card">
-        <canvas id="message-canvas" aria-label="Message signing QR code"></canvas>
+    <section class="step">
+      <h2 class="step-title"><span class="step-num"></span> Scan the message</h2>
+      <div class="qr-stage">
+        <div class="qr-card">
+          <canvas id="message-canvas" aria-label="Message signing QR code"></canvas>
+        </div>
+        <div class="qr-meta"><span id="message-meta"></span></div>
       </div>
-      <div class="qr-meta"><span id="message-meta"></span></div>
-    </div>
-    <p class="qr-note" id="message-note"></p>
 
-    <details class="details">
-      <summary>What is being signed?</summary>
-      <div id="message-detail"></div>
-    </details>
+      <details class="details">
+        <summary>What is being signed?</summary>
+        <div id="message-detail"></div>
+      </details>
+    </section>
+
+    <!-- The message alone is not enough: signing it needs the key on board, and
+         the device asks for a seed straight after the scan. -->
+    <section class="step">
+      <h2 class="step-title"><span class="step-num"></span> Load the seed</h2>
+      <p class="step-hint" id="message-seed-hint"></p>
+
+      <div class="qr-stage">
+        <div class="fold" id="message-seed-fold">
+          <div class="qr-card qr-card-paper">
+            <canvas id="message-seed-canvas" aria-label="SeedQR code"></canvas>
+          </div>
+          <div class="fold-stage" aria-hidden="true">
+            <div class="fold-half fold-upper"></div>
+            <div class="fold-flap">
+              <div class="fold-face fold-front"></div>
+              <div class="fold-face fold-back">
+                <div class="fold-back-note">
+                  <span class="fold-back-name"></span>
+                  <span class="fold-back-fp"></span>
+                </div>
+              </div>
+            </div>
+            <div class="fold-prompt">
+              <button type="button" class="btn btn-primary fold-open">Unfold the paper</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <details class="details">
+        <summary>QR options</summary>
+        <div class="control">
+          <label>SeedQR type</label>
+          <div class="segmented" id="message-seedqr-seg"></div>
+        </div>
+      </details>
+
+      <details class="details">
+        <summary>Show the words in plain text</summary>
+        <div id="message-seed-words"></div>
+      </details>
+    </section>
   </section>
 
   <!-- The banner and the landing warning already say this; no need for a third
