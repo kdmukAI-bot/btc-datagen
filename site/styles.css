@@ -231,9 +231,8 @@ main { max-width: 40rem; margin: 0 auto; padding: var(--pad); }
 .control label {
   display: flex;
   justify-content: space-between;
-  font-size: .75rem;
-  text-transform: uppercase;
-  letter-spacing: .04em;
+  font-size: .82rem;
+  letter-spacing: .01em;
   color: var(--muted);
   margin-bottom: 6px;
 }
@@ -305,7 +304,15 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .pill-change { border-color: var(--accent); color: var(--accent); }
 .pill-external { border-color: var(--warn-line); color: var(--warn-text); background: var(--warn-bg); }
 
-.words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 10px; font-size: .95rem; }
+/* Column-major: the numbering runs DOWN each column, not across the rows, which
+   is how a mnemonic is written on a seed card and shown on the device. Row count
+   is set inline per seed, since 12- and 24-word phrases need different heights. */
+.words {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 5px 14px;
+  font-size: .95rem;
+}
 .words span { font-family: ui-monospace, monospace; }
 .words i { color: var(--muted); font-style: normal; width: 1.6em; display: inline-block; }
 
@@ -357,14 +364,14 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
   border: 1px solid var(--line);
   background: var(--surface);
   border-radius: 8px;
-  padding: 11px 12px;
-  margin-bottom: 7px;
+  padding: 13px 14px;
+  margin-bottom: 8px;
   cursor: pointer;
   color: var(--text);
 }
 .scenario-item[aria-current="true"] { border-color: var(--accent); }
-.scenario-item strong { display: block; font-weight: 600; }
-.scenario-item span { display: block; color: var(--muted); font-size: .88rem; margin-top: 3px; }
+.scenario-item strong { display: block; font-weight: 600; font-size: 1.02rem; }
+.scenario-item span { display: block; color: var(--muted); font-size: .92rem; margin-top: 4px; }
 .empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: .9rem; }
 
 /* --- fullscreen QR ------------------------------------------------------- */
@@ -397,3 +404,237 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
   .controls { grid-template-columns: repeat(4, 1fr); }
   .filters { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* --- paper card (handmade SeedQR) ---------------------------------------- */
+/* The card behind a hand-transcribed SeedQR should feel like a physical object.
+   Note what is NOT here: no rotation and no filter on the canvas. Either would
+   resample the bitmap and destroy the whole-pixel module grid that makes it
+   reliably scannable. The paper tint, grain and creases live inside the canvas
+   instead (see PAPER / grainPattern / drawCreases in app.js); this dresses the
+   surround so the two meet seamlessly. */
+.qr-card-paper {
+  position: relative;
+  background: #f0e4c4;            /* matches PAPER in app.js */
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Paper edges are drawn on the OUTER sides of each half only. A full ring (or
+   the inset top highlight) on both halves put a bright 1px line right along the
+   crease, which showed as a white seam across the middle for the whole
+   animation. Each half now carries only the edges that are genuinely the edge of
+   the sheet, so flat they read as one continuous card. */
+.qr-card-paper {
+  border-radius: 3px;             /* paper has corners, not rounded buttons */
+}
+.fold-upper {
+  border-radius: 3px 3px 0 0;
+  box-shadow:
+    -1px 0 0 #d3c49c, 1px 0 0 #d3c49c, 0 -1px 0 #d3c49c,
+    0 1px 0 rgba(255, 253, 246, .9) inset;
+}
+.fold-face {
+  border-radius: 0 0 3px 3px;
+  box-shadow:
+    -1px 0 0 #d3c49c, 1px 0 0 #d3c49c, 0 1px 0 #d3c49c,
+    0 3px 4px rgba(60, 48, 20, .20),
+    0 14px 26px -10px rgba(60, 48, 20, .24);
+}
+
+/* Torn-ish top and bottom edges. A tiny repeating mask reads as deckle at a
+   glance without needing an image asset. */
+.qr-card-paper::before,
+.qr-card-paper::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #f0e4c4;
+  -webkit-mask-image: radial-gradient(circle at 3px 3px, transparent 2.6px, #000 2.7px);
+  mask-image: radial-gradient(circle at 3px 3px, transparent 2.6px, #000 2.7px);
+  -webkit-mask-size: 7px 6px;
+  mask-size: 7px 6px;
+}
+.qr-card-paper::before { top: -2px; transform: scaleY(-1); }
+.qr-card-paper::after { bottom: -2px; }
+
+/* Self-hosted so it can't fail to load on conference wifi and silently fall back
+   to a system serif — which is exactly what a font stack alone did. Permanent
+   Marker (Apache-2.0, Font Diner) is hand-lettered PRINT rather than cursive, and
+   it's marker-drawn, matching the dabs in the QR itself. */
+@font-face {
+  font-family: "Permanent Marker";
+  src: url("permanent-marker.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* The hand-written label is canvas text now (see QrPlayer.draw), so the whole
+   card is one continuous textured surface with no seam between the canvas and
+   the card padding. The @font-face above still has to exist for it: canvas
+   inherits nothing, but it does use fonts the document has loaded. */
+
+/* --- the folded sheet ----------------------------------------------------- */
+/* A SeedQR is transcribed BY HAND onto paper. Rather than dressing that up as a
+   vault door, the card itself unfolds to reveal the code — the point of the
+   gesture is simply to establish that the thing is PAPER.
+   
+   Note it is not a storage recommendation: creasing a SeedQR risks the very
+   transcription you are protecting, so the copy deliberately says "this lives on
+   paper" rather than anything about keeping it folded.
+
+   Built from CSS 3D transforms, not WebGL: the flap is the LOWER half of the
+   sheet, hinged on its top edge, carrying the bottom half of the QR on its
+   front face and blank paper on its back. Folded is rotateX(180deg), which lays
+   it face-down over the upper half; open is 0deg, where it drops into exactly
+   the place it would occupy had the sheet never been folded. Opening downward
+   keeps the sheet anchored at the top and leaves room for the prompt below. */
+.fold { position: relative; }
+
+/* While folded, the real canvas is hidden and the two faces stand in for it.
+   The canvas is never display:none — that would measure 0 wide and lay out at
+   one device pixel per module — just visually covered. */
+.fold-stage {
+  position: absolute;
+  z-index: 1;
+  /* Geometry is set from JS to match the canvas exactly (see refreshFold); these
+     are only the fallback before the first render. */
+  inset: 0;
+  right: auto;
+  bottom: auto;
+  cursor: pointer;
+  perspective: 1600px;
+  transform-style: preserve-3d;
+}
+.fold-half,
+.fold-flap {
+  image-rendering: pixelated;
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background-size: 100% 200%;   /* each half shows half of the full-card image */
+  background-repeat: no-repeat;
+}
+.fold-upper { top: 0; background-position: top center; }
+.fold-flap {
+  bottom: 0;
+  background: none;
+  transform-origin: center top;
+  transform-style: preserve-3d;
+  transform: rotateX(180deg);
+  transition: transform .95s cubic-bezier(.42, 0, .18, 1);
+}
+.fold-face {
+  position: absolute;
+  inset: 0;
+  image-rendering: pixelated;
+  backface-visibility: hidden;
+  background-size: 100% 200%;
+  background-repeat: no-repeat;
+  border-radius: 3px;
+}
+.fold-front { background-position: bottom center; }
+/* The reverse of the sheet: blank paper, shaded along the fold — and still
+   carrying the vertical crease, because a sheet folded down to this size was
+   folded in quarters, not just in half. */
+.fold-back {
+  transform: rotateX(180deg);
+  background-color: #ece0bd;
+  background-image: linear-gradient(
+    90deg,
+    rgba(120, 100, 60, 0) 44%,
+    rgba(120, 100, 60, .07) 48.5%,
+    rgba(88, 70, 38, .13) 50%,
+    rgba(255, 253, 244, .60) 52%,
+    rgba(120, 100, 60, 0) 57%);
+  box-shadow: 0 8px 18px -10px rgba(70, 55, 25, .45) inset;
+  display: grid;
+  place-items: center;
+}
+
+/* What the owner wrote on the OUTSIDE, so they can tell one backup from another
+   without unfolding it — which is the actual reason to label the outside.
+   Deliberately DESCRIPTIVE, never imperative: a "keep this secret!" scrawl would
+   read as an instruction to whoever is holding the phone, and since this data is
+   published on purpose, that would be both confusing and wrong. The standing
+   warning lives in the banner; the card stays in character. */
+.fold-back-note {
+  text-align: center;
+  transform: rotate(-1.4deg);
+  font-family: "Permanent Marker", cursive;
+  line-height: 1.35;
+  opacity: .92;
+}
+.fold-back-name { display: block; font-size: 2.6rem; }
+/* Per-character wander, set from JS. Without it the line sits on a dead-straight
+   baseline and reads as type in a handwriting face rather than as handwriting.
+   Scoped to the INNER spans: `.fold-back-note span` also matched .fold-back-name
+   and .fold-back-fp (both spans) and, at higher specificity than their own
+   class rules, flipped them to inline-block — so on a wide screen the
+   fingerprint sat beside the name instead of under it. */
+.fold-back-name span,
+.fold-back-fp span { display: inline-block; }
+.fold-back-fp { display: block; font-size: 1.9rem; opacity: .85; margin-top: .15em; }
+
+/* Sits in the empty lower half, BELOW and off the paper. Instructions printed
+   on the folded sheet itself would be instructions no real backup carries. */
+.fold-prompt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: opacity .3s ease;
+}
+.fold-open { min-height: 48px; padding: 12px 22px; font-size: 1rem; }
+
+/* While folded, the real canvas must not show through: the sheet's top half is
+   folded away, so that region should be bare background, not the upper half of
+   the QR. `visibility` rather than `display` — a display:none canvas measures
+   0 wide and would lay out at one device pixel per module. */
+/* The canvas is never shown: it is the source bitmap and the measurement
+   target, and the two stand-in faces (painted from a snapshot of it, and pinned
+   to its exact box) are what's on screen at every moment. Handing over from the
+   stand-ins to the canvas at the end of the unfold was what made the paper pop:
+   two ringed halves became one ringed card. Never swapping means what you see
+   mid-animation is literally the same elements you see at rest. */
+.fold .qr-card { visibility: hidden; }
+
+/* Open: flap lies flat, the stand-ins get out of the way, the canvas shows. */
+.fold.is-open .fold-flap { transform: rotateX(0deg); }
+.fold.is-open .fold-prompt { opacity: 0; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fold-flap { transition: none; }
+}
+
+/* --- what a SeedQR is ----------------------------------------------------- */
+/* Sits at the foot of the seed steps, after the words. Short and bulleted: the
+   point is that a SeedQR IS the seed, which is not obvious from looking at one,
+   and that the handling rules follow from that. */
+.seed-facts {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 14px;
+}
+/* Sentence case, not uppercase. "SeedQR" carries meaning in its capitalisation
+   — SEEDQR loses the word boundary and reads as an acronym it isn't. Same
+   reason .control label no longer upper-cases: it was rendering "SEEDQR TYPE". */
+.seed-facts h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.seed-facts ul { margin: 0; padding-left: 1.15em; }
+.seed-facts li { margin-bottom: 7px; color: var(--muted); }
+.seed-facts strong { color: var(--text); }

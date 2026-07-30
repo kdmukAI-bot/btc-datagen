@@ -57,14 +57,28 @@ async function checkCanvas(page, where, id, label) {
   const s = await canvasStats(page, id);
   if (!s) return fail(where, `${label}: canvas #${id} not in the DOM`);
   if (s.w < 50) return fail(where, `${label}: canvas never sized (${s.w}px)`);
-  if (s.w !== s.h) fail(where, `${label}: canvas not square (${s.w}x${s.h})`);
+  // The QR itself is always square. A handmade SeedQR canvas is deliberately
+  // TALLER than wide: it carries the hand-written label band on the same
+  // textured surface, so the card reads as one sheet of paper rather than a
+  // canvas sitting inside a differently-textured card. Anything wider than tall,
+  // or a band bigger than the symbol, is still a bug.
+  const band = s.h - s.w;
+  if (band < 0) fail(where, `${label}: canvas wider than tall (${s.w}x${s.h})`);
+  else if (band > s.w * 0.3) {
+    fail(where, `${label}: label band implausibly large (${band}px on a ${s.w}px symbol)`);
+  }
   if (s.ratio < DARK_MIN || s.ratio > DARK_MAX) {
     fail(where, `${label}: does not look like a QR (dark ratio ${s.ratio.toFixed(3)})`);
   }
   return s;
 }
 
-const browser = await chromium.launch();
+// Lets you smoke-test a custom domain before local DNS has caught up, e.g.
+//   SMOKE_HOST_RULES='MAP testqrs.com 185.199.108.153' node tools/smoke_site.mjs https://testqrs.com/
+const hostRules = process.env.SMOKE_HOST_RULES;
+const browser = await chromium.launch(
+  hostRules ? { args: [`--host-resolver-rules=${hostRules}`] } : {},
+);
 
 for (const [name, viewport, dpr] of VIEWPORTS) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: dpr });
@@ -239,6 +253,43 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
     await page.waitForTimeout(700);
     if (await page.isHidden(view)) fail(name, `${view} did not open`);
     if (!(await page.isHidden('#view-sign'))) fail(name, `signing view still visible in ${goto}`);
+
+    // A SeedQR starts behind a closed vault and opens on demand. Scope to the
+    // visible view — both seed surfaces have a .fold-open button, and the one
+    // in the hidden signing view would otherwise be matched first.
+    const fold = page.locator(`${view} .fold`).first();
+    if (await fold.count()) {
+      const isOpen = () => fold.evaluate((v) => v.classList.contains('is-open'));
+      if (await isOpen()) fail(name, `${goto}: sheet should start folded`);
+      // Tapping the PAPER itself must unfold it, not just the button.
+      await page.click(`${view} .fold-stage`, { position: { x: 60, y: 40 } });
+      await page.waitForTimeout(1100);
+      if (!(await isOpen())) fail(name, `${goto}: tapping the sheet did not unfold it`);
+      // The card is permanently hidden (the stand-in faces are what's shown),
+      // so the fold-back gesture lands on the stage.
+      await page.click(`${view} .fold-stage`, { position: { x: 60, y: 40 } });
+      await page.waitForTimeout(700);
+      if (await isOpen()) fail(name, `${goto}: tapping the sheet did not re-fold it`);
+
+      await page.click(`${view} .fold-open`);
+      await page.waitForTimeout(1100);
+      if (!(await isOpen())) fail(name, `${goto}: the unfold button did not work`);
+
+      // Tapping the revealed sheet folds it away again. The gesture lands on the
+      // stage, not the card: the card is permanently visibility:hidden (the
+      // stand-in faces are what's on screen), and hidden elements take no
+      // pointer events. This also guards the opposite bug — a toggle placed on
+      // .fold would catch the very click that unfolded it and re-fold it, so the
+      // sheet would never appear open at all.
+      await page.click(`${view} .fold-stage`, { position: { x: 60, y: 40 } });
+      await page.waitForTimeout(700);
+      if (await isOpen()) fail(name, `${goto}: tapping the sheet did not re-fold it`);
+      await page.click(`${view} .fold-open`);
+      await page.waitForTimeout(800);
+      if (!(await isOpen())) fail(name, `${goto}: sheet did not unfold again after re-folding`);
+      console.log(`  activity "${goto}": sheet unfolds, tap-to-fold works`);
+    }
+
     for (const [id, label] of canvases) await checkCanvas(page, name, id, label);
     console.log(`  activity "${goto}" renders`);
   }
@@ -246,6 +297,10 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   await page.click('#home');
   await page.waitForTimeout(400);
   if (await page.isHidden('#view-home')) fail(name, 'home did not return to the landing page');
+  // Vaults re-lock on navigation, so the next person at the demo table starts
+  // from the closed state instead of inheriting the last one's.
+  const stillOpen = await page.locator('.fold.is-open').count();
+  if (stillOpen) fail(name, `${stillOpen} sheet(s) stayed unfolded after navigating home`);
 
 
   if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/site-${name}.png` });

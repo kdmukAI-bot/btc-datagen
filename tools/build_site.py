@@ -43,9 +43,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE_SRC = os.path.join(ROOT, "site")
 DIST = os.path.join(SITE_SRC, "dist")
 STATIC_FILES = ["index.html", "app.js", "styles.css", "seedsigner-logo.svg",
+                # Self-hosted rather than pulled from a font CDN: this thing gets
+                # opened on conference wifi, and a webfont that fails to load
+                # would silently drop the handwritten label back to a system
+                # serif — the exact failure the font is there to avoid.
+                "permanent-marker.woff2",
                 # Custom domain. Ships inside the artifact so the domain travels
                 # with the build rather than living only in repo settings.
                 "CNAME"]
+# Copied wholesale (font licence texts).
+STATIC_DIRS = ["licenses"]
 
 MIN_FRAGMENT_BYTES = 10          # Sparrow MIN_FRAGMENT_LENGTH
 DEFAULT_FPS = 5                  # Sparrow ANIMATION_PERIOD_MILLIS = 200ms
@@ -377,6 +384,10 @@ def copy_static():
         src = os.path.join(SITE_SRC, name)
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(DIST, name))
+    for name in STATIC_DIRS:
+        src = os.path.join(SITE_SRC, name)
+        if os.path.isdir(src):
+            shutil.copytree(src, os.path.join(DIST, name), dirs_exist_ok=True)
 
 
 def main():
@@ -393,9 +404,17 @@ def main():
     if args.quick:
         all_scenarios = [s for s in all_scenarios if s.num_inputs <= 5]
 
-    if os.path.exists(DIST):
-        shutil.rmtree(DIST)
-    os.makedirs(DIST, exist_ok=True)
+    # Build into a staging directory and swap at the end, so the previous build
+    # keeps serving throughout. Wiping DIST up front left the dev server with no
+    # index.html for the ~2 minutes of a full build — anyone testing on a phone
+    # in that window just got a directory listing.
+    global DIST
+    final = DIST
+    staging = final + ".building"
+    if os.path.exists(staging):
+        shutil.rmtree(staging)
+    os.makedirs(staging)
+    DIST = staging
 
     started = time.time()
     total_bytes = 0
@@ -439,6 +458,18 @@ def main():
     })
 
     copy_static()
+
+    # Swap the finished build in. Rename is near-instant, so the window where the
+    # site is unavailable is a moment rather than the length of a build.
+    DIST = final
+    previous = final + ".previous"
+    if os.path.exists(previous):
+        shutil.rmtree(previous)
+    if os.path.exists(final):
+        os.rename(final, previous)
+    os.rename(staging, final)
+    shutil.rmtree(previous, ignore_errors=True)
+
     elapsed = time.time() - started
     print(f"\nBuilt {len(scenario_entries)} scenarios, {len(seed_entries)} seeds, "
           f"{len(wallet_entries)} wallets, {len(message_entries)} messages")

@@ -22,6 +22,281 @@
 'use strict';
 
 const QUIET_ZONE = 4;           // modules; spec minimum, vs Sparrow's on-screen 2
+// The handmade card runs a tighter margin: the guide strip already sits between
+// the quiet zone and the grid, so a full 4-module zone on top of that left a
+// conspicuous empty band between the hand-written label and the code. The
+// printed templates carry no quiet zone at all and still scan.
+const HAND_QUIET = 3;
+const TAU = Math.PI * 2;
+
+// "Handmade" SeedQR palette. Warm paper and a soft dark grey rather than pure
+// black — a felt pen never lays down #000. Contrast stays enormous (grey ~3%
+// luminance against ~87% paper), so decoders are unaffected.
+const PAPER = '#f0e4c4';   // aged, well off white and towards yellow
+const GRID_INK = 'rgba(86, 72, 44, 0.28)';        // per-module, dotted
+const ZONE_INK = 'rgba(74, 62, 38, 0.55)';        // zone boundaries, solid
+const GUIDE_INK = 'rgba(105, 95, 72, 0.72)';      // the A-F / 1-6 guides
+const GUIDE_RULE = 'rgba(120, 108, 82, 0.40)';    // strip borders around them
+// Room outside the quiet zone for the row/column guides, in modules. Added to
+// the canvas rather than taken out of the quiet zone: the quiet zone has to stay
+// clear paper for the symbol to be found reliably.
+const GUTTER_MODULES = 2.6;
+
+/* One marker colour per key: different people, different pens. In a multisig
+ * demo it also means each cosigner's card is instantly distinguishable, which is
+ * useful rather than merely decorative.
+ *
+ * Every entry is LOW LIGHTNESS on purpose. A decoder binarizes on luminance, so
+ * a marker colour is only safe while it stays dark against ~94% paper — a yellow
+ * or orange highlighter would look plausible and scan terribly.
+ *
+ * The hand-written label uses the SAME marker, which is what a person would
+ * actually do: you label the card with the pen already in your hand. */
+const MARKER_COLORS = {
+  graphite: { h: 35, s: 10, l: 30 },                 // near-black Sharpie
+  blue: { h: 221, s: 55, l: 34 },
+  green: { h: 150, s: 45, l: 26 },
+  maroon: { h: 353, s: 52, l: 34 },
+  purple: { h: 275, s: 42, l: 34 },
+  teal: { h: 193, s: 48, l: 27 },
+  brown: { h: 25, s: 45, l: 28 },
+};
+
+/* Assigned explicitly, not hashed. alice/bob/carol are the 2-of-3 cosigners and
+ * so the trio a demo actually exercises — they have to be unmistakably
+ * different from each other, and hashing happened to hand alice and carol the
+ * same purple. Their hues are spread wide on purpose (275 / 221 / 150).
+ * Graphite is kept in the set, just moved off bob onto dave. */
+const SEED_MARKERS = {
+  alice: 'purple',
+  bob: 'blue',
+  carol: 'maroon',
+  dave: 'graphite',
+  erin: 'brown',
+  frank: 'teal',
+  grace: 'green',
+};
+
+const MARKER_FALLBACK = Object.keys(MARKER_COLORS);
+
+function markerFor(seedName) {
+  const named = SEED_MARKERS[seedName];
+  if (named) return MARKER_COLORS[named];
+  // Any seed added later still gets a stable colour.
+  let h = 0;
+  for (let i = 0; i < seedName.length; i++) {
+    h = Math.imul(h ^ seedName.charCodeAt(i), 0x01000193) >>> 0;
+  }
+  return MARKER_COLORS[MARKER_FALLBACK[h % MARKER_FALLBACK.length]];
+}
+
+/* Paper grain, built once into a small tile and repeated.
+ *
+ * Regenerating noise per draw would be wasteful, and doing it per pixel on a
+ * 1000px canvas is not free. The amplitude is well short of anything a
+ * binarizer would trip over — paper sits around 90% lightness and the darkest
+ * ink at ~19% — but grit is what stops a flat fill reading as a screen, so it's
+ * pushed until it's actually visible on a phone rather than merely present. */
+let paperGrain = null;
+function grainPattern(ctx) {
+  if (paperGrain) return paperGrain;
+  const size = 128;
+  const tile = document.createElement('canvas');
+  tile.width = size;
+  tile.height = size;
+  const tctx = tile.getContext('2d');
+  const img = tctx.createImageData(size, size);
+  for (let i = 0; i < size * size; i++) {
+    const n = Math.random() - 0.5;
+    const light = n > 0;
+    img.data[i * 4] = light ? 255 : 120;
+    img.data[i * 4 + 1] = light ? 252 : 104;
+    img.data[i * 4 + 2] = light ? 240 : 72;
+    img.data[i * 4 + 3] = Math.abs(n) * 78;
+  }
+  tctx.putImageData(img, 0, 0);
+  paperGrain = ctx.createPattern(tile, 'repeat');
+  return paperGrain;
+}
+
+/* Soft crease down the middle in each axis — a backup card that has lived folded
+   in a safe, rather than a freshly generated rectangle. Each crease is a narrow
+   shadow with a highlight on one side, which is what sells a fold. */
+function drawCreases(ctx, w, h) {
+  const crease = (x0, y0, x1, y1, len) => {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0.00, 'rgba(120, 100, 60, 0)');
+    g.addColorStop(0.42, 'rgba(120, 100, 60, 0.05)');
+    g.addColorStop(0.50, 'rgba(88, 70, 38, 0.10)');
+    g.addColorStop(0.58, 'rgba(255, 253, 244, 0.55)');
+    g.addColorStop(1.00, 'rgba(120, 100, 60, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  };
+  const vx = w * 0.5;
+  const hy = h * 0.5;
+  crease(vx - w * 0.07, 0, vx + w * 0.07, 0);
+  crease(0, hy - h * 0.07, 0, hy + h * 0.07);
+}
+
+/* Handmade-look tuning, in one place so the scannability sweep can drive it.
+   `floor`/`range` are fractions of a full half-cell radius. */
+const HAND = {
+  // Marker ink: a mid grey. Distinctly lighter than the PRINTED registration
+  // blocks, because on a real template those are pre-printed and the dots are
+  // whatever pen the owner had. That contrast is half the story the look tells.
+  inkL: 30,        // marker ink lightness, %
+  inkVary: 12,     // +/- half of this, %
+  printL: 19,      // pre-printed blocks: near-black, not pure black
+  offset: 0.10,    // dab centre wander, +/- half of this, as a fraction of a cell
+  // Sharpie nib vs the little box you're told to fill: the nib usually wins, so
+  // most dabs OVERFLOW their cell and neighbours merge into blobs. Width is in
+  // cells, so anything over 1.0 is spilling out.
+  // Biased deliberately upward. QR codes tolerate marks that are too BIG far
+  // better than dots that are too small: an oversized dab still cannot reach a
+  // neighbouring cell's sample point, whereas an undersized one fails to cover
+  // its own. So err fat.
+  widthMin: 0.95,
+  widthRange: 0.35,   // 0.95 .. 1.30 cells wide
+  strokeMin: 0.10,    // nib drag length, in cells
+  strokeRange: 0.30,
+  // Printed ink flakes off paper that has been folded and handled. Applied only
+  // to the registration blocks, since those are the printed part.
+  //
+  // Kept deliberately light. Finder patterns are STRUCTURAL, not error
+  // corrected: a decoder finds the symbol at all by scanning for the 1:1:3:1:1
+  // dark/light ratio through them. Data modules can lose ink and be
+  // reconstructed; a finder pattern eaten away past recognition means the
+  // symbol is never located in the first place. Specks are small and sparse so
+  // they read as wear without disturbing that ratio.
+  // Pushed up until the wear actually reads on a phone. The safe direction is
+  // BIGGER-BUT-GREY: a factorial over {print darkness} x {speck colour} x {speck
+  // size} showed only one failing combination — large AND paper-white, which
+  // punches holes that binarize as light. Large grey specks decode fine; so do
+  // small white ones. These are large and grey.
+  flakeChance: 0.72,  // fraction of printed cells showing any wear
+  flakeMax: 4,        // specks per affected cell
+  flakeSizeMin: 0.12, // speck diameter, as a fraction of a cell
+  flakeSize: 0.34,    // ...plus up to this much more
+  flakeLMin: 26,      // speck lightness %, far below paper's ~90
+  flakeLRange: 11,
+};
+
+/* Deterministic per-module wobble, so hand-filled dots don't look stamped: each
+ * dot gets its own size, a slight offset, and a slightly different ink density.
+ * Same module always yields the same wobble, so nothing shimmers on reflow and
+ * the scannability test stays reproducible.
+ *
+ * On the bounds: going LARGE is safe — even a dot overflowing its cell can't
+ * reach a neighbouring cell's centre, which is where a decoder samples — so the
+ * only theoretical limit is the small end.
+ *
+ * A sweep at the tightest size we render (320px-wide phone, dpr 3) had zbar
+ * still decoding with the floor as low as 0.40 and ink as light as 65%
+ * lightness. So these settings have wide margin *on a clean synthetic render*.
+ * Do not read that as licence to push them: a real camera, off-axis and
+ * under bad light, is far less forgiving than zbar on a pristine PNG, and the
+ * hardware is the only test that counts. These values keep the handmade look
+ * while staying conservative. */
+function jitter(x, y) {
+  const h = Math.imul((x * 73856093) ^ (y * 19349663), 0x45d9f3b) >>> 0;
+  const g = Math.imul(h ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
+  return {
+    dx: (((h & 0xff) / 255) - 0.5) * HAND.offset,
+    dy: ((((h >> 8) & 0xff) / 255) - 0.5) * HAND.offset,
+    w: HAND.widthMin + (((h >> 16) & 0xff) / 255) * HAND.widthRange,
+    inkD: ((((h >> 24) & 0xff) / 255) - 0.5) * HAND.inkVary,
+    len: HAND.strokeMin + ((g & 0xff) / 255) * HAND.strokeRange,
+    ang: (((g >> 8) & 0xff) / 255) * TAU,
+  };
+}
+
+/* Zone size for the printed transcription templates.
+ *
+ * Straight from the device's own transcribe screen (`modules_per_zone =
+ * (size == 21) ? 7 : 5`) and matching the printed PDFs in the SeedSigner repo
+ * (docs/seed_qr/printable_templates/grid_NxN.pdf) exactly:
+ *
+ *   21x21 -> 7 per zone, 3 zones, rows A-C, columns 1-3
+ *   25x25 -> 5 per zone, 5 zones, rows A-E, columns 1-5
+ *   29x29 -> 5 per zone, 6 zones, rows A-F, columns 1-6  (last zone only 4 wide)
+ *
+ * The zone count is a ceiling, so the final zone can be a partial one; guides
+ * are centred on each zone's ACTUAL extent rather than assuming full width. */
+function zoneSize(modules) {
+  return modules === 21 ? 7 : 5;
+}
+
+function zoneRanges(modules) {
+  const per = zoneSize(modules);
+  const ranges = [];
+  for (let start = 0; start < modules; start += per) {
+    ranges.push([start, Math.min(start + per, modules)]);
+  }
+  return ranges;
+}
+
+/* Fine mottling for the PRINTED blocks, so they don't read as flat digital
+ * black. Same idea as the paper grain, tuned for dark ink: a sparse two-tone
+ * speckle in both directions, tiled from one small canvas.
+ *
+ * This replaced an earlier approach that drew discrete pale splotches. Those
+ * looked like damage rather than print, and were actively risky: large light
+ * blobs in a finder pattern binarize as holes, and finder patterns are
+ * STRUCTURAL — a decoder locates the symbol by scanning for their 1:1:3:1:1
+ * ratio, with no error correction to fall back on. Fine noise softens the fill
+ * without ever producing a light region big enough to matter, and a camera's
+ * own defocus averages it away entirely.
+ *
+ * Tiled from the canvas origin, so neighbouring printed cells line up and a
+ * block still reads as one continuous piece of ink. */
+let inkGrain = null;
+function inkNoisePattern(ctx) {
+  if (inkGrain) return inkGrain;
+  const size = 96;
+  const tile = document.createElement('canvas');
+  tile.width = size;
+  tile.height = size;
+  const tctx = tile.getContext('2d');
+  const img = tctx.createImageData(size, size);
+  for (let i = 0; i < size * size; i++) {
+    const n = Math.random() - 0.5;
+    const lighter = n > 0;
+    img.data[i * 4] = lighter ? 168 : 26;
+    img.data[i * 4 + 1] = lighter ? 158 : 24;
+    img.data[i * 4 + 2] = lighter ? 136 : 20;
+    img.data[i * 4 + 3] = Math.abs(n) * HAND.inkNoise;
+  }
+  tctx.putImageData(img, 0, 0);
+  inkGrain = ctx.createPattern(tile, 'repeat');
+  return inkGrain;
+}
+
+/* Is this module part of a fixed registration pattern — a finder "eye" or the
+ * alignment block?
+ *
+ * Ported verbatim from the device's own zoomed-transcription screen
+ * (seedsigner-lvgl-screens, seed_transcribe_zoomed_qr_is_registration) so the
+ * "handmade" SeedQR here looks like what a transcriber actually sees. Those
+ * blocks stay SOLID SQUARES: printed SeedQR templates come with them
+ * pre-printed in normal square form, and full-cell squares let neighbouring
+ * cells tile into one connected shape. Only DATA modules are the round dots the
+ * transcriber fills in by hand. (The `qrcode` library's CircleModuleDrawer
+ * makes the same split: square eyes, round data.)
+ *
+ * Alignment position follows the same square-off: module 16 for a 25-module QR,
+ * 20 for 29; version-1 21-module QRs have no alignment pattern at all.
+ */
+function isRegistrationModule(x, y, size) {
+  const finder = (x < 7 && y < 7)
+    || (x >= size - 7 && y < 7)
+    || (x < 7 && y >= size - 7);
+  const align = size === 25 ? 16 : (size === 29 ? 20 : -1);
+  const alignment = align >= 0
+    && x >= align && x < align + 5
+    && y >= align && y < align + 5;
+  return finder || alignment;
+}
 
 const VIEWS = ['home', 'sign', 'seed', 'verify', 'message'];
 
@@ -42,7 +317,10 @@ const state = {
   onlySeedName: null,
   onlySeedVariant: 'compact',
   messageName: null,
-  filters: { network: 'main', sig_type: 'all', script_type: 'all', output_shape: 'all' },
+  // Native SegWit by default: the common case, and the one the landing
+  // scenario uses. Outputs are deliberately NOT a filter — the shape is in
+  // each row's title, so leaving it out keeps the list short enough to scan.
+  filters: { network: 'main', sig_type: 'all', script_type: 'P2WPKH', inputs: 'all' },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -74,6 +352,47 @@ function prepare(payload) {
 }
 
 const sats = (n) => n.toLocaleString('en-US') + ' sats';
+
+/* "alice" -> "Alice's key". What someone would actually scrawl on a backup,
+   rather than a spec line. Names already ending in s take the bare apostrophe. */
+function possessive(name) {
+  const titled = name.charAt(0).toUpperCase() + name.slice(1);
+  return `${titled}${titled.endsWith('s') ? "'" : "'s"} key`;
+}
+
+/* Draw the label a character at a time, each one nudged and tilted slightly.
+ *
+ * A single rotation applied to the whole string still reads as typeset text
+ * that happens to be crooked. Hand lettering is irregular letter BY letter:
+ * baselines drift, individual characters lean different ways, and the slant
+ * isn't consistent. Wander is deterministic per character index, so redraws
+ * (resize, font load, unfolding the sheet) don't make the label twitch.
+ *
+ * Called inside a save()/restore() with the origin already at the label centre
+ * and `ctx.font` set by the caller. */
+function drawHandLabel(ctx, text, size) {
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const chars = [...text];
+  const widths = chars.map((ch) => ctx.measureText(ch).width);
+  const total = widths.reduce((a, b) => a + b, 0);
+
+  let x = -total / 2;
+  chars.forEach((ch, i) => {
+    const h = Math.imul(i + 1, 0x9e3779b1) >>> 0;
+    const dy = (((h & 0xff) / 255) - 0.5) * size * 0.10;        // baseline drift
+    const rot = ((((h >> 8) & 0xff) / 255) - 0.5) * 0.10;       // +/- ~3 degrees
+    const shear = ((((h >> 16) & 0xff) / 255) - 0.5) * 0.22;    // lean, per letter
+    const w = widths[i];
+    ctx.save();
+    ctx.translate(x + w / 2, dy);
+    ctx.rotate(rot);
+    ctx.transform(1, 0, shear, 1, 0, 0);
+    ctx.fillText(ch, -w / 2, 0);
+    ctx.restore();
+    x += w;
+  });
+}
 
 /* ---------- QR player ----------------------------------------------------- */
 
@@ -121,7 +440,8 @@ class QrPlayer {
     if (!canvas || !payload) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const grid = payload.maxModules + QUIET_ZONE * 2;
+    const quiet = this.renderStyle === 'handmade' ? HAND_QUIET : QUIET_ZONE;
+    const grid = payload.maxModules + quiet * 2;
 
     let availCss;
     if (canvas.id === 'fs-canvas') {
@@ -138,13 +458,27 @@ class QrPlayer {
     // will call back once the container has a real width.
     if (!(availCss > 0)) return;
 
-    const scale = Math.max(1, Math.floor((availCss * dpr) / grid));
+    // The guides live OUTSIDE the quiet zone, so they cost canvas rather than
+    // symbol size.
+    const gutterModules = this.renderStyle === 'handmade' ? GUTTER_MODULES : 0;
+    const scale = Math.max(1, Math.floor((availCss * dpr) / (grid + gutterModules)));
     const devPx = grid * scale;
-    canvas.width = devPx;
-    canvas.height = devPx;
-    canvas.style.width = `${devPx / dpr}px`;
-    canvas.style.height = `${devPx / dpr}px`;
+    const gutter = Math.round(gutterModules * scale);
+
+    // The hand-written label is drawn INTO the canvas rather than sitting in the
+    // card as HTML. As a sibling element it was a second surface: the canvas had
+    // grain and creases, the card padding did not, and the join between them was
+    // a visible rectangle that broke the illusion of one sheet of paper. Giving
+    // the canvas a taller band keeps every textured pixel on one surface without
+    // shrinking the symbol (which growing the quiet zone would have done).
+    const band = this.label ? Math.round(scale * 6.4) : 0;
+    canvas.width = devPx + gutter;
+    canvas.height = devPx + gutter + band;
+    canvas.style.width = `${(devPx + gutter) / dpr}px`;
+    canvas.style.height = `${(devPx + gutter + band) / dpr}px`;
     this.scale = scale;
+    this.band = band;
+    this.gutter = gutter;
     this.draw();
   }
 
@@ -153,25 +487,202 @@ class QrPlayer {
     if (!canvas || !payload || !this.scale) return;
     const f = payload.frames[this.frame];
     const scale = this.scale;
+    const handmade = this.renderStyle === 'handmade';
+    // Declared up here because both the label and the dabs need it, and the
+    // label is drawn first.
+    const mk = this.marker || MARKER_COLORS.graphite;
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#000000';
 
-    // Centre this frame inside the locked grid of the largest frame.
-    const off = QUIET_ZONE + ((payload.maxModules - f.m) >> 1);
+    // Paper tint and ink, not white and pure black. Contrast stays enormous, so
+    // decoders are unbothered, but it reads as a physical card. This lives
+    // INSIDE the canvas on purpose: a CSS filter or rotation on the canvas would
+    // resample it and undo the crisp whole-pixel module grid.
+    ctx.fillStyle = handmade ? PAPER : '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const band = this.band || 0;
+    if (handmade) {
+      ctx.fillStyle = grainPattern(ctx);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      drawCreases(ctx, canvas.width, canvas.height);
+      if (this.label) {
+        // Same marker as the dabs — nudged a little brighter, because thin
+        // letter strokes read lighter than dense blobs of the same ink.
+        const ink = `hsl(${mk.h} ${Math.min(100, mk.s + 12)}% ${mk.l + 4}%)`;
+        const maxWidth = canvas.width * 0.86;
+        const write = (text, y, targetSize, tilt) => {
+          ctx.save();
+          ctx.translate(canvas.width / 2, y);
+          ctx.rotate(tilt);
+          ctx.fillStyle = ink;
+          let size = Math.round(targetSize);
+          ctx.font = `${size}px "Permanent Marker", cursive`;
+          // Shrink to fit rather than run off the edge of the card.
+          const measured = ctx.measureText(text).width;
+          if (measured > maxWidth) {
+            size = Math.max(10, Math.floor(size * (maxWidth / measured)));
+          }
+          drawHandLabel(ctx, text, size);
+          ctx.restore();
+        };
+        write(this.label, band * 0.33, scale * 3.4, -0.019);
+        // The master fingerprint, which is what actually tells two backups
+        // apart — a name is a convenience, the fingerprint is the identity, and
+        // writing it on the card is standard practice. SeedSigner's own
+        // fingerprint templates give it a box in the header for exactly this.
+        if (this.fingerprint) {
+          write(this.fingerprint, band * 0.78, scale * 2.8, 0.012);
+        }
+      }
+    }
+
+    // Centre this frame inside the locked grid of the largest frame, then shift
+    // past the label band (top) and the guide gutter (top + left).
+    const quiet = handmade ? HAND_QUIET : QUIET_ZONE;
+    const off = quiet + ((payload.maxModules - f.m) >> 1);
+    const gutter = this.gutter || 0;
+    const originX = gutter;
+    const originY = band + gutter;
     const bits = f.bits;
+    const radius = scale / 2;
+
+    // Transcription grid, drawn BENEATH the modules so the dabs stay solid. The
+    // device draws it on top (a transcriber needs to see cell edges), but here
+    // that would eat into the dark area a camera depends on.
+    //
+    // Two weights, copying the printed templates: DOTTED hairlines at every
+    // module, SOLID heavier lines at each zone boundary. lineWidth is in DEVICE
+    // pixels — a hardcoded 1 is a third of a CSS pixel on a dpr-3 phone, which
+    // is why the grid was invisible on a real handset while looking fine in
+    // dpr-1 screenshots — so it scales with the module size.
+    if (handmade && scale >= 4) {
+      const a = originY + off * scale;
+      const b = originY + (off + f.m) * scale;
+      const la = originX + off * scale;
+      const lb = originX + (off + f.m) * scale;
+      const hair = Math.max(1, Math.round(scale / 10));
+
+      ctx.strokeStyle = GRID_INK;
+      ctx.lineWidth = hair;
+      ctx.setLineDash([hair, hair * 2]);
+      for (let i = 0; i <= f.m; i++) {
+        const gx = Math.round(originX + (off + i) * scale) + 0.5;
+        const gy = Math.round(originY + (off + i) * scale) + 0.5;
+        ctx.beginPath(); ctx.moveTo(gx, a); ctx.lineTo(gx, b); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(la, gy); ctx.lineTo(lb, gy); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = ZONE_INK;
+      ctx.lineWidth = Math.max(1, Math.round(scale / 7));
+      const per = zoneSize(f.m);
+      for (let i = 0; i <= f.m; i += per) {
+        const gx = Math.round(originX + (off + i) * scale) + 0.5;
+        const gy = Math.round(originY + (off + i) * scale) + 0.5;
+        ctx.beginPath(); ctx.moveTo(gx, a); ctx.lineTo(gx, b); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(la, gy); ctx.lineTo(lb, gy); ctx.stroke();
+      }
+      // Close the far edges, which a stride of `per` misses when the last zone
+      // is a partial one (29x29).
+      const ex = Math.round(originX + (off + f.m) * scale) + 0.5;
+      const ey = Math.round(originY + (off + f.m) * scale) + 0.5;
+      ctx.beginPath(); ctx.moveTo(ex, a); ctx.lineTo(ex, b); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(la, ey); ctx.lineTo(lb, ey); ctx.stroke();
+
+      // Row/column guides, laid out like the printed templates: a header strip
+      // of numbered cells across the top, a lettered strip down the left, an
+      // empty corner cell, thin rules boxing them in.
+      //
+      // They sit FLUSH against the grid, which technically intrudes on the
+      // symbol's quiet zone — exactly as the printed PDFs do, since those carry
+      // no quiet zone at all and rely on the surrounding paper. The guides are
+      // light grey hairlines and there is a wide paper margin outside them, so
+      // detection is unaffected; attaching them to the grid is what makes them
+      // read as part of the template rather than floating labels.
+      if (gutter > 0) {
+        const gridL = originX + off * scale;
+        const gridT = originY + off * scale;
+        const gridR = originX + (off + f.m) * scale;
+        const gridB = originY + (off + f.m) * scale;
+        const stripL = gridL - gutter;
+        const stripT = gridT - gutter;
+
+        ctx.strokeStyle = GUIDE_RULE;
+        ctx.lineWidth = Math.max(1, Math.round(scale / 12));
+        // Box around strips + grid, then the rules closing each strip off.
+        ctx.strokeRect(Math.round(stripL) + 0.5, Math.round(stripT) + 0.5,
+                       Math.round(gridR - stripL), Math.round(gridB - stripT));
+        ctx.beginPath();
+        ctx.moveTo(stripL, Math.round(gridT) + 0.5);
+        ctx.lineTo(gridR, Math.round(gridT) + 0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(Math.round(gridL) + 0.5, stripT);
+        ctx.lineTo(Math.round(gridL) + 0.5, gridB);
+        ctx.stroke();
+
+        ctx.fillStyle = GUIDE_INK;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `${Math.round(scale * 1.35)}px -apple-system, "Segoe UI", Roboto, sans-serif`;
+        zoneRanges(f.m).forEach(([zStart, zEnd], k) => {
+          const mid = (zStart + zEnd) / 2;
+          ctx.fillText(String(k + 1), gridL + mid * scale, stripT + gutter / 2);
+          ctx.fillText(String.fromCharCode(65 + k), stripL + gutter / 2, gridT + mid * scale);
+          if (k > 0) {
+            const dx = Math.round(gridL + zStart * scale) + 0.5;
+            const dy = Math.round(gridT + zStart * scale) + 0.5;
+            ctx.beginPath(); ctx.moveTo(dx, stripT); ctx.lineTo(dx, gridT); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(stripL, dy); ctx.lineTo(gridL, dy); ctx.stroke();
+          }
+        });
+      }
+    }
+
+    // Registration blocks are PRINTED, so they get flat, much blacker ink than
+    // the owner's marker dabs. That difference is doing real explanatory work:
+    // it shows at a glance which parts came with the template and which parts a
+    // person filled in.
+    const printInk = handmade ? `hsl(35 8% ${HAND.printL}%)` : '#000000';
+    ctx.fillStyle = printInk;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
     for (let r = 0; r < f.m; r++) {
       const rowBase = r * f.m;
       for (let c = 0; c < f.m; c++) {
         const i = rowBase + c;
-        if ((bits[i >> 3] >> (7 - (i & 7))) & 1) {
-          ctx.fillRect((off + c) * scale, (off + r) * scale, scale, scale);
+        if (!((bits[i >> 3] >> (7 - (i & 7))) & 1)) continue;
+        const x = originX + (off + c) * scale;
+        const y = originY + (off + r) * scale;
+        if (handmade && !isRegistrationModule(c, r, f.m)) {
+          // One dab of a marker per cell: a short round-capped drag rather than
+          // a perfect circle, so the mark has a direction and a blobby edge the
+          // way a felt tip actually leaves. Wider than its cell more often than
+          // not, so neighbours run together.
+          const j = jitter(c, r);
+          const cx = x + radius + j.dx * scale;
+          const cy = y + radius + j.dy * scale;
+          const hx = Math.cos(j.ang) * j.len * scale * 0.5;
+          const hy = Math.sin(j.ang) * j.len * scale * 0.5;
+          ctx.strokeStyle = `hsl(${mk.h} ${mk.s}% ${mk.l + j.inkD}%)`;
+          ctx.lineWidth = j.w * scale;
+          ctx.beginPath();
+          ctx.moveTo(cx - hx, cy - hy);
+          ctx.lineTo(cx + hx, cy + hy);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = printInk;
+          ctx.fillRect(x, y, scale, scale);
+          if (handmade) {
+            ctx.fillStyle = inkNoisePattern(ctx);
+            ctx.fillRect(x, y, scale, scale);
+          }
         }
       }
     }
     if (this.onFrame) this.onFrame(this.frame, payload.count);
+    if (this.onRendered) this.onRendered(canvas);
   }
 
   /* Once a UR animation reaches the fountain parts it STAYS there.
@@ -360,10 +871,11 @@ async function renderSeedStep() {
   if (!state.seedName || !seeds.includes(state.seedName)) state.seedName = seeds[0];
 
   const multi = seeds.length > 1;
+  // Stage direction: what the person would actually be doing at this point.
   $('seed-hint').textContent = multi
-    ? `${state.scenario.threshold}-of-${seeds.length} multisig — sign with any `
-      + `${state.scenario.threshold}, one at a time.`
-    : '';
+    ? `You retrieve your handmade SeedQR. ${state.scenario.threshold}-of-${seeds.length} `
+      + `multisig — sign with any ${state.scenario.threshold}, one at a time.`
+    : 'You retrieve your handmade SeedQR.';
 
   const chooser = $('seed-chooser');
   chooser.hidden = !multi;
@@ -383,12 +895,16 @@ async function renderSeedStep() {
     { value: 'standard', label: `SeedQR (${data.words}w)` },
   ], state.seedVariant, (v) => { state.seedVariant = v; renderSeedStep(); });
 
+  seedPlayer.label = possessive(data.name);
+  seedPlayer.marker = markerFor(data.name);
+  seedPlayer.fingerprint = data.master_fingerprint.toUpperCase();
   seedPlayer.setPayload(prepare(data[state.seedVariant].qr));
 
-  const words = data.mnemonic.split(' ')
-    .map((w, i) => `<span><i>${i + 1}</i>${w}</span>`).join('');
+  const wordList = data.mnemonic.split(' ');
+  const wordRows = Math.ceil(wordList.length / 3);
+  const words = wordList.map((w, i) => `<span><i>${i + 1}</i>${w}</span>`).join('');
   $('seed-words').innerHTML = `
-    <div class="words">${words}</div>
+    <div class="words" style="grid-template-rows: repeat(${wordRows}, auto)">${words}</div>
     <table class="kv" style="margin-top:10px">
       <tr><th>Master fingerprint</th><td class="mono">${data.master_fingerprint}</td></tr>
     </table>`;
@@ -406,7 +922,7 @@ async function renderDescriptorStep() {
   const data = await getJSON(entry.file);
 
   $('descriptor-hint').textContent =
-    `So the device can recognise this ${entry.policy} wallet's own change output.`;
+    `So the device can verify this ${entry.policy} wallet's own change output.`;
 
   const urs = data.descriptor_urs;
   if (!Object.keys(urs).includes(state.descriptorUr)) {
@@ -509,15 +1025,19 @@ async function renderOnlySeedView() {
   ], state.onlySeedVariant, (v) => { state.onlySeedVariant = v; renderOnlySeedView(); });
 
   const variant = data[state.onlySeedVariant];
+  onlySeedPlayer.label = possessive(data.name);
+  onlySeedPlayer.marker = markerFor(data.name);
+  onlySeedPlayer.fingerprint = data.master_fingerprint.toUpperCase();
   onlySeedPlayer.setPayload(prepare(variant.qr));
   $('only-seed-note').textContent = state.onlySeedVariant === 'compact'
     ? `${data.words === 24 ? 32 : 16} bytes of entropy — a smaller, easier scan.`
     : `${variant.payload.length} digits, numeric mode.`;
 
-  const words = data.mnemonic.split(' ')
-    .map((w, i) => `<span><i>${i + 1}</i>${w}</span>`).join('');
+  const wordList = data.mnemonic.split(' ');
+  const wordRows = Math.ceil(wordList.length / 3);
+  const words = wordList.map((w, i) => `<span><i>${i + 1}</i>${w}</span>`).join('');
   $('only-seed-words').innerHTML = `
-    <div class="words">${words}</div>
+    <div class="words" style="grid-template-rows: repeat(${wordRows}, auto)">${words}</div>
     <table class="kv" style="margin-top:10px">
       <tr><th>Master fingerprint</th><td class="mono">${data.master_fingerprint}</td></tr>
     </table>`;
@@ -552,10 +1072,90 @@ async function renderMessageView() {
     </table>`;
 }
 
+/* ---------- the folded sheet ---------------------------------------------- */
+
+/* The card starts folded in half and unfolds upward. The two stand-in faces are
+   painted from a snapshot of the canvas, because a canvas element can only live
+   in one place in the DOM and the fold needs its top and bottom halves to move
+   independently. Once the flap is flat the stand-ins fade out and the real
+   canvas — which was never display:none, only covered — is what you scan. */
+function refreshFold(fold, canvas, meta) {
+  if (!fold || !canvas.width) return;
+  // Match the stage to the CANVAS box, not the container's.
+  //
+  // Integer module scaling means the canvas is usually a few percent narrower
+  // than the space available, and the card centres it. The stand-in faces size
+  // their background to the stage, so a stage spanning the full container
+  // stretched the snapshot ~5% too large — the QR visibly popped down to size
+  // the instant the real canvas took over at the end of the unfold, and popped
+  // back up when re-folding.
+  const stage = fold.querySelector('.fold-stage');
+  const foldBox = fold.getBoundingClientRect();
+  const canvasBox = canvas.getBoundingClientRect();
+  stage.style.left = `${canvasBox.left - foldBox.left}px`;
+  stage.style.top = `${canvasBox.top - foldBox.top}px`;
+  stage.style.width = `${canvasBox.width}px`;
+  stage.style.height = `${canvasBox.height}px`;
+
+  const url = canvas.toDataURL();
+  fold.querySelectorAll('.fold-upper, .fold-front').forEach((face) => {
+    face.style.backgroundImage = `url(${url})`;
+  });
+  if (!meta) return;
+  // The outside of the folded sheet carries the same identifying marks, in the
+  // same pen, so a closed card still tells you which key it is.
+  const note = fold.querySelector('.fold-back-note');
+  if (!note) return;
+  note.style.color = `hsl(${meta.marker.h} ${Math.min(100, meta.marker.s + 12)}% ${meta.marker.l + 4}%)`;
+  handwrite(note.querySelector('.fold-back-name'), meta.label, 0);
+  handwrite(note.querySelector('.fold-back-fp'), meta.fingerprint, 7);
+}
+
+/* DOM equivalent of drawHandLabel: one span per character, each nudged, tilted
+   and sheared a little. A single rotation on the whole line still reads as type
+   that happens to be crooked — the irregularity has to be per letter. */
+function handwrite(el, text, salt) {
+  el.textContent = '';
+  [...text].forEach((ch, i) => {
+    const span = document.createElement('span');
+    span.textContent = ch === ' ' ? '\u00a0' : ch;
+    const h = Math.imul(i + 1 + salt * 31, 0x9e3779b1) >>> 0;
+    const dy = ((((h & 0xff) / 255) - 0.5) * 0.16).toFixed(3);
+    const rot = ((((h >> 8) & 0xff) / 255) - 0.5) * 8;
+    const skew = ((((h >> 16) & 0xff) / 255) - 0.5) * 14;
+    span.style.transform = `translateY(${dy}em) rotate(${rot.toFixed(2)}deg) skewX(${skew.toFixed(2)}deg)`;
+    el.appendChild(span);
+  });
+}
+
+function setupFolds() {
+  document.querySelectorAll('.fold').forEach((fold) => {
+    // The button opens; it must not also reach the stage's toggle below, or the
+    // two would cancel out and the sheet would never open.
+    fold.querySelector('.fold-open').addEventListener('click', (e) => {
+      e.stopPropagation();
+      fold.classList.add('is-open');
+    });
+    // Tapping the sheet itself toggles it. This lives on the stage rather than
+    // the card because the card is permanently visibility:hidden, and hidden
+    // elements receive no pointer events.
+    fold.querySelector('.fold-stage').addEventListener('click', () => {
+      fold.classList.toggle('is-open');
+    });
+  });
+}
+
+/* Re-fold everything, so the next person at the demo table starts from a folded
+   sheet rather than inheriting the last one's. */
+function lockFolds() {
+  document.querySelectorAll('.fold').forEach((f) => f.classList.remove('is-open'));
+}
+
 /* ---------- view routing -------------------------------------------------- */
 
 async function setMode(mode) {
   if (!VIEWS.includes(mode)) mode = 'home';
+  lockFolds();
   state.mode = mode;
   VIEWS.forEach((v) => { $(`view-${v}`).hidden = v !== mode; });
 
@@ -577,6 +1177,7 @@ async function selectScenario(id) {
   if (!scenario) return;
   state.scenario = scenario;
   state.scenarioData = await getJSON(`data/scenario/${id}.json`);
+  lockFolds();
 
   // The blurb lives behind the "What's in this transaction?" accordion — above
   // the fold it was three lines of prose between the QR and the next step.
@@ -598,27 +1199,58 @@ async function selectScenario(id) {
 
 function uniq(list) { return [...new Set(list)]; }
 
+/* Scenarios matching the current filters, optionally ignoring one of them so
+   that filter's own option list can be built from what's actually reachable. */
+function matchingScenarios(ignore) {
+  const f = state.filters;
+  return state.index.scenarios.filter((s) =>
+    s.network === f.network
+    && (ignore === 'sig_type' || f.sig_type === 'all' || s.sig_type === f.sig_type)
+    && (ignore === 'script_type' || f.script_type === 'all' || s.script_type === f.script_type)
+    && (ignore === 'inputs' || f.inputs === 'all' || s.num_inputs === Number(f.inputs)));
+}
+
+/* Picking "Multisig" should land on the multisig people actually use, not on
+   whatever the previous single-sig choice was — which would otherwise filter to
+   nothing and look broken. */
+function defaultScriptFor(sigType) {
+  if (sigType === 'multisig') return 'P2WSH';
+  if (sigType === 'single-sig') return 'P2WPKH';
+  return state.filters.script_type;
+}
+
 function renderFilters() {
-  const all = state.index.scenarios;
   const idx = state.index;
+  const inNetwork = idx.scenarios.filter((s) => s.network === state.filters.network);
+  const forSig = state.filters.sig_type === 'all'
+    ? inNetwork
+    : inNetwork.filter((s) => s.sig_type === state.filters.sig_type);
+
+  // Only offer input counts that exist for the rest of the selection. The sweep
+  // runs on two script types only, so most combinations have just the one count,
+  // and listing the others would be dead options.
+  const counts = uniq(matchingScenarios('inputs').map((s) => s.num_inputs))
+    .sort((a, b) => a - b);
+  if (state.filters.inputs !== 'all' && !counts.includes(Number(state.filters.inputs))) {
+    state.filters.inputs = 'all';
+  }
+
   const defs = [
     { key: 'network', label: 'Network',
       options: [{ value: 'main', label: 'Mainnet' }, { value: 'test', label: 'Testnet' }] },
     { key: 'sig_type', label: 'Signing',
       options: [{ value: 'all', label: 'All' },
-                ...uniq(all.map((s) => s.sig_type))
+                ...uniq(inNetwork.map((s) => s.sig_type))
                   .map((v) => ({ value: v, label: idx.sig_type_labels[v] || v }))] },
     // Human name alongside the abbreviation: "Native SegWit (P2WPKH)". The
     // abbreviation alone is jargon; the name alone loses precision.
     { key: 'script_type', label: 'Script type',
       options: [{ value: 'all', label: 'All' },
-                ...uniq(all.map((s) => s.script_type))
+                ...uniq(forSig.map((s) => s.script_type))
                   .map((v) => ({ value: v, label: scriptLabel(v) }))] },
-    { key: 'output_shape', label: 'Outputs',
+    { key: 'inputs', label: 'Inputs',
       options: [{ value: 'all', label: 'All' },
-                ...uniq(all.map((s) => s.output_shape))
-                  .map((v) => ({ value: v,
-                                 label: idx.output_shape_labels[v] || v.replace(/_/g, ' ') }))] },
+                ...counts.map((n) => ({ value: String(n), label: `${n} input${n === 1 ? '' : 's'}` }))] },
   ];
 
   const box = $('filters');
@@ -639,6 +1271,12 @@ function renderFilters() {
     });
     select.addEventListener('change', () => {
       state.filters[def.key] = select.value;
+      if (def.key === 'sig_type') {
+        state.filters.script_type = defaultScriptFor(select.value);
+      }
+      // Rebuild the controls too: changing one filter changes what the others
+      // can offer.
+      renderFilters();
       renderScenarioList();
     });
     wrap.append(label, select);
@@ -647,13 +1285,7 @@ function renderFilters() {
 }
 
 function renderScenarioList() {
-  const f = state.filters;
-  const matches = state.index.scenarios.filter((s) =>
-    s.network === f.network
-    && (f.sig_type === 'all' || s.sig_type === f.sig_type)
-    && (f.script_type === 'all' || s.script_type === f.script_type)
-    && (f.output_shape === 'all' || s.output_shape === f.output_shape));
-
+  const matches = matchingScenarios();
   const list = $('scenario-list');
   list.innerHTML = '';
   if (!matches.length) {
@@ -665,10 +1297,12 @@ function renderScenarioList() {
     b.type = 'button';
     b.className = 'scenario-item';
     b.setAttribute('aria-current', String(state.scenario && s.id === state.scenario.id));
-    const ref = s.qr[state.format][densityFor(state.format)];
+    // Just the input count, spelled out. Frame count and PSBT size were noise at
+    // this size — the size now lives in "What's in this transaction?", where
+    // there is room to read it.
+    const stress = s.tags.includes('stress test') ? ' · stress test' : '';
     b.innerHTML = `<strong>${s.title}</strong>
-      <span>${s.num_inputs} in · ${s.psbt_bytes.toLocaleString()} B ·
-      ${ref.count === 1 ? 'static QR' : ref.count + ' frames'}${s.tags.includes('stress test') ? ' · stress test' : ''}</span>`;
+      <span>${s.num_inputs} input${s.num_inputs === 1 ? '' : 's'}${stress}</span>`;
     b.addEventListener('click', () => {
       closePicker();
       selectScenario(s.id);
@@ -749,14 +1383,30 @@ async function goHome() {
 async function main() {
   player.setCanvas($('qr-canvas'));
   player.onFrame = onFrameChange;
+  seedPlayer.renderStyle = 'handmade';
+  seedPlayer.onRendered = (c) => refreshFold($('seed-fold'), c, seedPlayer);
   seedPlayer.setCanvas($('seed-canvas'));
   descriptorPlayer.setCanvas($('descriptor-canvas'));
   verifyDescriptorPlayer.setCanvas($('verify-descriptor-canvas'));
   verifyAddressPlayer.setCanvas($('verify-address-canvas'));
+  onlySeedPlayer.renderStyle = 'handmade';
+  onlySeedPlayer.onRendered = (c) => refreshFold($('only-seed-fold'), c, onlySeedPlayer);
   onlySeedPlayer.setCanvas($('only-seed-canvas'));
   messagePlayer.setCanvas($('message-canvas'));
 
   wireControls();
+  setupFolds();
+  // The hand-written label is canvas text, and canvas does NOT participate in
+  // font loading: setting ctx.font never triggers a fetch. Once the label moved
+  // off the DOM and into the canvas, nothing on the page referenced Permanent
+  // Marker any more, so the browser never downloaded it, document.fonts.ready
+  // resolved immediately, and every label silently painted in a serif fallback.
+  // Ask for the face explicitly, then redraw.
+  if (document.fonts && document.fonts.load) {
+    document.fonts.load('16px "Permanent Marker"')
+      .then(() => allPlayers.forEach((pl) => pl.layout()))
+      .catch(() => {});
+  }
 
   state.index = await getJSON('data/index.json');
   const d = state.index.defaults;
@@ -778,6 +1428,15 @@ async function main() {
   // A ?tx= link means someone wants that transaction, not the landing page.
   await setMode(params.get('do') || (params.get('tx') ? 'sign' : 'home'));
 }
+
+// Test hook: lets the scannability harness force a render style on the seed QRs.
+window.__tuneHandmade = (patch) => {
+  Object.assign(HAND, patch);
+  [seedPlayer, onlySeedPlayer].forEach((p) => p.draw());
+};
+window.__setStyle = (style) => {
+  [seedPlayer, onlySeedPlayer].forEach((p) => { p.renderStyle = style; p.draw(); });
+};
 
 main().catch((err) => {
   document.body.insertAdjacentHTML('afterbegin',

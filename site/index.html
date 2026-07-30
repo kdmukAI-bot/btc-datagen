@@ -60,6 +60,8 @@
     <!-- STEP 1 — the transaction -->
     <section class="step" id="step-tx">
       <h2 class="step-title"><span class="step-num">1</span> Scan the transaction</h2>
+      <p class="step-hint">Wallet software like Sparrow builds the transaction and
+        shows it as this QR.</p>
 
       <div class="qr-stage" id="qr-stage">
         <div class="qr-card">
@@ -122,8 +124,25 @@
       <div class="chooser" id="seed-chooser"></div>
 
       <div class="qr-stage">
-        <div class="qr-card">
-          <canvas id="seed-canvas" aria-label="SeedQR code"></canvas>
+        <div class="fold" id="seed-fold">
+          <div class="qr-card qr-card-paper">
+            <canvas id="seed-canvas" aria-label="SeedQR code"></canvas>
+          </div>
+          <div class="fold-stage" aria-hidden="true">
+            <div class="fold-half fold-upper"></div>
+            <div class="fold-flap">
+              <div class="fold-face fold-front"></div>
+              <div class="fold-face fold-back">
+                <div class="fold-back-note">
+                  <span class="fold-back-name"></span>
+                  <span class="fold-back-fp"></span>
+                </div>
+              </div>
+            </div>
+            <div class="fold-prompt">
+              <button type="button" class="btn btn-primary fold-open">Unfold the paper</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -139,6 +158,19 @@
         <summary>Show the words in plain text</summary>
         <div id="seed-words"></div>
       </details>
+
+      <div class="seed-facts">
+        <h3>What is a SeedQR?</h3>
+        <ul>
+          <li><strong>It is your private key.</strong> Scanning it is the
+              same as typing in every word of the seed phrase.</li>
+          <li><strong>Transcribe it by hand</strong> onto paper or steel, copying
+              the grid from the device's own transcription screen.</li>
+          <li><strong>Never photograph it, never make one digitally.</strong>
+              Phones and computers sync, back up and cache without asking, and a
+              copy you didn't know about is a copy you can't destroy.</li>
+        </ul>
+      </div>
 
     </section>
 
@@ -175,14 +207,31 @@
   <!-- ============ LOAD A SEED ============ -->
   <section id="view-seed" hidden>
     <h1 class="view-title">Load a seed</h1>
-    <p class="view-intro">On the device: <em>Seeds &rsaquo; Load a seed &rsaquo; Scan</em>.</p>
+    <p class="view-intro">You retrieve your handmade SeedQR. On the device: <em>Seeds &rsaquo; Load a seed &rsaquo; Scan</em>.</p>
 
     <div class="chooser" id="only-seed-chooser"></div>
 
     <div class="qr-stage">
-      <div class="qr-card">
-        <canvas id="only-seed-canvas" aria-label="SeedQR code"></canvas>
-      </div>
+      <div class="fold" id="only-seed-fold">
+          <div class="qr-card qr-card-paper">
+            <canvas id="only-seed-canvas" aria-label="SeedQR code"></canvas>
+          </div>
+          <div class="fold-stage" aria-hidden="true">
+            <div class="fold-half fold-upper"></div>
+            <div class="fold-flap">
+              <div class="fold-face fold-front"></div>
+              <div class="fold-face fold-back">
+                <div class="fold-back-note">
+                  <span class="fold-back-name"></span>
+                  <span class="fold-back-fp"></span>
+                </div>
+              </div>
+            </div>
+            <div class="fold-prompt">
+              <button type="button" class="btn btn-primary fold-open">Unfold the paper</button>
+            </div>
+          </div>
+        </div>
     </div>
 
     <details class="details">
@@ -200,6 +249,19 @@
       <summary>Show the words in plain text</summary>
       <div id="only-seed-words"></div>
     </details>
+
+    <div class="seed-facts">
+      <h3>What is a SeedQR?</h3>
+      <ul>
+        <li><strong>It is your private key.</strong> Scanning it is the
+              same as typing in every word of the seed phrase.</li>
+        <li><strong>Transcribe it by hand</strong> onto paper or steel, copying
+            the grid from the device's own transcription screen.</li>
+        <li><strong>Never photograph it, never make one digitally.</strong>
+            Phones and computers sync, back up and cache without asking, and a
+            copy you didn't know about is a copy you can't destroy.</li>
+      </ul>
+    </div>
   </section>
 
   <!-- ============ VERIFY AN ADDRESS ============ -->

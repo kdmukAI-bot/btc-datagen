@@ -152,6 +152,61 @@ pure count (floor 16, ceiling 256).
 BBQR has no fountain coding — it really is a fixed set of slices that a sender
 loops — so every BBQR part is "pure" and that case wraps normally.
 
+One honest limitation: because the parts are generated at build time, the mixed
+tail itself loops. Every mixed part shipped is a genuine, distinct fountain part
+with a real sequence number, but once the tail is exhausted the browser replays
+it rather than emitting something new, which a live encoder would. Compiling cUR
+to WASM would fix that and shrink the payload — see [docs/TODO.md](docs/TODO.md).
+
+### The handmade SeedQR
+
+A SeedQR is normally transcribed **by hand** onto a paper template and kept in a
+safe. Pulling one up on a phone and scanning it teaches the opposite lesson, so
+the seed activities work to undo that:
+
+- The QR starts **locked in a vault**. One tap parts the doors; tapping the
+  revealed QR shuts it again, and navigating away re-locks everything so the next
+  person at the table starts from the closed state.
+- Data modules are drawn as **marker dabs** — a short round-capped drag at a
+  random angle, 0.95–1.30 cells wide, so most overflow their cell and neighbours
+  merge into blobs. Registration blocks stay flat and much blacker, because on a
+  real template those are pre-printed. That contrast shows at a glance which
+  parts came with the template and which parts a person filled in.
+- Each key gets **its own marker colour**, assigned explicitly (alice purple,
+  bob blue, carol green — the 2-of-3 cosigners, spread wide so they're
+  distinguishable at a glance). The hand-written label uses the same marker.
+- The card is one continuous sheet of **paper**: warm tint, grain, fold creases,
+  and the transcription grid. The label is drawn *into the canvas* rather than
+  sitting in the card as HTML — as a sibling element it was a second surface,
+  and the join between the textured canvas and the flat card padding was a
+  visible rectangle that broke the illusion.
+
+Geometry rules that keep this scannable:
+
+- **No rotation or CSS filter on the canvas.** Either resamples the bitmap and
+  destroys the whole-pixel module grid. Tint, grain, creases and the label all
+  live *inside* the canvas; only the surrounding card is styled in CSS.
+- **Err fat.** QR codes tolerate marks that are too big far better than dots
+  that are too small: an oversized dab still cannot reach a neighbouring cell's
+  sample point, whereas an undersized one fails to cover its own.
+- **Colours stay dark.** A decoder binarizes on luminance, so a marker colour is
+  only safe while it's dark against the paper — a yellow highlighter would look
+  entirely plausible and scan terribly.
+
+Verified by rendering in a real browser and decoding with zbar: both SeedQR
+variants at four sizes down to a 320px phone, and every marker colour at the
+tightest size. A sweep found zbar still decoding with dot sizes down to 0.40 of
+full radius, so the shipped values have wide margin — though a camera off-axis
+in bad light is far less forgiving than zbar on a clean PNG, and hardware is the
+only test that counts. These renderings have been confirmed scanning on a real
+SeedSigner.
+
+> Two decoder gotchas the harness has to handle, neither of which is a defect in
+> the QR: zbar **charset-guesses** byte-mode payloads and returns UTF-8, using
+> latin-1 for most of our seeds but Shift-JIS for one whose entropy happens to
+> start with a valid double-byte sequence; and an element screenshot captures the
+> **closed vault** unless it's opened first.
+
 ### The transaction matrix
 
 Static hosting means every PSBT is precomputed, so "configurable" is a bounded
@@ -277,6 +332,11 @@ addresses* from the same keys. Sparrow means sortedmulti.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The vendored UR2 codec in `common/ur2/` is from the
+MIT — see [LICENSE](LICENSE).
+
+The bundled **Permanent Marker** webfont (`site/permanent-marker.woff2`, by Font
+Diner) is Apache-2.0; its licence travels with it at
+`site/licenses/permanent-marker-LICENSE.txt`. The SeedSigner logo
+(`site/seedsigner-logo.svg`) comes from the SeedSigner project. The vendored UR2 codec in `common/ur2/` is from the
 [SeedSigner](https://github.com/SeedSigner/seedsigner) project (also MIT); its
 original license is preserved at `common/ur2/LICENSE`.
