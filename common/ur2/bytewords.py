@@ -103,12 +103,18 @@ def decode(s, separator, word_len):
     if len(buf) < 5:
         raise ValueError('Invalid Bytewords.') 
 
-    # Validate checksum
+    # Validate checksum.
+    #
+    # This was commented out, and re-enabling it was only safe once crc32n()
+    # stopped emitting minimal-width checksums (see crc32.py). With that bug in
+    # place every part whose CRC32 had a zero high byte failed this check, so
+    # disabling the check made the symptom go away while leaving the cause —
+    # and left a corrupt frame indistinguishable from a good one.
     body = buf[0:-4]
     body_checksum = buf[-4:]
     checksum = crc32_bytes(body)
-    # if checksum != body_checksum:
-    #     raise ValueError('Invalid Bytewords.')
+    if checksum != body_checksum:
+        raise ValueError('Invalid Bytewords.')
 
     return body
 
