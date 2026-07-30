@@ -42,7 +42,10 @@ from common.ur2.ur_encoder import UREncoder
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE_SRC = os.path.join(ROOT, "site")
 DIST = os.path.join(SITE_SRC, "dist")
-STATIC_FILES = ["index.html", "app.js", "styles.css", "seedsigner-logo.svg"]
+STATIC_FILES = ["index.html", "app.js", "styles.css", "seedsigner-logo.svg",
+                # Custom domain. Ships inside the artifact so the domain travels
+                # with the build rather than living only in repo settings.
+                "CNAME"]
 
 MIN_FRAGMENT_BYTES = 10          # Sparrow MIN_FRAGMENT_LENGTH
 DEFAULT_FPS = 5                  # Sparrow ANIMATION_PERIOD_MILLIS = 200ms
