@@ -4,16 +4,26 @@ This checks the artifacts that actually ship, not a fresh in-memory rebuild —
 so a bug in the packing/serialization layer can't hide behind correct
 intermediate values. For each scenario it:
 
-  1. renders every shipped QR matrix back to an image and **decodes it with an
-     independent QR decoder** (zbar), proving the bits we ship are a readable
-     QR and not just plausible-looking noise;
+  1. renders every QR matrix back to an image and **decodes it with an
+     independent QR decoder** (zbar), proving the bits are a readable QR and
+     not just plausible-looking noise;
   2. feeds the decoded payloads back through the UR / BBQR decoders and asserts
      the reconstructed PSBT is byte-identical to the scenario's PSBT;
   3. asserts the PSBT still signs with its intended seed;
-  4. parses it with **SeedSigner's own PSBTParser** and checks the policy and
+  4. checks the shipped sighash digests are the ones a signature over this
+     transaction actually commits to, by signing and verifying against them;
+  5. parses it with **SeedSigner's own PSBTParser** and checks the policy and
      amounts match what the generator intended.
 
-Requires the dev extras (see requirements-dev.txt) and, for step 4, a seedsigner
+BBQR frames ship pre-rendered and are read straight out of site/dist/. UR
+frames do not exist on disk any more — the browser generates them at runtime —
+so step 1 regenerates them here from the PARAMETERS the site ships (the base64
+PSBT and the fragment size) and checks those. This half of the guarantee is
+"the parameters we ship produce readable, correct frames"; the other half, "the
+browser's encoder agrees with Python's", is tools/wasm/roundtrip_test.mjs.
+Neither is sufficient alone.
+
+Requires the dev extras (see requirements-dev.txt) and, for step 5, a seedsigner
 checkout. The decoder choice matters: OpenCV's built-in QRCodeDetector silently
 fails on dense codes (it could not read a v16 symbol that zbar reads perfectly,
 including one produced by the reference encoder itself), so it is not usable as
@@ -33,15 +43,18 @@ import base64
 import numpy as np
 from PIL import Image
 from pyzbar.pyzbar import decode as zbar_decode
-from embit import bip32, bip39
+from embit import bip32, bip39, ec
 from embit.networks import NETWORKS
 from embit.psbt import PSBT
 from urtypes.crypto import PSBT as URPSBT
 
 from common import bbqr
 from common.fixtures import load_seeds
+from common.qr import qr_matrix
 from common.seedqr import standard_seedqr_digits, compact_seedqr_bytes
+from common.ur2.ur import UR
 from common.ur2.ur_decoder import URDecoder
+from common.ur2.ur_encoder import UREncoder
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIST = os.path.join(ROOT, "site", "dist")
@@ -98,6 +111,80 @@ def root_key(mnemonic: str, network: str):
                                  version=NETWORKS[network]["xprv"])
 
 
+def verify_sighashes(data, seeds, entry) -> list:
+    """Prove the shipped verification block describes this exact transaction.
+
+    site/psbt.js does no sighash construction of its own — it verifies a
+    returned signature against the digest shipped here. That makes these digests
+    load-bearing in a way nothing else in the build is: a wrong one turns a
+    correct signature into a red cross on screen at a demo table, and there is
+    no second opinion in the browser to catch it.
+
+    So: sign the PSBT for real, then verify each signature against the SHIPPED
+    digest rather than against a freshly computed one. Recomputing would only
+    prove embit agrees with itself.
+    """
+    verify = data.get("verify")
+    if not verify:
+        return ["scenario ships no verification block"]
+
+    psbt = PSBT.from_string(data["psbt_base64"])
+    problems = []
+    if psbt.tx.serialize().hex() != verify["unsigned_tx"]:
+        problems.append("verify.unsigned_tx does not match the PSBT's transaction")
+    if psbt.tx.txid().hex() != verify["txid"]:
+        problems.append("verify.txid does not match the PSBT's transaction")
+
+    network = "main" if entry["network"] == "main" else "test"
+    signer = entry["signing_seeds"][0]
+    psbt.sign_with(root_key(seeds[signer]["mnemonic"], network), sighash=None)
+
+    for i, inp in enumerate(psbt.inputs):
+        digest = bytes.fromhex(verify["inputs"][i]["sighash"])
+        if verify["taproot"]:
+            # Key-path spend: embit finalizes straight into the witness, and the
+            # signature is checked against the tweaked output key from the
+            # scriptPubKey — not the internal key in the derivation fields.
+            witness = inp.final_scriptwitness
+            if witness is None or not witness.items:
+                problems.append(f"input {i}: taproot input produced no witness")
+                continue
+            key = ec.PublicKey.from_xonly(bytes.fromhex(verify["inputs"][i]["keys"][0]["pubkey"]))
+            if not key.schnorr_verify(ec.SchnorrSig.parse(witness.items[0][:64]), digest):
+                problems.append(f"input {i}: shipped sighash does not match the schnorr signature")
+            continue
+
+        if not inp.partial_sigs:
+            problems.append(f"input {i}: no signature was produced")
+            continue
+        for pubkey, sig in inp.partial_sigs.items():
+            # The trailing byte is the sighash flag, not part of the DER.
+            if not pubkey.verify(ec.Signature.parse(sig[:-1]), digest):
+                problems.append(f"input {i}: shipped sighash does not match the signature "
+                                f"from {pubkey.sec().hex()[:16]}")
+    return problems
+
+
+def ur_frames(raw: bytes, ref: dict, full: bool) -> list:
+    """Regenerate the UR frames the browser will produce from `ref`.
+
+    The site ships the fragment size, not the frames. Feeding that parameter
+    back through the same encoder the build used is what makes this a check on
+    the shipped artifact rather than on a coincidence — get the fragment size
+    wrong in the index and these frames stop reassembling.
+
+    Runs one part past the pure set even in sampled mode: the last pure fragment
+    is padded and the first mixed part is full-width, and those are the two
+    frames most likely to differ in QR version from their neighbours.
+    """
+    encoder = UREncoder(UR("crypto-psbt", URPSBT(raw).to_cbor()),
+                        ref["max_fragment"], 0, ref["min_fragment"])
+    if encoder.is_single_part():
+        return [encoder.next_part()]
+    count = ref["count"] + (ref["count"] if full else 1)
+    return [encoder.next_part() for _ in range(count)]
+
+
 def verify_scenario(entry, seeds, full: bool, parser_cls, seed_cls, ss_network):
     data = load(f"data/scenario/{entry['id']}.json")
     psbt = PSBT.from_string(data["psbt_base64"])
@@ -111,13 +198,30 @@ def verify_scenario(entry, seeds, full: bool, parser_cls, seed_cls, ss_network):
         variants = [("ur", "normal"), ("bbqr", "low")]
     for fmt, density in variants:
         ref = entry["qr"][fmt][density]
-        payload = load(ref["file"])
         try:
-            texts = [decode_frame(f) for f in payload["frames"]]
+            if ref.get("runtime"):
+                parts = ur_frames(raw, ref, full)
+                frames = [dict(zip(("b", "v", "m"), qr_matrix(p))) for p in parts]
+                if ref["modules"] < max(f["m"] for f in frames):
+                    problems.append(
+                        f"{fmt}/{density}: shipped module ceiling {ref['modules']} is "
+                        f"below an actual frame ({max(f['m'] for f in frames)}) — the "
+                        f"canvas would clip the QR")
+            else:
+                frames = load(ref["file"])["frames"]
+            texts = [decode_frame(f) for f in frames]
             if reassemble(texts, fmt) != raw:
                 problems.append(f"{fmt}/{density}: reassembled PSBT differs")
         except AssertionError as e:
             problems.append(f"{fmt}/{density}: {e}")
+
+    # --- the sighash digests shipped for the scan-back step ------------------
+    #
+    # These are what the browser checks a returned signature against, so a wrong
+    # digest means the site would reject a perfectly good signature (or, worse,
+    # accept one over something else). Signing the PSBT and verifying the result
+    # against the shipped digest is the direct test.
+    problems += verify_sighashes(data, seeds, entry)
 
     # --- still signable -------------------------------------------------------
     network = "main" if entry["network"] == "main" else "test"

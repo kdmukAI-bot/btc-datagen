@@ -24,6 +24,7 @@
  * Run (with `python -m tools.serve 8777` already running):
  *   node tools/smoke_site.mjs http://localhost:8777/
  */
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const BASE = process.argv[2] || 'http://localhost:8777/';
@@ -71,6 +72,216 @@ async function checkCanvas(page, where, id, label) {
     fail(where, `${label}: does not look like a QR (dark ratio ${s.ratio.toFixed(3)})`);
   }
   return s;
+}
+
+/* ---------- the scan-it-back step, with a fake camera ---------------------- *
+ *
+ * The one part of the site with no other automated coverage: the camera path is
+ * the only place where getUserMedia, k_quirc, the UR fountain decoder and the
+ * signature verifier all run together, and it is exactly the part a reviewer
+ * cannot check by reading.
+ *
+ * The camera is replaced by a canvas MediaStream, driven from inside the page
+ * by the SAME WASM encoder the transaction QRs use. So the test plays a real
+ * animated ur:crypto-psbt of a real signed PSBT at the real 5 fps, and every
+ * link after getUserMedia — video element, downscale, grayscale conversion,
+ * k_quirc, cUR's fountain decoder, the PSBT parser, secp256k1 — is the shipping
+ * code.
+ *
+ * A fake video DEVICE (--use-file-for-fake-video-capture with a Y4M) was the
+ * other option. It buys one extra link of realism (Chromium's capture pipeline)
+ * and costs a 20 MB generated file and a browser-flag dependency; the canvas
+ * stream tests everything the site actually owns.
+ *
+ * Three cases, because a checker that cannot say no is decoration:
+ *   signed            -> "the signature is real"
+ *   unsigned          -> "not signed yet"
+ *   a different tx    -> "that is a different transaction"
+ */
+const SCAN_CASES = [
+  ['signed', /signature is real/i],
+  ['unsigned', /not signed yet/i],
+  ['different transaction', /different transaction/i],
+];
+
+/* Playing one PSBT into the fake camera as a live UR fountain. Installed on the
+   page rather than passed frame by frame, so the animation runs at the device's
+   real 5 fps and the scanner sees genuine timing. */
+function playIntoFakeCamera(page, b64) {
+  return page.evaluate(async (psbtB64) => {
+    const ssqr = await import('./ssqr.js');
+    await ssqr.ready();
+    const bin = atob(psbtB64);
+    const psbt = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) psbt[i] = bin.charCodeAt(i);
+
+    clearInterval(window.__scanTimer);
+    const enc = new ssqr.UrPsbtEncoder(psbt, 80);
+    const canvas = window.__fakeCam;
+    const g = canvas.getContext('2d');
+    window.__scanTimer = setInterval(() => {
+      const frame = ssqr.qrEncode(enc.next().toUpperCase());
+      const quiet = 4;
+      const scale = Math.floor(Math.min(canvas.width, canvas.height)
+        / (frame.m + quiet * 2));
+      const size = (frame.m + quiet * 2) * scale;
+      const ox = ((canvas.width - size) >> 1) + quiet * scale;
+      const oy = ((canvas.height - size) >> 1) + quiet * scale;
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      g.fillStyle = '#000';
+      for (let r = 0; r < frame.m; r++) {
+        for (let c = 0; c < frame.m; c++) {
+          const i = r * frame.m + c;
+          if ((frame.bits[i >> 3] >> (7 - (i & 7))) & 1) {
+            g.fillRect(ox + c * scale, oy + r * scale, scale, scale);
+          }
+        }
+      }
+    }, 200);
+  }, b64);
+}
+
+/* A 2-of-3 completed one cosigner at a time, which is how it actually happens:
+ * each scan carries only the signature the device just made, so the page has to
+ * accumulate them the way a coordinator combines PSBTs. Judged per scan, this
+ * transaction can never reach "complete" — which is the whole thing a multisig
+ * demo exists to show.
+ *
+ * Also checks that re-reading the SAME cosigner is recognised rather than
+ * counted twice; at a demo table that is the first thing anyone tries when the
+ * numbers do not move. */
+async function runMultisigScanCheck(browser, ctx, cases) {
+  const where = 'scan';
+  const alice = cases.find((c) => /2of3_p2wsh.* one of 2$/.test(c.label));
+  const both = cases.find((c) => /2of3_p2wsh.* signed$/.test(c.label));
+  if (!alice || !both) {
+    fail(where, 'reference.json has no partial + complete 2-of-3 pair');
+    return;
+  }
+  const scenarioId = alice.label.split(' ')[0];
+
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => fail(where, `multisig: pageerror: ${e.message}`));
+  await page.goto(`${BASE}?tx=${scenarioId}&do=sign`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => document.getElementById('qr-canvas').width > 50,
+    { timeout: 8000 }).catch(() => fail(where, 'multisig: page never rendered'));
+
+  const scan = async (b64) => {
+    await playIntoFakeCamera(page, b64);
+    await page.click('#scan-again').catch(async () => { await page.click('#scan-start'); });
+    await page.waitForSelector('#scan-result:not([hidden])', { timeout: 30000 })
+      .catch(() => fail(where, 'multisig: no verdict within 30s'));
+    return ((await page.textContent('#scan-result').catch(() => '')) || '')
+      .replace(/\s+/g, ' ').trim();
+  };
+
+  const first = await scan(alice.psbt_base64);
+  if (!/partly signed/i.test(first)) {
+    fail(where, `multisig: one cosigner should read as partly signed — got "${first.slice(0, 120)}"`);
+  }
+  // Feeding the identical PSBT again must not inflate the count.
+  const repeat = await scan(alice.psbt_base64);
+  if (!/already counted/i.test(repeat)) {
+    fail(where, `multisig: re-scanning one cosigner should say so — got "${repeat.slice(0, 120)}"`);
+  }
+  const second = await scan(both.psbt_base64);
+  if (!/signature is real/i.test(second)) {
+    fail(where, `multisig: the threshold should complete across scans — got "${second.slice(0, 160)}"`);
+  } else {
+    console.log(`  scan ${'multisig, collected'.padEnd(22)} -> ${second.split('  ')[0].slice(0, 60)}`);
+  }
+
+  await page.evaluate(() => clearInterval(window.__scanTimer));
+  if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/scan-multisig.png` });
+  await page.close();
+}
+
+async function runScanChecks(browser) {
+  const where = 'scan';
+  let fixtures;
+  try {
+    fixtures = JSON.parse(readFileSync('tools/wasm/reference.json', 'utf8'));
+  } catch (e) {
+    fail(where, `tools/wasm/reference.json is missing (${e.message}) — `
+      + 'run `python -m tools.wasm.reference` first');
+    return;
+  }
+
+  const signed = (fixtures.signing || []).find((c) => /native_segwit.* signed$/.test(c.label));
+  const unsigned = (fixtures.signing || []).find((c) => /native_segwit.* unsigned$/.test(c.label));
+  const otherTx = (fixtures.signing || []).find((c) => /legacy.* signed$/.test(c.label));
+  if (!signed || !unsigned || !otherTx) {
+    fail(where, 'reference.json has no signed/unsigned native-segwit pair to scan');
+    return;
+  }
+  const scenarioId = signed.label.split(' ')[0];
+  const psbts = {
+    'signed': signed.psbt_base64,
+    'unsigned': unsigned.psbt_base64,
+    'different transaction': otherTx.psbt_base64,
+  };
+
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+  });
+
+  // Stand in for the camera BEFORE any page script runs. captureStream only
+  // emits a frame when the canvas is painted, so the animation's own 5 fps
+  // paces the stream — exactly as a real camera watching a device would.
+  await ctx.addInitScript(() => {
+    window.__fakeCam = document.createElement('canvas');
+    window.__fakeCam.width = 640;
+    window.__fakeCam.height = 480;
+    const ctx2d = window.__fakeCam.getContext('2d');
+    ctx2d.fillStyle = '#fff';
+    ctx2d.fillRect(0, 0, 640, 480);
+    navigator.mediaDevices = navigator.mediaDevices || {};
+    navigator.mediaDevices.getUserMedia = async () => window.__fakeCam.captureStream(15);
+  });
+
+  for (const [label, expected] of SCAN_CASES) {
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => fail(where, `${label}: pageerror: ${e.message}`));
+
+    await page.goto(`${BASE}?tx=${scenarioId}&do=sign`, { waitUntil: 'networkidle' });
+    await page.waitForFunction(() => document.getElementById('qr-canvas').width > 50,
+      { timeout: 8000 }).catch(() => fail(where, `${label}: page never rendered`));
+
+    // Play the "device screen" into the fake camera: a real UR fountain over
+    // the PSBT under test, one frame every 200ms.
+    await playIntoFakeCamera(page, psbts[label]);
+
+    await page.click('#scan-start');
+
+    // Progress must actually move before the result lands — otherwise a
+    // verifier that somehow got the PSBT by another route would pass this.
+    await page.waitForFunction(
+      () => document.querySelectorAll('#scan-cells .scan-cell.is-read').length > 0,
+      { timeout: 20000 },
+    ).catch(() => fail(where, `${label}: no fragment was ever marked as read`));
+
+    await page.waitForSelector('#scan-result:not([hidden])', { timeout: 30000 })
+      .catch(() => fail(where, `${label}: no verdict within 30s`));
+
+    const verdict = ((await page.textContent('#scan-result').catch(() => '')) || '')
+      .replace(/\s+/g, ' ').trim();
+    if (!expected.test(verdict)) {
+      fail(where, `${label}: verdict did not match ${expected} — got "${verdict.slice(0, 140)}"`);
+    } else {
+      console.log(`  scan ${label.padEnd(22)} -> ${verdict.split('  ')[0].slice(0, 60)}`);
+    }
+
+    await page.evaluate(() => clearInterval(window.__scanTimer));
+    if (SHOT_DIR) {
+      await page.screenshot({ path: `${SHOT_DIR}/scan-${label.replace(/\s+/g, '-')}.png` });
+    }
+    await page.close();
+  }
+
+  await runMultisigScanCheck(browser, ctx, fixtures.signing || []);
+  await ctx.close();
 }
 
 // Lets you smoke-test a custom domain before local DNS has caught up, e.g.
@@ -294,6 +505,52 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
     console.log(`  activity "${goto}" renders`);
   }
 
+  // --- nothing may overflow the viewport horizontally ----------------------
+  //
+  // A 62-character bech32 address in a table cell whose column is `nowrap`
+  // pushed the amounts off the right edge of a phone with nothing to scroll to.
+  // Measuring scrollWidth is the only way to catch that class of bug: it looks
+  // fine in a desktop screenshot and the failure is off-camera by definition.
+  await page.click('#home');
+  await page.waitForTimeout(200);
+  await page.click('[data-goto="sign"]');
+  await page.waitForTimeout(500);
+  await openAll();
+  const overflow = await page.evaluate(() => {
+    const doc = document.documentElement;
+    const wide = [...document.querySelectorAll('#view-sign table, #view-sign .details')]
+      .filter((el) => el.scrollWidth > el.clientWidth + 1)
+      .map((el) => `${el.tagName.toLowerCase()}.${el.className} `
+        + `${el.scrollWidth}>${el.clientWidth}`);
+    return { page: doc.scrollWidth - doc.clientWidth, wide };
+  });
+  if (overflow.page > 1) fail(name, `page scrolls horizontally by ${overflow.page}px`);
+  if (overflow.wide.length) {
+    fail(name, `content overflows its container: ${overflow.wide.join('; ')}`);
+  }
+
+  // --- the browser's Back button --------------------------------------------
+  //
+  // On a phone Back is the primary way out of anything, and every view change
+  // used replaceState — so the history stack stayed one entry deep and Back
+  // from inside the signing flow left the site entirely. That reads as a crash,
+  // not as navigation.
+  await page.click('#home');
+  await page.waitForTimeout(300);
+  await page.click('[data-goto="verify"]');
+  await page.waitForTimeout(500);
+  if (await page.isHidden('#view-verify')) fail(name, 'verify view did not open');
+  await page.goBack();
+  await page.waitForTimeout(600);
+  if (await page.isHidden('#view-home')) {
+    fail(name, 'Back from a view did not return to the landing page');
+  }
+  // Forward has to work too, or Back is just destroying state.
+  await page.goForward();
+  await page.waitForTimeout(600);
+  if (await page.isHidden('#view-verify')) fail(name, 'Forward did not restore the view');
+  console.log('  back/forward navigates between views');
+
   await page.click('#home');
   await page.waitForTimeout(400);
   if (await page.isHidden('#view-home')) fail(name, 'home did not return to the landing page');
@@ -306,6 +563,8 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
   if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/site-${name}.png` });
   await ctx.close();
 }
+
+await runScanChecks(browser);
 
 await browser.close();
 

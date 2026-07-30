@@ -1,51 +1,39 @@
 # TODO
 
-## Compile cUR to WASM for live UR encoding (and decoding)
-
-**Problem.** UR animations are pre-generated at build time, so the browser plays
-a finite sequence: the pure fragments once, then a fixed mixed tail on loop. Each
-mixed part is a genuine, distinct fountain part with a real sequence number, but
-once the tail is exhausted it replays the same parts — sequence numbers and all.
-A real encoder calls `nextPart()` forever and never repeats. On a small PSBT the
-tail is 16 frames, so at 5 fps the loop is visible in about 3.6 seconds.
-
-**Fix.** Compile [cUR](https://github.com/kdmukAI-bot/cUR) (fork of odudex/cUR;
-vendored at `seedsigner-micropython-builder/deps/cUR`) to WASM with Emscripten
-and encode in the browser. It has both encoder and decoder, plus the CBOR types
-we need — and it's the same codec the ESP32 firmware runs, so output is
-byte-identical to the device rather than merely equivalent.
-
-Follow the build pattern already proven in
-`seedsigner-lvgl-screens/tools/apps/web_runner/build.sh` (Docker + pinned emsdk,
-no host toolchain).
-
-**Wins beyond fidelity:**
-
-- Payload shrinks a lot. We currently ship pre-rendered frame matrices — up to
-  296 KB for the 100-input case at UR Low. With a runtime encoder we ship only
-  the base64 PSBT (~53 KB for that same case) and generate frames on demand.
-- Density stops being a build-time axis. Fragment size could become a live
-  slider instead of two pre-baked presets.
-- The same WASM module unlocks the **camera-scan phase**: decode SeedSigner's
-  signed-PSBT animated QR back in the browser. Both features share one build, so
-  the toolchain cost is paid once.
-
-**Note on the QR rasterizer.** Runtime encoding means the browser would also have
-to rasterize QR symbols, which today is done in Python so that Sparrow's exact
-settings (uppercase → alphanumeric mode, EC level L, smallest fitting version)
-cannot drift. Either port that carefully or keep a build-time check that compares
-WASM-generated fragments against the Python ones.
-
-**Cheaper interim options** if the loop is the only concern:
-
-- Raise the mixed-tail multiplier (currently ~1:1 with the pure count, floor 16,
-  ceiling 256) so the loop is long enough not to read as one.
-- Drop the floor of 16 so tiny payloads don't get a disproportionately long tail.
-
-Both are one-line changes in `MIXED_PARTS_*` in `tools/build_site.py`.
-
 ## Mirrors
 
 Only GitHub exists for this repo. House convention is GitHub + GitLab + Codeberg
 + Forgejo; the other three need creating via their own APIs before a plain push
 will work.
+
+## Report the ur2 CRC32 truncation upstream
+
+`docs/knowledge/ur2-crc32-truncation.md` documents a bug fixed here in
+`common/ur2/crc32.py`: the bytewords checksum was encoded at minimal width, so
+roughly one part in 256 came out a byte short and was rejected by any decoder.
+
+SeedSigner's vendored copy — `src/seedsigner/helpers/ur2/crc32.py` — has the
+identical `crc32n`. On the Pi Zero path (where the Python UR encoder is the one
+in use, rather than cUR) that means ~0.4% of the frames a device shows when
+displaying a signed PSBT are malformed and get discarded by whatever is
+scanning. The cost is a marginally slower scan, never a failure, which is
+exactly why it has gone unnoticed. Worth a one-line PR.
+
+## Nice to have: report which fragments the UR decoder holds
+
+`ur_decoder_received_parts_count()` gives a count, not a set, so the scan
+progress meter fills left to right rather than showing which fragments have
+landed. An accessor returning the received indexes would let the display show
+the real, scattered arrival pattern — see the note in
+`docs/knowledge/runtime-qr-and-camera-readback.md` about why the positional
+version was reverted. Small addition to cUR (`fountain_decoder.c` already keeps
+`received_part_indexes`), and SeedSigner's own scan UI would want the same
+thing.
+
+## Nice to have: fragment size as a live slider
+
+Now that UR frames are generated in the browser rather than pre-rendered,
+density is no longer a build-time axis — `max_fragment` is just a number passed
+to the encoder. The two presets could become a slider without changing anything
+in the build. Left alone for now because two big buttons beat a slider at a demo
+table.

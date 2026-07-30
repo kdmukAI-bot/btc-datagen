@@ -62,14 +62,45 @@ jobs:
           git diff --exit-code -- fixtures/ \
             || { echo "::error::fixtures/ is not reproducible from tools/build_fixtures.py"; exit 1; }
 
+      # The site cannot be built without this: every animated transaction QR is
+      # generated in the browser by this module, and tools/build_site.py refuses
+      # to produce a site if it is missing. Docker + a pinned emsdk image, so no
+      # toolchain action to trust and no version drift.
+      - name: Build the WASM module (UR codec + QR encoder + QR decoder)
+        run: bash tools/wasm/build.sh
+
       - name: Build the site
         run: python -m tools.build_site
 
-      # Decodes the shipped QR matrices with an independent decoder, reassembles
-      # the PSBTs, and cross-checks them. A broken artifact fails the build
-      # rather than shipping to a demo table.
+      # Decodes the QR matrices with an independent decoder (zbar), reassembles
+      # the PSBTs, cross-checks them, and verifies the shipped sighash digests
+      # against real signatures. A broken artifact fails the build rather than
+      # shipping to a demo table.
       - name: Verify built artifacts
         run: python -m tools.verify
+
+      # The browser is now the encoder for animated QRs, so it needs its own
+      # gate: encode -> rasterize -> decode -> reassemble, cross-checked against
+      # the Python reference, plus the signature verifier's positive AND
+      # negative cases. Node is preinstalled on the runner image.
+      - name: Check the browser pipeline against the Python reference
+        run: |
+          python -m tools.wasm.reference
+          node tools/wasm/roundtrip_test.mjs
+
+      # Renders the real page in a real browser. The scan-the-signature-back
+      # step has no other coverage — it is the only place getUserMedia, k_quirc,
+      # the fountain decoder and secp256k1 all run together.
+      - name: Browser smoke test
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          python -m tools.serve 8777 &
+          for i in $(seq 1 30); do
+            curl -sf -o /dev/null http://localhost:8777/ && break
+            sleep 1
+          done
+          node tools/smoke_site.mjs http://localhost:8777/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa  # v3

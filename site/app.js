@@ -1,8 +1,15 @@
 /* SeedSigner demo QR site.
  *
- * The browser never encodes a QR. Every symbol arrives from the Python build as
- * a bare module matrix (packed bits, row-major, 1 = dark, no quiet zone); all
- * this file does is blit those modules onto a canvas and flip frames.
+ * Static QRs (seeds, descriptors, addresses, messages, BBQR) arrive from the
+ * Python build as bare module matrices (packed bits, row-major, 1 = dark, no
+ * quiet zone), and this file just blits those modules onto a canvas.
+ *
+ * The animated transaction QRs are different: they are generated here, frame by
+ * frame, by the WASM build of cUR (site/ssqr.js). A UR animation is a
+ * *fountain* — pure fragments 1..N and then an endless stream of fresh XOR
+ * combinations — and no finite list of frames can be that. Shipping a list
+ * meant the animation eventually replayed the same mixed parts, sequence
+ * numbers and all, which no real encoder does.
  *
  * Two rendering rules matter for whether a SeedSigner can actually read the
  * screen, and both are easy to get wrong:
@@ -344,11 +351,73 @@ function prepare(payload) {
   // Decode once, up front — decoding inside the animation loop would stutter.
   return {
     count: payload.count,
-    pureCount: payload.pure_count != null ? payload.pure_count : payload.count,
     maxModules: payload.max_modules,
     maxVersion: payload.max_version,
     frames: payload.frames.map((f) => ({ m: f.m, v: f.v, bits: unpack(f.b) })),
   };
+}
+
+/* A live ur:crypto-psbt fountain, dressed up to look like a payload.
+ *
+ * Same duck type as `prepare()` output — maxModules for the canvas, a frame at
+ * `frames[i]` — so QrPlayer does not need to know which kind it is holding.
+ * The difference is that `frames` is a growing cache rather than a fixed list,
+ * and `count` is the number of PURE fragments rather than a total, because
+ * there is no total.
+ *
+ * Frames are cached rather than regenerated on each draw: a canvas relayout
+ * (rotate the phone, open fullscreen) redraws the current frame, and pulling a
+ * *new* part from the encoder for a redraw would silently skip a frame every
+ * time the layout changed.
+ */
+class UrFountain {
+  constructor(ssqr, psbtBytes, spec) {
+    this.ssqr = ssqr;
+    this.encoder = new ssqr.UrPsbtEncoder(psbtBytes, spec.max_fragment);
+    this.count = spec.count;
+    this.maxModules = spec.modules;
+    this.maxVersion = spec.version;
+    this.frames = [];
+    this.onGrow = null;
+  }
+
+  /* Generate up to and including index `i`. Sequential by construction: the
+     player only ever advances by one. */
+  ensure(i) {
+    while (this.frames.length <= i) {
+      const part = this.encoder.next().toUpperCase();
+      const frame = this.ssqr.qrEncode(part);
+      // The build-time ceiling (LAYOUT_CEILING_SEQ in tools/build_site.py) is
+      // computed from an actual part at a six-digit sequence number, so this
+      // should never fire. If it ever does, one visible resize beats a QR
+      // clipped by a canvas that is too small for it.
+      if (frame.m > this.maxModules) {
+        this.maxModules = frame.m;
+        this.maxVersion = frame.v;
+        if (this.onGrow) this.onGrow();
+      }
+      this.frames.push({ m: frame.m, v: frame.v, bits: frame.bits });
+    }
+    return this.frames[i];
+  }
+
+  /* Keep the cache bounded. A demo left running overnight would otherwise
+     accumulate a frame object per displayed part forever; 4096 frames is
+     roughly 13 minutes at 5 fps, far past any scan, and re-generating an
+     evicted frame is not possible (the fountain never goes back), so eviction
+     is only safe for frames already behind the playhead. */
+  trim(currentIndex) {
+    const KEEP = 4096;
+    if (this.frames.length <= KEEP) return;
+    // Null out old entries rather than splicing: indexes are the sequence
+    // number, and shifting them would renumber the whole animation.
+    for (let i = 0; i < currentIndex - KEEP; i++) this.frames[i] = null;
+  }
+
+  free() {
+    this.encoder.free();
+    this.frames = [];
+  }
 }
 
 const sats = (n) => n.toLocaleString('en-US') + ' sats';
@@ -485,7 +554,8 @@ class QrPlayer {
   draw() {
     const { canvas, payload } = this;
     if (!canvas || !payload || !this.scale) return;
-    const f = payload.frames[this.frame];
+    // A fountain generates on demand; a pre-rendered payload just indexes.
+    const f = payload.ensure ? payload.ensure(this.frame) : payload.frames[this.frame];
     const scale = this.scale;
     const handmade = this.renderStyle === 'handmade';
     // Declared up here because both the label and the dabs need it, and the
@@ -685,32 +755,23 @@ class QrPlayer {
     if (this.onRendered) this.onRendered(canvas);
   }
 
-  /* Once a UR animation reaches the fountain parts it STAYS there.
+  /* A UR fountain never wraps; a BBQR set always does.
    *
-   * A real encoder emits pure fragments 1..N and then mixed XOR parts N+1,
-   * N+2, … forever; it never returns to part 1. So when playback runs off the
-   * end of the shipped sequence it wraps to the start of the *mixed tail*, not
-   * to the beginning. The tail is built large enough to complete a decode on its
-   * own (see MIXED_PARTS_* in tools/build_site.py) precisely because this rule
-   * means a scanner that missed a pure fragment will only ever see mixed parts
-   * again.
-   *
-   * BBQR has no fountain coding — pureCount === count — and a BBQR sender really
-   * does loop its fixed set of slices, so that case wraps normally.
+   * A real UR encoder emits pure fragments 1..N and then mixed XOR parts N+1,
+   * N+2, … forever, never returning to part 1 — so for a fountain the frame
+   * index just keeps climbing and the encoder keeps producing. BBQR has no
+   * fountain coding and a BBQR sender really does loop its fixed set of
+   * slices, so that case wraps modulo the count.
    */
   advance(delta = 1) {
     if (!this.payload) return;
-    const { count, pureCount } = this.payload;
-    const hasFountainTail = pureCount < count;
-    let next = this.frame + delta;
-    if (next >= count) {
-      next = hasFountainTail
-        ? pureCount + ((next - pureCount) % (count - pureCount))
-        : next % count;
-    } else if (next < 0) {
-      next = (next % count + count) % count;
+    if (this.payload.ensure) {
+      this.frame = Math.max(0, this.frame + delta);
+      this.payload.trim(this.frame);
+    } else {
+      const { count } = this.payload;
+      this.frame = ((this.frame + delta) % count + count) % count;
     }
-    this.frame = next;
     this.draw();
   }
 
@@ -808,11 +869,34 @@ function renderFormatControls() {
   $('qr-note').textContent = spec.note;
 }
 
+/* The WASM module, loaded once and shared by the animated QRs and the scanner.
+   Dynamic import keeps it off the critical path for the seed and address views,
+   which never touch it. */
+let ssqrPromise = null;
+function loadSsqr() {
+  if (!ssqrPromise) {
+    ssqrPromise = import('./ssqr.js').then(async (mod) => { await mod.ready(); return mod; });
+  }
+  return ssqrPromise;
+}
+
 async function loadQr() {
   const density = densityFor(state.format);
   const ref = state.scenario.qr[state.format][density];
   renderFormatControls();
-  player.setPayload(prepare(await getJSON(ref.file)));
+
+  // Release the previous fountain's encoder before replacing it; WASM memory is
+  // not garbage collected on our behalf.
+  if (player.payload && typeof player.payload.free === 'function') player.payload.free();
+
+  if (ref.runtime) {
+    const ssqr = await loadSsqr();
+    const fountain = new UrFountain(ssqr, unpack(state.scenarioData.psbt_base64), ref);
+    fountain.onGrow = () => player.layout();
+    player.setPayload(fountain);
+  } else {
+    player.setPayload(prepare(await getJSON(ref.file)));
+  }
   updatePlaybackControls();
 }
 
@@ -828,19 +912,38 @@ function updatePlaybackControls() {
 function onFrameChange(i, count) {
   const payload = player.payload;
   const modules = payload.maxModules;
+  // For a fountain, `count` is the number of PURE fragments, not a total —
+  // there is no total. Past that point the sequence number is the only honest
+  // thing to show, so "12 / 15" gives way to a bare part number.
+  const fountain = !!payload.ensure;
   let label;
+  let fsLabel;
   if (count === 1) {
     label = `Single static frame · ${modules}×${modules} modules`;
-  } else if (i < payload.pureCount) {
-    // Sequence numbers 1..N are the plain message fragments.
-    label = `Part ${i + 1} of ${payload.pureCount} · ${modules}×${modules} modules`;
-  } else {
-    // Everything past N is an XOR of a random fragment subset. Sparrow emits
-    // these forever; we cycle a finite window of them.
+    fsLabel = '';
+  } else if (fountain && i >= count) {
+    // Every part past N is a fresh XOR of a random fragment subset, forever.
     label = `Fountain part ${i + 1} (mixed) · ${modules}×${modules} modules`;
+    fsLabel = `part ${i + 1}`;
+  } else {
+    label = `Part ${i + 1} of ${count} · ${modules}×${modules} modules`;
+    fsLabel = `${i + 1} / ${count}`;
   }
   $('qr-progress').textContent = label;
-  $('fs-progress').textContent = count > 1 ? `${i + 1} / ${count}` : '';
+  $('fs-progress').textContent = fsLabel;
+}
+
+/* Split an address so CSS can ellipsize the head and always show the tail.
+   The last characters are the ones you check against the device screen, so
+   they must survive; see .addr-trunc in styles.css. Tapping expands it. */
+const ADDR_TAIL = 8;
+
+function truncatedAddr(address) {
+  if (address.length <= ADDR_TAIL + 8) return `<div class="addr">${address}</div>`;
+  const head = address.slice(0, -ADDR_TAIL);
+  const tail = address.slice(-ADDR_TAIL);
+  return `<div class="addr addr-trunc" title="${address}" role="button" tabindex="0"
+    ><span class="addr-head">${head}</span><span class="addr-tail">${tail}</span></div>`;
 }
 
 function renderTxSummary() {
@@ -849,7 +952,7 @@ function renderTxSummary() {
     const cls = o.kind === 'external' ? 'pill-external' : 'pill-change';
     const label = o.kind === 'external' ? 'recipient'
       : (o.kind === 'change' ? 'change' : 'self-transfer');
-    return `<tr><th><span class="pill ${cls}">${label}</span><div class="addr">${o.address}</div></th>
+    return `<tr><th class="kv-wide"><span class="pill ${cls}">${label}</span>${truncatedAddr(o.address)}</th>
             <td class="num">${sats(o.value)}</td></tr>`;
   }).join('');
 
@@ -946,6 +1049,288 @@ async function renderDescriptorStep() {
    transaction that has change to recognise. */
 function renderFlow() {
   $('step-descriptor').hidden = !state.scenario.needs_descriptor;
+  renumberSteps();
+}
+
+/* The descriptor step comes and goes with the wallet policy, so step numbers
+   are assigned at render time. Hardcoding them left single-sig showing
+   "1, 2, 4", which reads as a missing step rather than an omitted one. */
+function renumberSteps() {
+  let n = 0;
+  document.querySelectorAll('#view-sign > .step').forEach((step) => {
+    if (step.hidden) return;
+    const badge = step.querySelector('.step-num');
+    if (badge) badge.textContent = String(++n);
+  });
+}
+
+/* ---------- signing path: reading the signature back ---------------------- */
+
+let scanner = null;
+
+/* Signatures collected across successive scans.
+ *
+ * A multisig needs one cosigner at a time: load alice's seed, sign, read it
+ * back; load bob's seed, sign the SAME transaction, read that back. Each scan
+ * carries only the signature the device just made, so judging each one in
+ * isolation reported "partly signed" forever and the demo could never reach a
+ * complete transaction — the one thing a multisig demo exists to show.
+ *
+ * Accumulating them here is exactly what a coordinator like Sparrow does when
+ * it combines PSBTs. Only signatures that have VERIFIED are kept, and they are
+ * keyed by public key per input, so re-scanning the same cosigner adds nothing
+ * rather than counting twice.
+ */
+let collected = { scenarioId: null, inputs: [] };
+
+function resetCollected() {
+  collected = { scenarioId: null, inputs: [] };
+}
+
+/** Merge a scan's valid signatures in; returns how many were new. */
+function collectSignatures(report) {
+  if (collected.scenarioId !== state.scenario.id
+      || collected.inputs.length !== report.inputs.length) {
+    collected = {
+      scenarioId: state.scenario.id,
+      inputs: report.inputs.map(() => new Map()),
+    };
+  }
+  let added = 0;
+  for (const inp of report.inputs) {
+    const seen = collected.inputs[inp.index];
+    for (const sig of inp.sigs) {
+      if (sig.valid && !seen.has(sig.pubkey)) {
+        seen.set(sig.pubkey, sig);
+        added++;
+      }
+    }
+  }
+  return added;
+}
+
+/* Tear the camera down and put the step back to its resting state. Called on
+   every navigation as well as by the Stop button — a camera left running
+   because someone tapped Home is both a battery drain and, at a demo table
+   where a stranger is holding the phone, a bad look. */
+function resetScanUi() {
+  if (scanner) { scanner.stop(); scanner = null; }
+  const start = $('scan-start');
+  start.hidden = false;
+  start.disabled = false;
+  start.textContent = 'Start camera';
+  $('scan-stage').hidden = true;
+  $('scan-progress').hidden = true;
+  $('scan-cells').innerHTML = '';
+  $('scan-note').textContent = '';
+  const result = $('scan-result');
+  result.hidden = true;
+  result.innerHTML = '';
+}
+
+async function startScan() {
+  const start = $('scan-start');
+  start.disabled = true;
+  start.textContent = 'Starting camera…';
+  $('scan-result').hidden = true;
+
+  const { SignedPsbtScanner } = await import('./scan.js');
+  scanner = new SignedPsbtScanner({
+    video: $('scan-video'),
+    onProgress: renderScanProgress,
+    onComplete: onScanComplete,
+    onError: showScanError,
+  });
+
+  if (!await scanner.start()) {          // start() already reported why
+    scanner = null;
+    start.disabled = false;
+    start.textContent = 'Start camera';
+    return;
+  }
+  start.hidden = true;
+  $('scan-stage').hidden = false;
+  $('scan-progress').hidden = false;
+  renderScanProgress(scanner.snapshot());
+
+  // The Start button sits at the bottom of a long scrolling page, so tapping it
+  // leaves the preview mostly below the fold — you end up aiming a camera you
+  // cannot see. Pull the stage to the top (clear of the sticky banner, via
+  // scroll-margin-top) so the preview and the percentage are both on screen.
+  $('scan-stage').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderScanProgress(p) {
+  $('scan-pct').textContent = `${Math.round(p.percent * 100)}%`;
+  $('scan-count').textContent = p.expected
+    ? `${p.received} of ${p.expected} parts`
+      // Named separately because it is a genuinely different event: the decoder
+      // solved that fragment out of XOR'd frames rather than ever seeing it.
+      + (p.reconstructed ? ` · ${p.reconstructed} rebuilt from mixed frames` : '')
+    : 'looking for the first frame…';
+
+  const cells = $('scan-cells');
+  if (p.expected && cells.childElementCount !== p.expected) {
+    cells.innerHTML = '';
+    for (let i = 0; i < p.expected; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'scan-cell';
+      cells.appendChild(cell);
+    }
+  }
+  // A COUNT meter, not a positional map: cell i lights when the decoder holds
+  // i+1 fragments, whichever they turn out to be.
+  //
+  // Marking only the fragments read directly off the screen was the first
+  // attempt, and against real hardware it displayed nothing at all. A device's
+  // UR animation shows the pure fragments once — under a second at 5 fps for a
+  // small transaction — and then stays in the fountain forever. Unless the
+  // camera happens to lock on in that first second, every frame you catch is a
+  // mixed one, so the decoder is recovering fragments steadily while not one of
+  // them was ever seen in pure form. The bar sat empty next to a rising
+  // percentage. cUR reports how many fragments it holds but not which, and a
+  // segmented meter is not read positionally anyway.
+  for (let i = 0; i < cells.childElementCount; i++) {
+    cells.children[i].classList.toggle('is-read', i < p.received);
+  }
+  $('scan-note').textContent = p.note || '';
+}
+
+async function onScanComplete(psbtBytes) {
+  scanner = null;
+  $('scan-stage').hidden = true;
+  $('scan-progress').hidden = true;
+
+  const { verifySignedPsbt } = await import('./psbt.js');
+  try {
+    renderScanResult(await verifySignedPsbt(psbtBytes, state.scenarioData.verify));
+  } catch (e) {
+    showScanError(`That decoded, but it is not a PSBT this page can read: ${e.message}`);
+  }
+  // The preview just disappeared from where the eye was; bring the verdict to
+  // the same place rather than leaving the page scrolled to empty space.
+  $('scan-result').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function scanResultBox(cls, mark, headline, detail, rows, footer, again) {
+  const box = $('scan-result');
+  box.className = `scan-result ${cls}`;
+  box.innerHTML = `
+    <div class="scan-verdict">
+      <span class="scan-verdict-mark" aria-hidden="true">${mark}</span>
+      <strong>${headline}</strong>
+    </div>
+    <p class="qr-note">${detail}</p>
+    ${rows ? `<table class="kv">${rows}</table>` : ''}
+    ${footer || ''}
+    <button id="scan-again" class="btn btn-block" style="margin-top:12px">${again}</button>`;
+  box.hidden = false;
+  $('scan-again').addEventListener('click', () => { resetScanUi(); startScan(); });
+}
+
+/* "alice, bob and carol" — an Oxford-comma-free list, because at three
+   cosigners this is read aloud at a demo table rather than parsed. */
+function nameList(names) {
+  if (names.length <= 1) return names[0] || '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+function renderScanResult(report) {
+  const added = report.txMatches ? collectSignatures(report) : 0;
+
+  // Counts come from everything collected so far, not just this scan, so a
+  // multisig adds up across cosigners. Capped per input at the threshold: three
+  // cosigners signing a 2-of-3 is 9 signatures against 6 needed, and "9 of 6"
+  // is not a thing anybody wants to read.
+  const needed = report.inputs.reduce((n, i) => n + i.needed, 0);
+  const have = report.inputs.map((i) =>
+    (collected.inputs[i.index] ? collected.inputs[i.index].size : 0));
+  const valid = report.inputs.reduce((n, i) => n + Math.min(have[i.index], i.needed), 0);
+  const threshold = report.inputs.length ? report.inputs[0].needed : 1;
+  const enough = report.txMatches && report.inputs.every((i) => have[i.index] >= i.needed);
+
+  const seeds = new Set();
+  for (const perInput of collected.inputs) {
+    for (const sig of perInput.values()) if (sig.seed) seeds.add(sig.seed);
+  }
+  const who = nameList([...seeds]);
+
+  let cls = '', mark = '·', headline, detail;
+  if (!report.txMatches) {
+    // The interesting failure. Every signature in it may be perfectly valid —
+    // just not over the transaction this page sent, which is the whole thing a
+    // hardware signer exists to make impossible to fake.
+    cls = 'scan-bad';
+    mark = '✗';
+    headline = 'That is a different transaction';
+    detail = 'The device returned a transaction that is not the one shown above.';
+  } else if (report.anyInvalid) {
+    cls = 'scan-bad';
+    mark = '✗';
+    headline = 'A signature did not check out';
+    detail = 'This is the right transaction, but a signature on it failed verification.';
+  } else if (enough) {
+    cls = 'scan-ok';
+    mark = '✓';
+    headline = 'Signed, and the signature is real';
+    // The headline already makes the verification claim, so the body closes the
+    // loop instead: this is the point where a real transfer ends, and without
+    // saying so the demo stops one step short of the thing it is explaining.
+    const cosigners = state.scenario.signing_seeds.length;
+    // The headline already makes the verification claim, so the body closes the
+    // loop instead: this is where a real transfer ends, and without saying so
+    // the demo stops one step short of the thing it is explaining. No "but this
+    // one is fake" line — the sticky banner and the transaction summary both
+    // carry that, and a third copy is the kind of text nobody reads.
+    detail = `${threshold > 1
+      ? `${who} together complete the ${threshold}-of-${cosigners}. `
+      : (who ? `Signed by ${who}. ` : '')}After scanning in the signature, your
+      wallet software would then broadcast the transaction to the network.`;
+  } else if (valid > 0) {
+    mark = '◐';
+    headline = 'Partly signed';
+    // Rescanning the same cosigner is the obvious thing to try when nothing
+    // seems to be happening, so name it rather than silently showing the same
+    // numbers a second time.
+    detail = added === 0
+      ? `That signature was already counted — ${who} has signed. Load a DIFFERENT
+         cosigner's seed on the device, scan the transaction above again, and read
+         the new signature back here.`
+      : `${who} ${seeds.size > 1 ? 'have' : 'has'} signed. Load the next cosigner's
+         seed, scan the transaction above again, and read that signature back here
+         too — they add up.`;
+  } else {
+    headline = 'Not signed yet';
+    detail = 'This is the transaction that was sent, unchanged and with no signatures on it.';
+  }
+
+  // Deliberately NOT an "inputs signed" row. It counted inputs that had reached
+  // threshold, so a 2-of-3 signed by one cosigner read "inputs signed: 0 of 3"
+  // directly above "valid signatures: 3" — two true statements that look like a
+  // contradiction. Signatures are the unit the user is accumulating, so count
+  // only those, and say how many are outstanding rather than making them
+  // subtract.
+  const rows = `
+    <tr><th>Valid signatures</th><td class="num">${valid} of ${needed}</td></tr>
+    ${valid < needed
+      ? `<tr><th>Still needed</th><td class="num">${needed - valid}</td></tr>`
+      : ''}`;
+
+  // The transaction id sits OUTSIDE the table. In it, the numeric column asks to
+  // be as narrow as its content while a 64-character txid asks for everything
+  // going — the auto table layout splits the difference and wraps the id into a
+  // ragged column two characters wide. Nothing in a two-column key/value table
+  // handles both a short right-aligned number and a long identifier.
+  const footer = `<p class="scan-txid"><span>Transaction</span>${truncatedAddr(report.txid)}</p>`;
+
+  scanResultBox(cls, mark, headline, detail, rows, footer, 'Scan again');
+}
+
+function showScanError(message) {
+  if (scanner) { scanner.stop(); scanner = null; }
+  $('scan-stage').hidden = true;
+  $('scan-progress').hidden = true;
+  scanResultBox('scan-bad', '✗', 'Camera', message, '', '', 'Try again');
 }
 
 /* ---------- "verify an address" view -------------------------------------- */
@@ -1153,9 +1538,23 @@ function lockFolds() {
 
 /* ---------- view routing -------------------------------------------------- */
 
-async function setMode(mode) {
+/* Each view change is a real history entry, so the phone's Back gesture returns
+ * to the landing page instead of leaving the site.
+ *
+ * Every navigation used replaceState, which keeps the URL shareable but leaves
+ * the history stack one entry deep — so Back from three steps into the signing
+ * flow exited to whatever was open before. On a phone Back is the primary way
+ * out of anything, and a page that answers it by closing itself reads as a
+ * crash.
+ *
+ * `push` is false when the navigation IS the history moving (popstate) or when
+ * restoring state on first load; pushing there would either loop or bury the
+ * entry the user came from.
+ */
+async function setMode(mode, { push = true } = {}) {
   if (!VIEWS.includes(mode)) mode = 'home';
   lockFolds();
+  resetScanUi();
   state.mode = mode;
   VIEWS.forEach((v) => { $(`view-${v}`).hidden = v !== mode; });
 
@@ -1166,8 +1565,19 @@ async function setMode(mode) {
   const url = new URL(window.location);
   if (mode === 'home') url.searchParams.delete('do');
   else url.searchParams.set('do', mode);
-  history.replaceState(null, '', url);
+  // Only a genuine change earns an entry; re-selecting the current view would
+  // otherwise stack duplicates that Back has to chew through one at a time.
+  if (push && url.href !== window.location.href) history.pushState({ mode }, '', url);
+  else history.replaceState({ mode }, '', url);
   window.scrollTo({ top: 0, behavior: 'auto' });
+}
+
+/* Back/forward: rebuild the view from the URL, without writing history again. */
+async function onPopState() {
+  const params = new URL(window.location).searchParams;
+  const tx = params.get('tx');
+  if (tx && (!state.scenario || state.scenario.id !== tx)) await selectScenario(tx);
+  await setMode(params.get('do') || 'home', { push: false });
 }
 
 /* ---------- scenario selection -------------------------------------------- */
@@ -1178,6 +1588,12 @@ async function selectScenario(id) {
   state.scenario = scenario;
   state.scenarioData = await getJSON(`data/scenario/${id}.json`);
   lockFolds();
+  // A result from the previous transaction would be about a different txid, and
+  // signatures collected for it mean nothing here. Note this is NOT in
+  // resetScanUi(): "Scan again" must keep what has been collected so far, which
+  // is the entire point of collecting it.
+  resetScanUi();
+  resetCollected();
 
   // The blurb lives behind the "What's in this transaction?" accordion — above
   // the fold it was three lines of prose between the QR and the next step.
@@ -1349,6 +1765,22 @@ function wireControls() {
   $('qr-expand').addEventListener('click', openFullscreen);
   $('fs-close').addEventListener('click', closeFullscreen);
 
+  $('scan-start').addEventListener('click', startScan);
+  $('scan-cancel').addEventListener('click', resetScanUi);
+
+  // Tap a truncated address to see all of it. Delegated from the document
+  // because the summary table is rebuilt on every scenario change, and a
+  // listener per row would leak one per selection.
+  document.addEventListener('click', (e) => {
+    const addr = e.target.closest && e.target.closest('.addr-trunc');
+    if (addr) addr.classList.toggle('is-open');
+  });
+  // A backgrounded tab keeps a camera open, and on a phone that means the
+  // indicator light stays on after someone has switched away from the page.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && scanner) resetScanUi();
+  });
+
   $('playpause').addEventListener('click', () => {
     player.playing = !player.playing;
     updatePlaybackControls();
@@ -1365,6 +1797,8 @@ function wireControls() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { closeFullscreen(); closePicker(); }
   });
+
+  window.addEventListener('popstate', () => { onPopState(); });
 
   let resizeTimer;
   const relayout = () => allPlayers.forEach((p) => p.layout());
@@ -1426,7 +1860,11 @@ async function main() {
   state.filters.network = start.network;
   await selectScenario(start.id);
   // A ?tx= link means someone wants that transaction, not the landing page.
-  await setMode(params.get('do') || (params.get('tx') ? 'sign' : 'home'));
+  // push:false — the first view IS the entry the browser already has. Pushing
+  // here would put a duplicate on the stack, so the first Back would appear to
+  // do nothing.
+  await setMode(params.get('do') || (params.get('tx') ? 'sign' : 'home'),
+                { push: false });
 }
 
 // Test hook: lets the scannability harness force a render style on the seed QRs.
@@ -1441,6 +1879,7 @@ window.__setStyle = (style) => {
 main().catch((err) => {
   document.body.insertAdjacentHTML('afterbegin',
     `<p style="padding:16px;color:#b00">Failed to load site data: ${err.message}.
-     Did you run <code>python -m tools.build_site</code> and start the dev server?</p>`);
+     Did you run <code>bash tools/wasm/build.sh</code> and
+     <code>python -m tools.build_site</code>, and start the dev server?</p>`);
   console.error(err);
 });

@@ -1,19 +1,32 @@
 """Build the static GitHub Pages demo site into site/dist/.
 
 Everything the browser needs is precomputed here, because Pages is static and
-PSBT construction needs embit. In particular the QR codes ship as **bare module
-matrices** (packed bits, no quiet zone) rather than payload text, so the browser
-never has to encode a QR itself — no JS QR library to keep faithful to Sparrow's
-settings, and the on-screen white border stays a front-end concern.
+PSBT construction needs embit. Static QR codes ship as **bare module matrices**
+(packed bits, no quiet zone) rather than payload text, so the browser never has
+to encode those itself and the on-screen white border stays a front-end concern.
+
+The animated transaction QRs are the exception, and deliberately so. They are
+generated in the browser by the WASM build of cUR (tools/wasm/), because a
+pre-generated frame list cannot be a fountain: a real UR encoder emits pure
+fragments 1..N and then mixed XOR parts forever, never repeating and never
+returning to part 1, and the only way to reproduce that is to run the encoder.
+Shipping the base64 PSBT plus a fragment size instead of a few hundred rendered
+frames also cuts the largest scenario from ~296 KB to ~53 KB.
+
+That trade means there IS now a second QR encoder to keep honest;
+tools/wasm/roundtrip_test.mjs is the gate that does it.
 
 Layout:
     site/dist/
-      index.html app.js styles.css        (copied from site/)
+      index.html app.js ssqr.js psbt.js scan.js styles.css  (copied from site/)
+      vendor/ssqr.{js,wasm} vendor/noble-secp256k1.js       (built / fetched)
       data/index.json                     scenario + wallet + seed catalog
-      data/scenario/<id>.json             base64 PSBT, per-input/output detail
-      data/qr/<id>.<format>.<density>.json  frame matrices (lazy-loaded)
+      data/scenario/<id>.json             base64 PSBT, detail, verification data
+      data/qr/<id>.bbqr.<density>.json    BBQR frame matrices (lazy-loaded)
       data/seed/<name>.json               SeedQR + CompactSeedQR matrices
       data/wallet/<name>.json             descriptor QR + address QRs
+
+Prerequisite:  bash tools/wasm/build.sh   (once; needs Docker)
 
 Run:  python -m tools.build_site            (both networks)
       python -m tools.build_site --network main
@@ -29,6 +42,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from embit.psbt import SIGHASH
 from urtypes.crypto import PSBT as URPSBT
 
 from common import bbqr, scenarios as scenario_defs, script_types
@@ -43,6 +57,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE_SRC = os.path.join(ROOT, "site")
 DIST = os.path.join(SITE_SRC, "dist")
 STATIC_FILES = ["index.html", "app.js", "styles.css", "seedsigner-logo.svg",
+                # ES modules, loaded on demand by app.js: the WASM wrapper, the
+                # PSBT reader/verifier, and the camera scanner.
+                "ssqr.js", "psbt.js", "scan.js",
                 # Self-hosted rather than pulled from a font CDN: this thing gets
                 # opened on conference wifi, and a webfont that fails to load
                 # would silently drop the handwritten label back to a system
@@ -51,25 +68,32 @@ STATIC_FILES = ["index.html", "app.js", "styles.css", "seedsigner-logo.svg",
                 # Custom domain. Ships inside the artifact so the domain travels
                 # with the build rather than living only in repo settings.
                 "CNAME"]
-# Copied wholesale (font licence texts).
-STATIC_DIRS = ["licenses"]
+# Copied wholesale: font + library licence texts, and the built/fetched
+# third-party bundle (see tools/wasm/).
+STATIC_DIRS = ["licenses", "vendor"]
+
+# The site cannot run without these; there is no pre-rendered fallback for the
+# animated transaction QRs any more.
+WASM_ARTIFACTS = ["vendor/ssqr.js", "vendor/ssqr.wasm", "vendor/noble-secp256k1.js"]
 
 MIN_FRAGMENT_BYTES = 10          # Sparrow MIN_FRAGMENT_LENGTH
 DEFAULT_FPS = 5                  # Sparrow ANIMATION_PERIOD_MILLIS = 200ms
 DEFAULT_SEEDQR = "compact"       # CompactSeedQR: smaller symbol, easier scan
 
-# How many mixed (XOR fountain) parts to append after the pure set.
+# Sequence number used to size the animation's canvas.
 #
-# This is sized so the mixed tail can complete a decode ON ITS OWN, which the
-# playback rule makes load-bearing: a real UR encoder never returns to the pure
-# prefix, so the browser loops the mixed tail forever once it gets there. If that
-# tail held too few distinct parts to solve for whatever fragments a scanner
-# missed, the animation would spin without ever completing — a hang at a demo
-# table rather than a slow scan. A rateless code needs roughly `seq_len` distinct
-# parts, hence the 1:1 target; the floor keeps tiny payloads interesting and the
-# ceiling stops the 490-frame stress case from doubling into absurdity.
-MIXED_PARTS_MIN = 16
-MIXED_PARTS_MAX = 256
+# Every fountain part carries the same fragment length, so the ONLY thing that
+# grows the payload — and with it the QR version — is the sequence number: as a
+# decimal in the URI path, and as a CBOR integer inside the part (1 byte below
+# 24, 2 below 256, 3 below 65536, 5 beyond). The front end has to lock one
+# module scale for a whole animation (see site/app.js), so it needs the ceiling
+# up front rather than discovering it three minutes in.
+#
+# 999,999 parts is 55 hours at 5 fps and already sits in the widest CBOR band,
+# so this is the practical maximum rather than a guess. The front end still
+# re-layouts if a frame ever exceeds it, which costs one visible resize instead
+# of a clipped QR.
+LAYOUT_CEILING_SEQ = 999_999
 
 # Sparrow's two density presets per format. "normal" is the HIGHER-density
 # option (more data per frame); "low" packs less in and is easier to scan.
@@ -119,49 +143,57 @@ WARNING = ("TEST DATA ONLY — every key on this site is published and determini
 
 # --- QR payload generation ---------------------------------------------------
 
-def ur_parts(raw_psbt: bytes, max_fragment_bytes: int) -> tuple:
-    """Sparrow's animated ur:crypto-psbt frames. Returns (parts, pure_count).
+def ur_runtime_spec(raw_psbt: bytes, max_fragment_bytes: int) -> dict:
+    """What the browser needs to run the ur:crypto-psbt fountain itself.
 
-    The BC-UR multi-part encoder is **rateless**, and this matters. The first
-    `seq_len` parts are the "pure" fragments (sequence numbers 1..N, each a
-    plain slice of the message). Every part after that is a *mixed* part: an XOR
-    of a pseudorandomly chosen subset of fragments, with sequence numbers
-    N+1, N+2, ... forever. Sparrow just keeps calling nextPart(), so a real
-    Sparrow animation runs 1..N and then stays in fountain mode indefinitely —
-    it never returns to part 1.
+    No frames — the browser has the PSBT and the fragment size, and generates
+    parts on demand with the same cUR codec the ESP32 firmware runs. What Python
+    contributes is the two numbers the front end cannot compute without
+    encoding: how many pure fragments there are (so the progress line can say
+    "part 3 of 15" and switch to "fountain part" past the end), and the module
+    ceiling to lock the canvas scale to.
 
-    We can't ship an infinite stream, so we ship the pure set plus a mixed tail
-    and the browser plays the pure prefix once before looping the tail (see
-    QrPlayer.advance in site/app.js). Two shortcuts were both wrong:
-
-      * emitting only the pure fragments leaves the fountain XOR-decode path —
-        the most intricate part of any UR decoder — entirely unexercised;
-      * cycling pure+mixed together makes the animation jump back to part 1,
-        which no real encoder does.
+    The ceiling is measured, not estimated: it rasterizes an actual part at
+    LAYOUT_CEILING_SEQ, which is the widest a part can get short of a 32-bit
+    sequence number. Part 1 is measured too, because a single-part UR has no
+    fountain header at all and is therefore *smaller*, not larger.
     """
     ur = UR("crypto-psbt", URPSBT(raw_psbt).to_cbor())
     encoder = UREncoder(ur, max_fragment_bytes, 0, MIN_FRAGMENT_BYTES)
+
     if encoder.is_single_part():
-        return [encoder.next_part()], 1
-    pure_count = encoder.fountain_encoder.seq_len()
-    mixed = max(MIXED_PARTS_MIN, min(pure_count, MIXED_PARTS_MAX))
-    return [encoder.next_part() for _ in range(pure_count + mixed)], pure_count
+        _b64, version, modules = qr_matrix(encoder.next_part())
+        return {"runtime": True, "max_fragment": max_fragment_bytes,
+                "min_fragment": MIN_FRAGMENT_BYTES, "count": 1,
+                "modules": modules, "version": version}
+
+    seq_len = encoder.fountain_encoder.seq_len()
+    _b64, v_first, m_first = qr_matrix(encoder.next_part())
+    ceiling = UREncoder(ur, max_fragment_bytes, LAYOUT_CEILING_SEQ, MIN_FRAGMENT_BYTES)
+    _b64, v_max, m_max = qr_matrix(ceiling.next_part())
+    return {
+        "runtime": True,
+        "max_fragment": max_fragment_bytes,
+        "min_fragment": MIN_FRAGMENT_BYTES,
+        "count": seq_len,
+        "modules": max(m_first, m_max),
+        "version": max(v_first, v_max),
+    }
 
 
-def bbqr_parts(raw_psbt: bytes, max_fragment_chars: int) -> tuple:
-    """BBQR parts. Returns (parts, pure_count) — BBQR has no fountain coding, so
-    it really is a fixed set of slices that a sender loops; every part is 'pure'."""
+def bbqr_parts(raw_psbt: bytes, max_fragment_chars: int) -> list:
+    """BBQR parts. Unlike UR this really is a fixed set of slices that a sender
+    loops — BBQR has no fountain coding — so pre-rendering it is faithful."""
     parts, _encoding = bbqr.encode(raw_psbt, "P", max_fragment_chars)
-    return parts, len(parts)
+    return parts
 
 
-def frames_payload(parts: list, pure_count: int) -> dict:
+def frames_payload(parts: list) -> dict:
     """Rasterize each part to a bare module matrix.
 
-    Frames in one animation can differ by a QR version (the last pure fragment
-    is often smaller, and mixed parts are full-width). The front end locks its
-    scale to `max_modules` and centers smaller frames, so the symbol never
-    resizes mid-scan.
+    Frames in one set can differ by a QR version (the last slice is often
+    smaller). The front end locks its scale to `max_modules` and centers smaller
+    frames, so the symbol never resizes mid-scan.
     """
     frames = []
     for part in parts:
@@ -169,23 +201,10 @@ def frames_payload(parts: list, pure_count: int) -> dict:
         frames.append({"m": modules, "v": version, "b": b64})
     return {
         "count": len(frames),
-        "pure_count": pure_count,
         "max_modules": max(f["m"] for f in frames),
         "max_version": max(f["v"] for f in frames),
         "frames": frames,
     }
-
-
-def qr_variants(raw_psbt: bytes) -> dict:
-    """All {format: {density: payload}} variants for one PSBT."""
-    out = {}
-    for fmt, spec in FORMATS.items():
-        out[fmt] = {}
-        for density, cap in spec["densities"].items():
-            parts, pure = (ur_parts(raw_psbt, cap) if fmt == "ur"
-                           else bbqr_parts(raw_psbt, cap))
-            out[fmt][density] = frames_payload(parts, pure)
-    return out
 
 
 def _single(b64: str, version: int, modules: int) -> dict:
@@ -206,6 +225,63 @@ def address_qr(address: str) -> dict:
 def bytes_qr(payload: bytes) -> dict:
     """A byte-mode QR (CompactSeedQR)."""
     return _single(*qr_matrix_bytes(payload))
+
+
+# --- verification data for the scan-back step --------------------------------
+
+def verification_data(psbt, signers: list, threshold: int) -> dict:
+    """Everything the browser needs to check a signature the device hands back.
+
+    The browser does the elliptic-curve work (site/psbt.js, via
+    @noble/secp256k1) but NOT the sighash construction. That is deliberate:
+    computing a sighash means implementing BIP143, BIP341 and the legacy
+    algorithm in JavaScript, three separate chances to be subtly wrong, in a
+    place where being subtly wrong means confidently displaying a green tick.
+    embit already knows how, so the message digest for every input is computed
+    here and shipped.
+
+    That shapes what the check MEANS, and the UI says so: it verifies the
+    signature against the sighash of *the transaction this page sent*. If the
+    device had signed anything else — a different amount, a different
+    recipient — the signature would not verify against this digest. That is the
+    property a demo is actually trying to show.
+
+    Taproot key-path spends verify against the TWEAKED output key sitting in the
+    scriptPubKey, not the internal key in the PSBT's derivation fields, so the
+    x-only key is pulled straight out of the script.
+    """
+    by_fingerprint = {s.fingerprint: s.name for s in signers}
+    taproot = psbt.inputs[0].is_taproot
+    sighash_type = SIGHASH.DEFAULT if taproot else SIGHASH.ALL
+
+    inputs = []
+    for i, inp in enumerate(psbt.inputs):
+        if taproot:
+            # A P2TR scriptPubKey is OP_1 <32-byte x-only key>.
+            xonly = inp.utxo.script_pubkey.data[2:34]
+            keys = [{"pubkey": xonly.hex(),
+                     "fingerprint": der.fingerprint.hex(),
+                     "seed": by_fingerprint.get(der.fingerprint.hex(), "?")}
+                    for _pk, (_leaves, der) in inp.taproot_bip32_derivations.items()]
+        else:
+            keys = [{"pubkey": pk.sec().hex(),
+                     "fingerprint": der.fingerprint.hex(),
+                     "seed": by_fingerprint.get(der.fingerprint.hex(), "?")}
+                    for pk, der in inp.bip32_derivations.items()]
+        inputs.append({"sighash": psbt.sighash(i, sighash=sighash_type).hex(),
+                       "keys": keys})
+
+    return {
+        "txid": psbt.tx.txid().hex(),
+        # The exact bytes the returned PSBT's global unsigned transaction must
+        # equal. Comparing these is what proves the device signed THIS
+        # transaction rather than a plausible-looking one.
+        "unsigned_tx": psbt.tx.serialize().hex(),
+        "taproot": taproot,
+        # Signatures required per input before the transaction is complete.
+        "threshold": threshold or 1,
+        "inputs": inputs,
+    }
 
 
 # --- writers -----------------------------------------------------------------
@@ -234,25 +310,30 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
     needs_descriptor = info.is_multisig and has_own_output
 
     written = 0
-    variants = qr_variants(raw)
-    variant_index = {}
-    for fmt, densities in variants.items():
-        variant_index[fmt] = {}
-        for density, payload in densities.items():
-            rel = f"data/qr/{scenario.id}.{fmt}.{density}.json"
-            written += write_json(os.path.join(DIST, rel), payload)
-            variant_index[fmt][density] = {
-                "file": rel,
-                "count": payload["count"],
-                "modules": payload["max_modules"],
-                "version": payload["max_version"],
-            }
+    variant_index = {"ur": {}, "bbqr": {}}
+
+    # UR is generated in the browser, so the index carries parameters rather
+    # than a file reference — a few dozen bytes instead of up to 296 KB.
+    for density, cap in FORMATS["ur"]["densities"].items():
+        variant_index["ur"][density] = ur_runtime_spec(raw, cap)
+
+    for density, cap in FORMATS["bbqr"]["densities"].items():
+        payload = frames_payload(bbqr_parts(raw, cap))
+        rel = f"data/qr/{scenario.id}.bbqr.{density}.json"
+        written += write_json(os.path.join(DIST, rel), payload)
+        variant_index["bbqr"][density] = {
+            "file": rel,
+            "count": payload["count"],
+            "modules": payload["max_modules"],
+            "version": payload["max_version"],
+        }
 
     written += write_json(os.path.join(DIST, f"data/scenario/{scenario.id}.json"), {
         "id": scenario.id,
         "psbt_base64": b64,
         "psbt_bytes": len(raw),
         "summary": summary,
+        "verify": verification_data(psbt, signers, wallet["threshold"]),
     })
 
     entry = {
@@ -397,6 +478,13 @@ def main():
                     help="skip input counts above 5 (fast iteration on the UI)")
     args = ap.parse_args()
 
+    # Fail here rather than shipping a site whose central feature is a blank
+    # canvas. There is no pre-rendered fallback for the animated QRs any more.
+    missing = [a for a in WASM_ARTIFACTS if not os.path.exists(os.path.join(SITE_SRC, a))]
+    if missing:
+        sys.exit(f"missing build artifact(s): {', '.join(missing)}\n"
+                 f"Run `bash tools/wasm/build.sh` first (needs Docker).")
+
     networks = ("main", "test") if args.network == "both" else (args.network,)
     seeds = load_seeds()
     wallets = load_wallets()
@@ -423,10 +511,13 @@ def main():
         entry, written = build_scenario(scenario, wallets, seeds)
         scenario_entries.append(entry)
         total_bytes += written
+        # For UR, `count` is the number of PURE fragments — the animation itself
+        # is unbounded, so this is "how long before it goes fountain", not a
+        # frame total.
         biggest = max(entry["qr"][f][d]["count"]
                       for f in entry["qr"] for d in entry["qr"][f])
         print(f"  [{i:>3}/{len(all_scenarios)}] {scenario.id:<44s} "
-              f"{entry['psbt_bytes']:>7,}B  up to {biggest:>3} frames")
+              f"{entry['psbt_bytes']:>7,}B  up to {biggest:>3} parts")
 
     seed_entries, w = build_seed_files(seeds)
     total_bytes += w

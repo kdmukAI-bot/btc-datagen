@@ -44,15 +44,26 @@ common/
   fixtures.py         fixture loaders
   ur2/                vendored UR2 codec (from SeedSigner; byte-identical fountain)
 generators/           standalone artifact generators (PNG/GIF into output/)
-site/                 the demo site's source (index.html, app.js, styles.css,
-                      seedsigner-logo.svg)
+site/                 the demo site's source
+  index.html app.js styles.css seedsigner-logo.svg
+  ssqr.js             wrapper over the WASM module (UR codec, QR encode/decode)
+  psbt.js             minimal PSBT reader + signature verification
+  scan.js             camera capture -> QR decode -> UR reassembly
+  vendor/             gitignored: built ssqr.{js,wasm} + @noble/secp256k1
 site/dist/            built site — gitignored, produced by tools/build_site.py
+deps/                 gitignored: cUR, k_quirc, qrcodegen at pinned commits
 tools/
   build_fixtures.py   (re)generate fixtures deterministically
   build_site.py       build the static site into site/dist/
-  serve.py            local dev server (binds all interfaces, for phone testing)
+  serve.py            local dev server (--tls for camera testing from a phone)
   verify.py           end-to-end verification of the BUILT artifacts
   smoke_site.mjs      headless-browser check of the page itself
+  wasm/
+    fetch_deps.sh     pull the third-party sources at pinned commits/hashes
+    build.sh          Docker + pinned emsdk -> site/vendor/ssqr.{js,wasm}
+    ssqr.c            the C surface the site talks to
+    reference.py      emit the reference data the round-trip test checks against
+    roundtrip_test.mjs  encode -> rasterize -> decode -> reassemble -> verify
 docs/knowledge/       reverse-engineering notes & format references
 ```
 
@@ -66,17 +77,43 @@ python3 -m venv .venv
 
 `requirements-dev.txt` needs the system zbar library (`apt install libzbar0`).
 
+The site also needs its WASM module, which requires **Docker** (a pinned emsdk
+image; nothing is installed on the host):
+
+```bash
+bash tools/wasm/build.sh          # -> site/vendor/ssqr.{js,wasm}
+```
+
+This is not optional. Every animated transaction QR is generated in the browser
+by that module, and `tools/build_site.py` refuses to build without it.
+
 ## The demo site
 
 ```bash
 .venv/bin/python -m tools.build_fixtures     # once, or after changing fixtures
-.venv/bin/python -m tools.build_site         # both networks, ~1-2 min
+.venv/bin/python -m tools.build_site         # both networks, ~20s
 .venv/bin/python -m tools.serve 8777         # prints a LAN URL for your phone
 ```
 
 Then open the printed LAN address on a phone and point a SeedSigner at it.
 `--quick` skips input counts above 5 for fast UI iteration; `--network main`
 builds one network only.
+
+**To test the camera step you need `--tls`:**
+
+```bash
+.venv/bin/python -m tools.serve --tls        # https on 8443, self-signed
+```
+
+Browsers refuse `getUserMedia` on an insecure origin unless the host is
+`localhost`, so a phone reaching the dev server by LAN or tailnet IP cannot open
+a camera over plain http. The certificate is generated on the spot with every
+one of this machine's addresses as SANs (an address missing from the SANs is
+rejected outright, with no click-through offered). Chrome on Android needs one
+**Advanced → Proceed**; Safari will not grant camera access to an untrusted
+certificate at all, so on iOS either install the certificate or use
+`adb reverse`-style port forwarding so the phone sees `localhost`. The server
+prints all of this on startup.
 
 ### What the site does
 
@@ -119,7 +156,7 @@ packs less in and is easier to scan. Density is sticky per format:
 | Frame rate | 5 fps, adjustable 0.5–10 |
 | SeedQR type | CompactSeedQR |
 
-### UR animations include fountain parts, and never loop back
+### UR animations are a real fountain, generated in the browser
 
 The BC-UR multi-part encoder is **rateless**. The first `seq_len` parts are the
 *pure* fragments (sequence numbers 1..N, plain slices of the message).
@@ -128,35 +165,47 @@ fragment subset, numbered N+1, N+2, … forever. Sparrow just keeps calling
 `nextPart()`, so a real animation runs 1..N and then **stays in fountain mode
 indefinitely — it never returns to part 1**.
 
-Two shortcuts are tempting and both are wrong:
+No finite list of frames can be that, which is why the browser runs the encoder
+itself: **cUR compiled to WASM**, the same codec the ESP32 firmware runs, so the
+frames are byte-identical to a device's rather than merely equivalent. The site
+ships the base64 PSBT and a fragment size; `UrFountain` in `site/app.js` pulls
+parts on demand and the frame counter distinguishes `Part 3 of 7` from
+`Fountain part 91 (mixed)`. Nothing ever repeats.
 
-- **Ship only the pure fragments and loop them.** Produces a working animation
-  that never exercises the fountain XOR-decode path — the most intricate part of
-  any UR decoder — so the test data silently fails to test the interesting half
-  of the implementation.
-- **Ship pure + mixed and cycle the whole list.** The animation jumps back to
-  part 1, which no real encoder does.
-
-So the build ships the pure set plus a mixed tail, and the browser plays the pure
-prefix once before looping *within the tail* (`QrPlayer.advance` in
-`site/app.js`). The frame counter distinguishes `Part 3 of 7` from
-`Fountain part 9 (mixed)`.
-
-That playback rule makes the tail's size load-bearing: a scanner that missed a
-pure fragment will only ever see mixed parts again, so if the tail held too few
-distinct parts to solve for what was missed, the animation would spin forever
-without completing — a hang at a demo table rather than a slow scan. A rateless
-code needs roughly `seq_len` distinct parts, so the tail targets 1:1 with the
-pure count (floor 16, ceiling 256).
+It is also much smaller: the 100-input stress case went from ~296 KB of
+pre-rendered matrices to a ~53 KB PSBT.
 
 BBQR has no fountain coding — it really is a fixed set of slices that a sender
-loops — so every BBQR part is "pure" and that case wraps normally.
+loops — so BBQR frames are still pre-rendered by Python, and that case wraps
+normally.
 
-One honest limitation: because the parts are generated at build time, the mixed
-tail itself loops. Every mixed part shipped is a genuine, distinct fountain part
-with a real sequence number, but once the tail is exhausted the browser replays
-it rather than emitting something new, which a live encoder would. Compiling cUR
-to WASM would fix that and shrink the payload — see [docs/TODO.md](docs/TODO.md).
+The trade is that there is now a second QR encoder (Nayuki's qrcodegen) that can
+drift from Python's. `tools/wasm/roundtrip_test.mjs` is the gate; see
+[docs/knowledge/runtime-qr-and-camera-readback.md](docs/knowledge/runtime-qr-and-camera-readback.md)
+for what it does and does not assert, including why the two encoders pick
+different QR masks and why that is fine.
+
+### Reading the signature back
+
+The last step of the signing flow closes the loop: point the phone's camera at
+the SeedSigner's screen, read the signed transaction back, and check it.
+
+- **QR decode** is k_quirc — SeedSigner's own decoder, compiled to WASM — so the
+  browser reads the device's screen with the device's code.
+- **Reassembly** is cUR's fountain decoder, with a live per-fragment meter.
+- **Verification** parses the returned PSBT, asserts its unsigned transaction is
+  byte-identical to the one this page sent, and verifies every signature on the
+  secp256k1 curve (`@noble/secp256k1`) against a sighash digest computed at
+  build time by embit.
+
+That last point shapes what the check means, and the UI says so: it proves the
+device signed *this* transaction. A signature over anything else — a different
+amount, a different recipient — does not verify against this digest.
+
+Signatures accumulate across scans, so a 2-of-3 can be completed one cosigner at
+a time the way a coordinator combines PSBTs: sign with alice, read it back, load
+bob's seed, scan the same transaction, read that back, and the page reports the
+threshold met.
 
 ### The handmade SeedQR
 
@@ -224,13 +273,15 @@ The **default** flow is 3 inputs, native segwit single sig, one external
 recipient plus change and the fee — two UR frames at Normal density, about as
 easy as an animated scan gets.
 
-### Why QRs ship as module matrices
+### Why static QRs ship as module matrices
 
-The build emits each QR as a **bare module matrix** (packed bits, row-major, no
-quiet zone) rather than payload text, and the browser just blits the modules.
-That means there is no JS QR encoder whose settings could drift from Sparrow's,
-and the on-screen white border stays a front-end concern. Two rendering rules in
-`site/app.js` decide whether a scan actually works:
+Every QR that isn't an animated transaction — seeds, descriptors, addresses,
+messages, BBQR — is emitted as a **bare module matrix** (packed bits, row-major,
+no quiet zone) rather than payload text, and the browser just blits the modules.
+Python stays the only encoder for those, so their settings cannot drift from
+Sparrow's, and the on-screen white border stays a front-end concern. Two
+rendering rules in `site/app.js` decide whether a scan actually works, and they
+apply to the runtime-generated frames too:
 
 - **Integer module scaling only**, in device pixels. A fractional scale gives
   some modules an extra pixel and that asymmetry wrecks decoding.

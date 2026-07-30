@@ -8,7 +8,26 @@ site/dist/
 
 # Per project convention: keep docs in README, don't track CLAUDE.md
 CLAUDE.md
+.claude/
+
+# Local git-gating flag. NOTE: this file is currently still TRACKED — it was
+# committed by accident — so this line has no effect until it is untracked:
+#   git rm --cached .claude-auto-commit
+.claude-auto-commit
 
 # Node is only used for the browser smoke test (tools/smoke_site.mjs).
 node_modules/
 package-lock.json
+
+# Third-party sources, fetched at pinned commits by tools/wasm/fetch_deps.sh.
+deps/
+
+# WASM build output + the vendored JS the fetch script pulls down. Rebuilt by
+# `bash tools/wasm/build.sh`; the licence texts under site/licenses/ ARE tracked.
+site/vendor/
+tools/wasm/.emcache/
+tools/wasm/reference.json
+
+# Self-signed certificate for `python -m tools.serve --tls`. Machine-specific
+# (its SANs are this host's addresses) and regenerated on demand.
+.devcert/

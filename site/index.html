@@ -61,7 +61,19 @@
     <section class="step" id="step-tx">
       <h2 class="step-title"><span class="step-num">1</span> Scan the transaction</h2>
       <p class="step-hint">Wallet software like Sparrow builds the transaction and
-        shows it as this QR.</p>
+        shows it as a QR.</p>
+
+      <!-- Which transaction this is, and the way to pick another, sit directly
+           above the QR: the name labels the thing below it, and "Change" is
+           only meaningful once you know what you would be changing. Below the
+           QR they read as trailing metadata about something you have already
+           scrolled past. -->
+      <div class="scenario-head">
+        <div class="scenario-head-text">
+          <h1 id="scenario-title">—</h1>
+        </div>
+        <button id="open-picker" class="btn btn-ghost">Change<span aria-hidden="true"> ▾</span></button>
+      </div>
 
       <div class="qr-stage" id="qr-stage">
         <div class="qr-card">
@@ -71,13 +83,6 @@
           <span id="qr-progress">—</span>
           <button id="qr-expand" class="btn btn-tiny">Fullscreen</button>
         </div>
-      </div>
-
-      <div class="scenario-head">
-        <div class="scenario-head-text">
-          <h1 id="scenario-title">—</h1>
-        </div>
-        <button id="open-picker" class="btn btn-ghost">Change<span aria-hidden="true"> ▾</span></button>
       </div>
 
       <!-- Everything optional is folded away. Default is UR / Normal / 5 fps,
@@ -201,6 +206,38 @@
         <div id="descriptor-text"></div>
       </details>
 
+    </section>
+
+    <!-- LAST STEP — read the signature back off the device.
+         The device shows the signed transaction as its own animated QR; this
+         reads it with the camera and checks the signatures are real. The step
+         number is filled in by renumberSteps(), because the descriptor step
+         above comes and goes with the wallet policy. -->
+    <section class="step" id="step-scan">
+      <h2 class="step-title"><span class="step-num"></span> Read the signature back</h2>
+      <p class="step-hint">The SeedSigner shows the signed transaction as an
+        animated QR. Point the camera at it.</p>
+
+      <button id="scan-start" class="btn btn-primary btn-block">Start camera</button>
+
+      <div class="scan-stage" id="scan-stage" hidden>
+        <video id="scan-video" playsinline muted disablepictureinpicture></video>
+        <div class="scan-reticle" aria-hidden="true"></div>
+      </div>
+
+      <div class="scan-progress" id="scan-progress" hidden>
+        <div class="scan-headline">
+          <strong id="scan-pct">0%</strong>
+          <span id="scan-count"></span>
+        </div>
+        <!-- One cell per fragment of the signed transaction. This is the
+             "how much has come back" display. -->
+        <div class="scan-cells" id="scan-cells"></div>
+        <p class="qr-note" id="scan-note"></p>
+        <button id="scan-cancel" class="btn btn-block">Stop</button>
+      </div>
+
+      <div id="scan-result" hidden></div>
     </section>
   </section>
 

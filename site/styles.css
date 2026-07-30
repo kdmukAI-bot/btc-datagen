@@ -289,8 +289,62 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .kv { width: 100%; border-collapse: collapse; font-size: .95rem; }
 .kv th, .kv td { text-align: left; padding: 6px 0; border-top: 1px solid var(--line); vertical-align: top; }
 .kv th { color: var(--muted); font-weight: 500; white-space: nowrap; padding-right: 10px; }
-.kv td.num { text-align: right; font-family: ui-monospace, monospace; white-space: nowrap; }
+
+/* Cells holding something long — an address, a descriptor.
+ *
+ * `.kv th` sets `white-space: nowrap` for the label column, which is right for
+ * labels and catastrophic for a 62-character bech32 address: it cannot wrap, so
+ * the table grows past the viewport and the amounts sit off the right edge of a
+ * phone with nothing to scroll to.
+ *
+ * `max-width: 0` with `width: 100%` is the standard way to get an ellipsis
+ * inside an auto-layout table. The auto algorithm normally sizes a column to
+ * its content, which gives the flex child below no definite width to ellipsize
+ * against; asking for zero and then for everything makes the column take
+ * exactly the space the other columns leave. `table-layout: fixed` would also
+ * work and was tried first — but it splits the width evenly unless every column
+ * is given an explicit size, which breaks the other .kv tables on the page. */
+.kv th.kv-wide { white-space: normal; max-width: 0; width: 100%; }
+.kv td.num {
+  text-align: right;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+  width: 1%;                 /* auto layout: "no wider than the content needs" */
+}
 .addr { font-family: ui-monospace, monospace; font-size: .85rem; word-break: break-all; }
+
+/* Middle-truncated address: head ellipsizes, tail always visible.
+ *
+ * End-truncation is the wrong shape for an address. The tail is what you check
+ * against the device screen — a wallet showing `bc1q...` and nothing else is
+ * useless for confirming a recipient — so the last few characters have to
+ * survive. CSS cannot ellipsize in the middle, hence two spans: the first takes
+ * the slack and ellipsizes, the second is fixed and never shrinks.
+ *
+ * Tapping expands to the full address, wrapped. Truncation is right for
+ * scanning a list; the whole thing is right when you are actually comparing it
+ * to a screen, and one tap is a cheap way to have both. */
+.addr-trunc {
+  display: flex;
+  min-width: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.addr-trunc > .addr-head {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.addr-trunc > .addr-tail { flex: none; white-space: nowrap; }
+.addr-trunc.is-open { display: block; }
+.addr-trunc.is-open > .addr-head,
+.addr-trunc.is-open > .addr-tail {
+  display: inline;
+  overflow: visible;
+  white-space: normal;
+  word-break: break-all;
+}
 
 .pill {
   display: inline-block;
@@ -638,3 +692,104 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .seed-facts ul { margin: 0; padding-left: 1.15em; }
 .seed-facts li { margin-bottom: 7px; color: var(--muted); }
 .seed-facts strong { color: var(--text); }
+
+/* ---------- reading the signature back ------------------------------------ */
+
+/* The camera preview. `object-fit: cover` on a fixed-aspect box, because the
+   camera's own aspect ratio varies by device and a letterboxed preview makes
+   people think the app is broken. What the decoder actually sees is the FULL
+   frame, not this crop — the crop is presentation only, so a QR visible at the
+   edge of the preview still decodes. */
+.scan-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  /* Cleared for the sticky banner when startScan() scrolls this into view. */
+  scroll-margin-top: 60px;
+  background: #000;
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.scan-stage video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* An aiming hint, nothing more: there is no region-of-interest crop behind it.
+   Sized well inside the frame so that lining a QR up with it leaves the margin
+   the decoder wants around the symbol. */
+.scan-reticle {
+  position: absolute;
+  inset: 12% 18%;
+  border: 2px solid rgba(255, 255, 255, .75);
+  border-radius: 8px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .25);
+}
+
+.scan-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.scan-headline strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.scan-headline span { color: var(--muted); font-size: .92rem; }
+
+/* One cell per fragment of the signed transaction, filling left to right as the
+   decoder recovers them.
+   A plain bar would do the same job; segments make the transaction's size
+   legible at a glance, which is the thing worth showing — a 40-cell row is a
+   visible explanation of why a big transaction takes longer to read back. */
+.scan-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.scan-cell {
+  flex: 1 1 6px;
+  min-width: 4px;
+  max-width: 22px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background-color .12s linear;
+}
+.scan-cell.is-read { background: var(--accent); }
+
+.scan-result {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--pad);
+  margin-top: 12px;
+  background: var(--surface);
+}
+.scan-verdict { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.scan-verdict-mark { font-size: 1.5rem; line-height: 1; flex: none; }
+.scan-verdict strong { font-size: 1.05rem; }
+.scan-ok .scan-verdict-mark { color: #1a7f37; }
+.scan-bad .scan-verdict-mark { color: #b42318; }
+.scan-bad { border-color: var(--warn-line); }
+.scan-result .qr-note { margin-bottom: 0; }
+
+/* Transaction id under the verdict table.
+   Its own line rather than a table row: a two-column key/value table cannot
+   hold both a short right-aligned count and a 64-character identifier without
+   the auto layout squeezing one of them into a ragged column. */
+.scan-txid {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.scan-txid > span {
+  flex: none;
+  color: var(--muted);
+  font-size: .95rem;
+}
+.scan-txid > .addr { flex: 1; min-width: 0; }
