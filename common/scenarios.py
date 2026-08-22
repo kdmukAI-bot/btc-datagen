@@ -68,6 +68,15 @@ class Scenario:
     blurb: str
     is_default: bool = False
     tags: list = field(default_factory=list)
+    # Adversarial / malformed test scenarios (SeedSigner PR #1013). None on the
+    # ordinary demo transactions. `attack` selects the forgery in
+    # common/attack_psbt.py; `load_seed` overrides which seed the "Load the seed"
+    # step presents (the point of the wrong-seed case); `expected*` describe what
+    # the device should do so the sample is useful to run on hardware.
+    attack: str = None                 # "fake_change" | "bad_input" | "wrong_seed"
+    load_seed: str = None
+    expected: str = None
+    expected_screen: str = None
 
 
 def _make(script_type, shape, num_inputs, network, is_default=False):
@@ -110,3 +119,84 @@ def all_scenarios(networks=("main", "test")) -> list:
 
 def default_scenario(scenarios: list) -> Scenario:
     return next(s for s in scenarios if s.is_default)
+
+
+# --- adversarial / malformed test scenarios (SeedSigner PR #1013) -------------
+#
+# These are hidden behind a "show test scenarios" toggle in the picker. They are
+# NOT part of the demo — they exist to run against a build of the PR on real
+# hardware and watch the device reject each one. Deliberately small and curated:
+# the two forgeries across the three script-type families the PR reasons about,
+# plus the one non-forged case (wrong seed loaded). Mainnet only; the ownership
+# scan is network-agnostic and the demo defaults to mainnet anyway.
+
+# The seed the forgeries impersonate: the honest signer of the single-sig test
+# wallets and a cosigner of the multisig one, so "load this seed" is unambiguous.
+TEST_VICTIM_SEED = "alice"
+# A seed that is NOT a key in the native-segwit test wallet, for "Seed Can't Sign".
+TEST_DECOY_SEED = "bob"
+
+# script_type -> (short family name, wallet fixture base name)
+TEST_SCRIPT_FAMILIES = [
+    ("P2WPKH", "Native SegWit"),
+    ("P2TR", "Taproot"),
+    ("P2WSH", "Multisig (2-of-3)"),
+]
+
+_ATTACK_DEFS = {
+    "fake_change": {
+        "label": "Fake change attack",
+        "expected_screen": "Suspicious Transaction / Likely an Attack!",
+        "expected": "Device should refuse it as likely an attack.",
+        "blurb": ("An output is dressed up as change back to your own wallet, but the "
+                  "key it names is one your seed does not own — the funds actually "
+                  "leave to an attacker. The device re-derives the key and the claim "
+                  "collapses."),
+    },
+    "bad_input": {
+        "label": "Malformed input ownership",
+        "expected_screen": "Transaction Problem",
+        "expected": "Device should reject it as a malformed transaction.",
+        "blurb": ("An input claims your fingerprint on a key your seed does not derive. "
+                  "It gains an attacker nothing (it is unsignable either way), so the "
+                  "device treats it as broken data rather than an attack."),
+    },
+    "wrong_seed": {
+        "label": "Wrong seed loaded",
+        "expected_screen": "Seed Can't Sign",
+        "expected": "Device should say this seed can't sign it.",
+        "blurb": ("A perfectly ordinary, honest transaction — for a wallet this "
+                  "seed is not part of. Load the decoy seed and the device finds no "
+                  "input it can sign."),
+    },
+}
+
+
+def _make_test(attack, script_type, family, is_default=False):
+    info = script_types.get(script_type)
+    base_wallet = WALLET_FOR_SCRIPT_TYPE[script_type]
+    d = _ATTACK_DEFS[attack]
+    slug = script_type.lower().replace("-", "_")
+    sid = f"test-{attack.replace('_', '-')}-{slug}"
+    title = f"⚠ {d['label']} — {family}"
+    load_seed = TEST_DECOY_SEED if attack == "wrong_seed" else TEST_VICTIM_SEED
+    return Scenario(
+        id=sid, wallet=base_wallet, script_type=script_type,
+        num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
+        title=title, blurb=d["blurb"], is_default=False,
+        tags=["test", d["label"], info.label],
+        attack=attack, load_seed=load_seed,
+        expected=d["expected"], expected_screen=d["expected_screen"],
+    )
+
+
+def test_scenarios() -> list:
+    """Adversarial / malformed transactions for exercising PR #1013 on device."""
+    out = []
+    # Both forgeries across all three script-type families.
+    for attack in ("fake_change", "bad_input"):
+        for script_type, family in TEST_SCRIPT_FAMILIES:
+            out.append(_make_test(attack, script_type, family))
+    # One wrong-seed case; it isn't script-type-sensitive, so native segwit stands in.
+    out.append(_make_test("wrong_seed", "P2WPKH", "Native SegWit"))
+    return out

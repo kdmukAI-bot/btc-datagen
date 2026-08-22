@@ -46,6 +46,7 @@ from embit.psbt import SIGHASH
 from urtypes.crypto import PSBT as URPSBT
 
 from common import bbqr, scenarios as scenario_defs, script_types
+from common.attack_psbt import build_attack_psbt
 from common.fixtures import load_seeds, load_wallets, wallet_cosigners
 from common.psbt import build_psbt, summarize
 from common.qr import qr_matrix, qr_matrix_bytes
@@ -297,17 +298,31 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
     """Returns (index_entry, files_written_bytes)."""
     wallet = wallets[scenario.wallet]
     signers = wallet_cosigners(wallet, seeds)
-    psbt = build_psbt(signers, scenario.script_type, scenario.num_inputs,
-                      scenario.output_shape, threshold=wallet["threshold"])
+
+    # Adversarial / malformed test scenarios (PR #1013) forge the PSBT; the
+    # "fake_change"/"bad_input" cases poison a derivation entry, "wrong_seed"
+    # ships an honest PSBT that the (decoy) loaded seed simply cannot sign.
+    if scenario.attack in ("fake_change", "bad_input"):
+        psbt = build_attack_psbt(scenario.attack, signers, scenario.script_type,
+                                 wallet["network"], scenario.num_inputs,
+                                 threshold=wallet["threshold"])
+    else:
+        psbt = build_psbt(signers, scenario.script_type, scenario.num_inputs,
+                          scenario.output_shape, threshold=wallet["threshold"])
     raw = psbt.serialize()
     b64 = psbt.to_string()
     summary = summarize(psbt, wallet["network"])
 
     info = script_types.get(scenario.script_type)
+    # Which seed the "Load the seed" step presents. Test scenarios override it (the
+    # wrong-seed case is entirely about loading a decoy).
+    signing_seeds = [scenario.load_seed] if scenario.load_seed else wallet["cosigners"]
+
     # The descriptor step only earns its place when there's an on-device address
-    # to check it against.
+    # to check it against — and never for a test scenario, which the device
+    # rejects during parse, before any descriptor is asked for.
     has_own_output = any(o["kind"] in ("change", "self_transfer") for o in summary["outputs"])
-    needs_descriptor = info.is_multisig and has_own_output
+    needs_descriptor = info.is_multisig and has_own_output and not scenario.attack
 
     written = 0
     variant_index = {"ur": {}, "bbqr": {}}
@@ -328,12 +343,16 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
             "version": payload["max_version"],
         }
 
+    # A test scenario is rejected by the device before it ever produces a
+    # signature, so there is nothing to scan back and no verification data.
+    verify = None if scenario.attack else verification_data(psbt, signers, wallet["threshold"])
+
     written += write_json(os.path.join(DIST, f"data/scenario/{scenario.id}.json"), {
         "id": scenario.id,
         "psbt_base64": b64,
         "psbt_bytes": len(raw),
         "summary": summary,
-        "verify": verification_data(psbt, signers, wallet["threshold"]),
+        "verify": verify,
     })
 
     entry = {
@@ -350,11 +369,16 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
         "tags": scenario.tags,
         "is_default": scenario.is_default,
         "psbt_bytes": len(raw),
-        "signing_seeds": wallet["cosigners"],
+        "signing_seeds": signing_seeds,
         "threshold": wallet["threshold"],
         "needs_descriptor": needs_descriptor,
         "summary": summary,
         "qr": variant_index,
+        # Present (and truthy) only on adversarial / malformed test scenarios.
+        "test": bool(scenario.attack),
+        "attack": scenario.attack,
+        "expected": scenario.expected,
+        "expected_screen": scenario.expected_screen,
     }
     return entry, written
 
@@ -491,6 +515,11 @@ def main():
     all_scenarios = scenario_defs.all_scenarios(networks)
     if args.quick:
         all_scenarios = [s for s in all_scenarios if s.num_inputs <= 5]
+    # Adversarial / malformed transactions for exercising PR #1013 on device.
+    # Mainnet-only and hidden behind a picker toggle, so they never intrude on
+    # the demo, but they build alongside everything else. Skipped by --network test.
+    if "main" in networks:
+        all_scenarios = all_scenarios + scenario_defs.test_scenarios()
 
     # Build into a staging directory and swap at the end, so the previous build
     # keeps serving throughout. Wiping DIST up front left the dev server with no

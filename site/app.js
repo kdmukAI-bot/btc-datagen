@@ -328,6 +328,9 @@ const state = {
   // scenario uses. Outputs are deliberately NOT a filter — the shape is in
   // each row's title, so leaving it out keeps the list short enough to scan.
   filters: { network: 'main', sig_type: 'all', script_type: 'P2WPKH', inputs: 'all' },
+  // Adversarial / malformed transactions (SeedSigner PR #1013) are hidden until
+  // this is toggled on in the picker. They are for testing the device, not the demo.
+  showTest: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -1051,8 +1054,29 @@ async function renderDescriptorStep() {
    is the one that genuinely comes and goes, since it only applies to a multisig
    transaction that has change to recognise. */
 function renderFlow() {
+  const isTest = !!state.scenario.test;
   $('step-descriptor').hidden = !state.scenario.needs_descriptor;
+  // A test scenario is rejected on device during the parse, before any signature
+  // exists — so there is nothing to read back. Hide that step and show the banner
+  // that says what the device should do instead.
+  $('step-scan').hidden = isTest;
+  renderTestBanner();
   renumberSteps('view-sign');
+}
+
+/* The what-to-load / what-should-happen note for a PR #1013 test scenario. Empty
+   and hidden for every ordinary demo transaction. */
+function renderTestBanner() {
+  const banner = $('test-banner');
+  const s = state.scenario;
+  if (!s.test) { banner.hidden = true; banner.innerHTML = ''; return; }
+  const seed = s.signing_seeds[0];
+  banner.innerHTML = `
+    <strong>Test transaction — not a demo</strong>
+    <p>${s.blurb}</p>
+    <p class="test-banner-do">Load <b>${seed}</b>'s seed below. On a device with the
+      fix, this should route to “<b>${s.expected_screen}</b>”.</p>`;
+  banner.hidden = false;
 }
 
 /* Steps that come and go with the wallet policy — the descriptor, in both the
@@ -1746,7 +1770,8 @@ function uniq(list) { return [...new Set(list)]; }
 function matchingScenarios(ignore) {
   const f = state.filters;
   return state.index.scenarios.filter((s) =>
-    s.network === f.network
+    !s.test                          // test scenarios are listed in their own group
+    && s.network === f.network
     && (ignore === 'sig_type' || f.sig_type === 'all' || s.sig_type === f.sig_type)
     && (ignore === 'script_type' || f.script_type === 'all' || s.script_type === f.script_type)
     && (ignore === 'inputs' || f.inputs === 'all' || s.num_inputs === Number(f.inputs)));
@@ -1826,34 +1851,64 @@ function renderFilters() {
   });
 }
 
-function renderScenarioList() {
-  const matches = matchingScenarios();
-  const list = $('scenario-list');
-  list.innerHTML = '';
-  if (!matches.length) {
-    list.innerHTML = '<p class="empty">No transactions match those filters.</p>';
-    return;
-  }
-  matches.forEach((s) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'scenario-item';
-    b.setAttribute('aria-current', String(state.scenario && s.id === state.scenario.id));
+function scenarioItem(s) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'scenario-item' + (s.test ? ' is-test' : '');
+  b.setAttribute('aria-current', String(state.scenario && s.id === state.scenario.id));
+  if (s.test) {
+    // A test row leads with what to load and the screen it should trigger — the
+    // only two things you need to run it on device.
+    b.innerHTML = `<strong>${s.title}</strong>
+      <span>Load ${s.signing_seeds[0]} · expects “${s.expected_screen}”</span>`;
+  } else {
     // Just the input count, spelled out. Frame count and PSBT size were noise at
     // this size — the size now lives in "What's in this transaction?", where
     // there is room to read it.
     const stress = s.tags.includes('stress test') ? ' · stress test' : '';
     b.innerHTML = `<strong>${s.title}</strong>
       <span>${s.num_inputs} input${s.num_inputs === 1 ? '' : 's'}${stress}</span>`;
-    b.addEventListener('click', () => {
-      closePicker();
-      selectScenario(s.id);
-    });
-    list.appendChild(b);
-  });
+  }
+  b.addEventListener('click', () => { closePicker(); selectScenario(s.id); });
+  return b;
+}
+
+function groupHead(text) {
+  const p = document.createElement('p');
+  p.className = 'list-group-head';
+  p.textContent = text;
+  return p;
+}
+
+function renderScenarioList() {
+  const list = $('scenario-list');
+  list.innerHTML = '';
+
+  // Test scenarios, when toggled on, sit in their own labelled group above the
+  // demo transactions. They match on network only — they are a small curated set,
+  // and hiding them behind the script-type/inputs filters would just make the
+  // toggle look broken.
+  if (state.showTest) {
+    const tests = state.index.scenarios.filter(
+      (s) => s.test && s.network === state.filters.network);
+    if (tests.length) {
+      list.appendChild(groupHead('Test scenarios — SeedSigner PR #1013'));
+      tests.forEach((s) => list.appendChild(scenarioItem(s)));
+      list.appendChild(groupHead('Demo transactions'));
+    }
+  }
+
+  const matches = matchingScenarios();
+  if (!matches.length) {
+    list.insertAdjacentHTML('beforeend',
+      '<p class="empty">No transactions match those filters.</p>');
+    return;
+  }
+  matches.forEach((s) => list.appendChild(scenarioItem(s)));
 }
 
 function openPicker() {
+  $('show-test').checked = state.showTest;
   renderFilters();
   renderScenarioList();
   $('picker').hidden = false;
@@ -1887,6 +1942,10 @@ function wireControls() {
   $('open-picker').addEventListener('click', openPicker);
   $('picker-close').addEventListener('click', closePicker);
   $('picker').addEventListener('click', (e) => { if (e.target.id === 'picker') closePicker(); });
+  $('show-test').addEventListener('change', (e) => {
+    state.showTest = e.target.checked;
+    renderScenarioList();
+  });
 
   $('qr-expand').addEventListener('click', openFullscreen);
   $('fs-close').addEventListener('click', closeFullscreen);
@@ -1992,6 +2051,9 @@ async function main() {
   const fallback = state.index.scenarios.find((s) => s.is_default) || state.index.scenarios[0];
   const start = state.index.scenarios.find((s) => s.id === params.get('tx')) || fallback;
   state.filters.network = start.network;
+  // A ?tx= link straight to a test scenario means the picker should already be
+  // showing them, so "Change" lands somewhere that includes the current one.
+  state.showTest = !!start.test;
   // updateUrl:false — a default transaction is preloaded so the signing view is
   // instant when it IS opened, but preloading must not announce itself in the
   // URL. Writing `?tx=` here is what made a refresh of the root land on the

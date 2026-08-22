@@ -428,6 +428,56 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .scenario-item span { display: block; color: var(--muted); font-size: .92rem; margin-top: 4px; }
 .empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: .9rem; }
 
+/* --- test-scenario picker affordances (PR #1013) ------------------------- */
+.picker-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: .95rem;
+  min-height: 44px;
+}
+.picker-toggle input { width: 18px; height: 18px; flex: none; }
+.picker-toggle small { color: var(--muted); }
+
+.list-group-head {
+  font-size: .78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  margin: 4px 0 8px;
+}
+.list-group-head + .list-group-head { margin-top: 14px; }
+
+/* Test rows carry the warning palette so they never read as ordinary demos. */
+.scenario-item.is-test {
+  border-color: var(--warn-line);
+  background: var(--warn-bg);
+}
+.scenario-item.is-test strong { color: var(--warn-text); }
+.scenario-item.is-test span { color: var(--warn-text); opacity: .85; }
+
+/* The in-flow note for a selected test scenario. */
+.test-banner {
+  border: 1px solid var(--warn-line);
+  border-left-width: 4px;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  border-radius: 8px;
+  padding: 11px 13px;
+  margin-bottom: 14px;
+  font-size: .95rem;
+}
+.test-banner strong { display: block; margin-bottom: 4px; }
+.test-banner p { margin: 6px 0 0; }
+.test-banner-do { opacity: .95; }
+
 /* --- fullscreen QR ------------------------------------------------------- */
 .fs {
   position: fixed;

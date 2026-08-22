@@ -75,6 +75,10 @@
         <button id="open-picker" class="btn btn-ghost">Change<span aria-hidden="true"> ▾</span></button>
       </div>
 
+      <!-- Shown only for the PR #1013 test scenarios: what to load and what the
+           device should do. Ordinary demo transactions never see this. -->
+      <div id="test-banner" class="test-banner" hidden></div>
+
       <div class="qr-stage" id="qr-stage">
         <div class="qr-card">
           <canvas id="qr-canvas" aria-label="Transaction QR code"></canvas>
@@ -475,6 +479,12 @@
       <button id="picker-close" class="btn btn-tiny">Close</button>
     </div>
     <div class="filters" id="filters"></div>
+    <!-- Hidden by default: the adversarial / malformed transactions built to
+         exercise SeedSigner PR #1013 on real hardware. Not part of the demo. -->
+    <label class="picker-toggle">
+      <input type="checkbox" id="show-test">
+      <span>Show test scenarios <small>(attack &amp; malformed — PR #1013)</small></span>
+    </label>
     <div class="sheet-list" id="scenario-list"></div>
   </div>
 </div>
