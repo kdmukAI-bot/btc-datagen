@@ -6,8 +6,8 @@
  *
  * The animated transaction QRs are different: they are generated here, frame by
  * frame, by the WASM build of cUR (site/ssqr.js). A UR animation is a
- * *fountain* — pure fragments 1..N and then an endless stream of fresh XOR
- * combinations — and no finite list of frames can be that. Shipping a list
+ * *fountain*, pure fragments 1..N and then an endless stream of fresh XOR
+ * combinations, and no finite list of frames can be that. Shipping a list
  * meant the animation eventually replayed the same mixed parts, sequence
  * numbers and all, which no real encoder does.
  *
@@ -37,7 +37,7 @@ const HAND_QUIET = 3;
 const TAU = Math.PI * 2;
 
 // "Handmade" SeedQR palette. Warm paper and a soft dark grey rather than pure
-// black — a felt pen never lays down #000. Contrast stays enormous (grey ~3%
+// black, a felt pen never lays down #000. Contrast stays enormous (grey ~3%
 // luminance against ~87% paper), so decoders are unaffected.
 const PAPER = '#f0e4c4';   // aged, well off white and towards yellow
 const GRID_INK = 'rgba(86, 72, 44, 0.28)';        // per-module, dotted
@@ -54,7 +54,7 @@ const GUTTER_MODULES = 2.6;
  * useful rather than merely decorative.
  *
  * Every entry is LOW LIGHTNESS on purpose. A decoder binarizes on luminance, so
- * a marker colour is only safe while it stays dark against ~94% paper — a yellow
+ * a marker colour is only safe while it stays dark against ~94% paper, a yellow
  * or orange highlighter would look plausible and scan terribly.
  *
  * The hand-written label uses the SAME marker, which is what a person would
@@ -70,7 +70,7 @@ const MARKER_COLORS = {
 };
 
 /* Assigned explicitly, not hashed. alice/bob/carol are the 2-of-3 cosigners and
- * so the trio a demo actually exercises — they have to be unmistakably
+ * so the trio a demo actually exercises, they have to be unmistakably
  * different from each other, and hashing happened to hand alice and carol the
  * same purple. Their hues are spread wide on purpose (275 / 221 / 150).
  * Graphite is kept in the set, just moved off bob onto dave. */
@@ -101,8 +101,8 @@ function markerFor(seedName) {
  *
  * Regenerating noise per draw would be wasteful, and doing it per pixel on a
  * 1000px canvas is not free. The amplitude is well short of anything a
- * binarizer would trip over — paper sits around 90% lightness and the darkest
- * ink at ~19% — but grit is what stops a flat fill reading as a screen, so it's
+ * binarizer would trip over, paper sits around 90% lightness and the darkest
+ * ink at ~19%, but grit is what stops a flat fill reading as a screen, so it's
  * pushed until it's actually visible on a phone rather than merely present. */
 let paperGrain = null;
 function grainPattern(ctx) {
@@ -126,7 +126,7 @@ function grainPattern(ctx) {
   return paperGrain;
 }
 
-/* Soft crease down the middle in each axis — a backup card that has lived folded
+/* Soft crease down the middle in each axis, a backup card that has lived folded
    in a safe, rather than a freshly generated rectangle. Each crease is a narrow
    shadow with a highlight on one side, which is what sells a fold. */
 function drawCreases(ctx, w, h) {
@@ -178,7 +178,7 @@ const HAND = {
   // they read as wear without disturbing that ratio.
   // Pushed up until the wear actually reads on a phone. The safe direction is
   // BIGGER-BUT-GREY: a factorial over {print darkness} x {speck colour} x {speck
-  // size} showed only one failing combination — large AND paper-white, which
+  // size} showed only one failing combination, large AND paper-white, which
   // punches holes that binarize as light. Large grey specks decode fine; so do
   // small white ones. These are large and grey.
   flakeChance: 0.72,  // fraction of printed cells showing any wear
@@ -194,8 +194,8 @@ const HAND = {
  * Same module always yields the same wobble, so nothing shimmers on reflow and
  * the scannability test stays reproducible.
  *
- * On the bounds: going LARGE is safe — even a dot overflowing its cell can't
- * reach a neighbouring cell's centre, which is where a decoder samples — so the
+ * On the bounds: going LARGE is safe, even a dot overflowing its cell can't
+ * reach a neighbouring cell's centre, which is where a decoder samples, so the
  * only theoretical limit is the small end.
  *
  * A sweep at the tightest size we render (320px-wide phone, dpr 3) had zbar
@@ -250,7 +250,7 @@ function zoneRanges(modules) {
  * This replaced an earlier approach that drew discrete pale splotches. Those
  * looked like damage rather than print, and were actively risky: large light
  * blobs in a finder pattern binarize as holes, and finder patterns are
- * STRUCTURAL — a decoder locates the symbol by scanning for their 1:1:3:1:1
+ * STRUCTURAL, a decoder locates the symbol by scanning for their 1:1:3:1:1
  * ratio, with no error correction to fall back on. Fine noise softens the fill
  * without ever producing a light region big enough to matter, and a camera's
  * own defocus averages it away entirely.
@@ -279,7 +279,7 @@ function inkNoisePattern(ctx) {
   return inkGrain;
 }
 
-/* Is this module part of a fixed registration pattern — a finder "eye" or the
+/* Is this module part of a fixed registration pattern, a finder "eye" or the
  * alignment block?
  *
  * Ported verbatim from the device's own zoomed-transcription screen
@@ -325,12 +325,13 @@ const state = {
   onlySeedVariant: 'compact',
   messageName: null,
   // Native SegWit by default: the common case, and the one the landing
-  // scenario uses. Outputs are deliberately NOT a filter — the shape is in
+  // scenario uses. Outputs are deliberately NOT a filter, the shape is in
   // each row's title, so leaving it out keeps the list short enough to scan.
   filters: { network: 'main', sig_type: 'all', script_type: 'P2WPKH', inputs: 'all' },
-  // Adversarial / malformed transactions (SeedSigner PR #1013) are hidden until
-  // this is toggled on in the picker. They are for testing the device, not the demo.
-  showTest: false,
+  // Adversarial / malformed transactions are hidden until their PR's toggle is
+  // enabled in the picker. Each hardening PR (#1013, #1032, ...) has its own
+  // toggle so the sets stay isolated. Holds the set of enabled PR ids.
+  showPR: new Set(),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -351,7 +352,7 @@ async function getJSON(path) {
 }
 
 function prepare(payload) {
-  // Decode once, up front — decoding inside the animation loop would stutter.
+  // Decode once, up front, decoding inside the animation loop would stutter.
   return {
     count: payload.count,
     maxModules: payload.max_modules,
@@ -362,8 +363,8 @@ function prepare(payload) {
 
 /* A live ur:crypto-psbt fountain, dressed up to look like a payload.
  *
- * Same duck type as `prepare()` output — maxModules for the canvas, a frame at
- * `frames[i]` — so QrPlayer does not need to know which kind it is holding.
+ * Same duck type as `prepare()` output, maxModules for the canvas, a frame at
+ * `frames[i]`, so QrPlayer does not need to know which kind it is holding.
  * The difference is that `frames` is a growing cache rather than a fixed list,
  * and `count` is the number of PURE fragments rather than a total, because
  * there is no total.
@@ -579,7 +580,7 @@ class QrPlayer {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       drawCreases(ctx, canvas.width, canvas.height);
       if (this.label) {
-        // Same marker as the dabs — nudged a little brighter, because thin
+        // Same marker as the dabs, nudged a little brighter, because thin
         // letter strokes read lighter than dense blobs of the same ink.
         const ink = `hsl(${mk.h} ${Math.min(100, mk.s + 12)}% ${mk.l + 4}%)`;
         const maxWidth = canvas.width * 0.86;
@@ -600,7 +601,7 @@ class QrPlayer {
         };
         write(this.label, band * 0.33, scale * 3.4, -0.019);
         // The master fingerprint, which is what actually tells two backups
-        // apart — a name is a convenience, the fingerprint is the identity, and
+        // apart, a name is a convenience, the fingerprint is the identity, and
         // writing it on the card is standard practice. SeedSigner's own
         // fingerprint templates give it a box in the header for exactly this.
         if (this.fingerprint) {
@@ -625,9 +626,9 @@ class QrPlayer {
     //
     // Two weights, copying the printed templates: DOTTED hairlines at every
     // module, SOLID heavier lines at each zone boundary. lineWidth is in DEVICE
-    // pixels — a hardcoded 1 is a third of a CSS pixel on a dpr-3 phone, which
+    // pixels, a hardcoded 1 is a third of a CSS pixel on a dpr-3 phone, which
     // is why the grid was invisible on a real handset while looking fine in
-    // dpr-1 screenshots — so it scales with the module size.
+    // dpr-1 screenshots, so it scales with the module size.
     if (handmade && scale >= 4) {
       const a = originY + off * scale;
       const b = originY + (off + f.m) * scale;
@@ -667,7 +668,7 @@ class QrPlayer {
       // empty corner cell, thin rules boxing them in.
       //
       // They sit FLUSH against the grid, which technically intrudes on the
-      // symbol's quiet zone — exactly as the printed PDFs do, since those carry
+      // symbol's quiet zone, exactly as the printed PDFs do, since those carry
       // no quiet zone at all and rely on the surrounding paper. The guides are
       // light grey hairlines and there is a wide paper margin outside them, so
       // detection is unaffected; attaching them to the grid is what makes them
@@ -761,7 +762,7 @@ class QrPlayer {
   /* A UR fountain never wraps; a BBQR set always does.
    *
    * A real UR encoder emits pure fragments 1..N and then mixed XOR parts N+1,
-   * N+2, … forever, never returning to part 1 — so for a fountain the frame
+   * N+2, … forever, never returning to part 1, so for a fountain the frame
    * index just keeps climbing and the encoder keeps producing. BBQR has no
    * fountain coding and a BBQR sender really does loop its fixed set of
    * slices, so that case wraps modulo the count.
@@ -918,7 +919,7 @@ function updatePlaybackControls() {
 function onFrameChange(i, count) {
   const payload = player.payload;
   const modules = payload.maxModules;
-  // For a fountain, `count` is the number of PURE fragments, not a total —
+  // For a fountain, `count` is the number of PURE fragments, not a total;
   // there is no total. Past that point the sequence number is the only honest
   // thing to show, so "12 / 15" gives way to a bare part number.
   const fountain = !!payload.ensure;
@@ -970,7 +971,7 @@ function renderTxSummary() {
       <tr><th>Network fee</th><td class="num">${sats(s.fee)}</td></tr>
       <tr><th>PSBT size</th><td class="num">${state.scenarioData.psbt_bytes.toLocaleString()} bytes</td></tr>
     </table>
-    <p class="qr-note">Signable, but unbroadcastable — these UTXOs do not exist.</p>`;
+    <p class="qr-note">Signable, but unbroadcastable, these UTXOs do not exist.</p>`;
 }
 
 /* ---------- signing path: the seed step ----------------------------------- */
@@ -983,7 +984,7 @@ async function renderSeedStep() {
   // Stage direction: what the person would actually be doing at this point.
   $('seed-hint').textContent = multi
     ? `You retrieve your handmade SeedQR. ${state.scenario.threshold}-of-${seeds.length} `
-      + `multisig — sign with any ${state.scenario.threshold}, one at a time.`
+      + `multisig, sign with any ${state.scenario.threshold}, one at a time.`
     : 'You retrieve your handmade SeedQR.';
 
   const chooser = $('seed-chooser');
@@ -1030,8 +1031,13 @@ async function renderDescriptorStep() {
   const entry = state.index.wallets.find((w) => w.name === state.scenario.wallet);
   const data = await getJSON(entry.file);
 
-  $('descriptor-hint').textContent =
-    `So the device can verify this ${entry.policy} wallet's own change output.`;
+  // A fixed build never reaches this step (it rejects the psbt during parse), so
+  // for a test scenario the descriptor is here to reproduce the OLD flow: load it
+  // on a pre-fix build to reach change verification and watch how it behaves.
+  $('descriptor-hint').textContent = state.scenario.test
+    ? `This wallet's descriptor, so a build from before the fix reaches its change `
+      + `verification. A fixed build rejects the transaction first and never asks for it.`
+    : `So the device can verify this ${entry.policy} wallet's own change output.`;
 
   const urs = data.descriptor_urs;
   if (!Object.keys(urs).includes(state.descriptorUr)) {
@@ -1057,30 +1063,32 @@ function renderFlow() {
   const isTest = !!state.scenario.test;
   $('step-descriptor').hidden = !state.scenario.needs_descriptor;
   // A test scenario is rejected on device during the parse, before any signature
-  // exists — so there is nothing to read back. Hide that step and show the banner
+  // exists, so there is nothing to read back. Hide that step and show the banner
   // that says what the device should do instead.
   $('step-scan').hidden = isTest;
   renderTestBanner();
   renumberSteps('view-sign');
 }
 
-/* The what-to-load / what-should-happen note for a PR #1013 test scenario. Empty
-   and hidden for every ordinary demo transaction. */
+/* The what-to-load / what-should-happen note for a PR test scenario. Empty and
+   hidden for every ordinary demo transaction. */
 function renderTestBanner() {
   const banner = $('test-banner');
   const s = state.scenario;
   if (!s.test) { banner.hidden = true; banner.innerHTML = ''; return; }
   const seed = s.signing_seeds[0];
+  const group = (state.index.test_pr_groups || []).find((g) => g.pr === s.pr);
+  const tag = group ? group.label : `PR #${s.pr}`;
   banner.innerHTML = `
-    <strong>Test transaction — not a demo</strong>
+    <strong>Test transaction (${tag}), not a demo</strong>
     <p>${s.blurb}</p>
     <p class="test-banner-do">Load <b>${seed}</b>'s seed below. On a device with the
       fix, this should route to “<b>${s.expected_screen}</b>”.</p>`;
   banner.hidden = false;
 }
 
-/* Steps that come and go with the wallet policy — the descriptor, in both the
-   signing and the verify flows — mean numbers have to be assigned at render
+/* Steps that come and go with the wallet policy, the descriptor, in both the
+   signing and the verify flows, mean numbers have to be assigned at render
    time. Hardcoding them left single-sig showing "1, 2, 4", which reads as a
    missing step rather than an omitted one. */
 function renumberSteps(viewId) {
@@ -1102,7 +1110,7 @@ let scanner = null;
  * back; load bob's seed, sign the SAME transaction, read that back. Each scan
  * carries only the signature the device just made, so judging each one in
  * isolation reported "partly signed" forever and the demo could never reach a
- * complete transaction — the one thing a multisig demo exists to show.
+ * complete transaction, the one thing a multisig demo exists to show.
  *
  * Accumulating them here is exactly what a coordinator like Sparrow does when
  * it combines PSBTs. Only signatures that have VERIFIED are kept, and they are
@@ -1138,7 +1146,7 @@ function collectSignatures(report) {
 }
 
 /* Tear the camera down and put the step back to its resting state. Called on
-   every navigation as well as by the Stop button — a camera left running
+   every navigation as well as by the Stop button, a camera left running
    because someone tapped Home is both a battery drain and, at a demo table
    where a stranger is holding the phone, a bad look. */
 function resetScanUi() {
@@ -1182,7 +1190,7 @@ async function startScan() {
   renderScanProgress(scanner.snapshot());
 
   // The Start button sits at the bottom of a long scrolling page, so tapping it
-  // leaves the preview mostly below the fold — you end up aiming a camera you
+  // leaves the preview mostly below the fold, you end up aiming a camera you
   // cannot see. Pull the stage to the top (clear of the sticky banner, via
   // scroll-margin-top) so the preview and the percentage are both on screen.
   $('scan-stage').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1211,8 +1219,8 @@ function renderScanProgress(p) {
   //
   // Marking only the fragments read directly off the screen was the first
   // attempt, and against real hardware it displayed nothing at all. A device's
-  // UR animation shows the pure fragments once — under a second at 5 fps for a
-  // small transaction — and then stays in the fountain forever. Unless the
+  // UR animation shows the pure fragments once, under a second at 5 fps for a
+  // small transaction, and then stays in the fountain forever. Unless the
   // camera happens to lock on in that first second, every frame you catch is a
   // mixed one, so the decoder is recovering fragments steadily while not one of
   // them was ever seen in pure form. The bar sat empty next to a rising
@@ -1256,7 +1264,7 @@ function scanResultBox(cls, mark, headline, detail, rows, footer, again) {
   $('scan-again').addEventListener('click', () => { resetScanUi(); startScan(); });
 }
 
-/* "alice, bob and carol" — an Oxford-comma-free list, because at three
+/* "alice, bob and carol", an Oxford-comma-free list, because at three
    cosigners this is read aloud at a demo table rather than parsed. */
 function nameList(names) {
   if (names.length <= 1) return names[0] || '';
@@ -1285,7 +1293,7 @@ function renderScanResult(report) {
 
   let cls = '', mark = '·', headline, detail;
   if (!report.txMatches) {
-    // The interesting failure. Every signature in it may be perfectly valid —
+    // The interesting failure. Every signature in it may be perfectly valid,
     // just not over the transaction this page sent, which is the whole thing a
     // hardware signer exists to make impossible to fake.
     cls = 'scan-bad';
@@ -1308,7 +1316,7 @@ function renderScanResult(report) {
     // The headline already makes the verification claim, so the body closes the
     // loop instead: this is where a real transfer ends, and without saying so
     // the demo stops one step short of the thing it is explaining. No "but this
-    // one is fake" line — the sticky banner and the transaction summary both
+    // one is fake" line, the sticky banner and the transaction summary both
     // carry that, and a third copy is the kind of text nobody reads.
     detail = `${threshold > 1
       ? `${who} together complete the ${threshold}-of-${cosigners}. `
@@ -1321,12 +1329,12 @@ function renderScanResult(report) {
     // seems to be happening, so name it rather than silently showing the same
     // numbers a second time.
     detail = added === 0
-      ? `That signature was already counted — ${who} has signed. Load a DIFFERENT
+      ? `That signature was already counted, ${who} has signed. Load a DIFFERENT
          cosigner's seed on the device, scan the transaction above again, and read
          the new signature back here.`
       : `${who} ${seeds.size > 1 ? 'have' : 'has'} signed. Load the next cosigner's
          seed, scan the transaction above again, and read that signature back here
-         too — they add up.`;
+         too, they add up.`;
   } else {
     headline = 'Not signed yet';
     detail = 'This is the transaction that was sent, unchanged and with no signatures on it.';
@@ -1334,7 +1342,7 @@ function renderScanResult(report) {
 
   // Deliberately NOT an "inputs signed" row. It counted inputs that had reached
   // threshold, so a 2-of-3 signed by one cosigner read "inputs signed: 0 of 3"
-  // directly above "valid signatures: 3" — two true statements that look like a
+  // directly above "valid signatures: 3", two true statements that look like a
   // contradiction. Signatures are the unit the user is accumulating, so count
   // only those, and say how many are outstanding rather than making them
   // subtract.
@@ -1346,7 +1354,7 @@ function renderScanResult(report) {
 
   // The transaction id sits OUTSIDE the table. In it, the numeric column asks to
   // be as narrow as its content while a 64-character txid asks for everything
-  // going — the auto table layout splits the difference and wraps the id into a
+  // going, the auto table layout splits the difference and wraps the id into a
   // ragged column two characters wide. Nothing in a two-column key/value table
   // handles both a short right-aligned number and a long identifier.
   const footer = `<p class="scan-txid"><span>Transaction</span>${truncatedAddr(report.txid)}</p>`;
@@ -1370,7 +1378,7 @@ function showScanError(message) {
  *
  * The ADDRESS comes first, matching the device: you scan the address, and only
  * then does the device need to know what to check it against. And the
- * descriptor step is multisig-only — a single-sig address is verified against a
+ * descriptor step is multisig-only, a single-sig address is verified against a
  * loaded seed, and there is no single-sig wallet descriptor to scan, because
  * SeedSigner does not support importing one. Offering it anyway sent people
  * looking for a device screen that does not exist. */
@@ -1394,7 +1402,7 @@ async function renderVerifyView() {
 
   // Step 2 is whatever the device asks for after the address scan, and that
   // differs by policy: a single-sig address is derived from the seed, while a
-  // multisig address only means something against the wallet policy — no single
+  // multisig address only means something against the wallet policy, no single
   // seed can answer for it.
   const isMultisig = entry.sig_type === 'multisig';
   $('verify-step-descriptor').hidden = !isMultisig;
@@ -1476,7 +1484,7 @@ async function renderOnlySeedView() {
   onlySeedPlayer.fingerprint = data.master_fingerprint.toUpperCase();
   onlySeedPlayer.setPayload(prepare(variant.qr));
   $('only-seed-note').textContent = state.onlySeedVariant === 'compact'
-    ? `${data.words === 24 ? 32 : 16} bytes of entropy — a smaller, easier scan.`
+    ? `${data.words === 24 ? 32 : 16} bytes of entropy, a smaller, easier scan.`
     : `${variant.payload.length} digits, numeric mode.`;
 
   const wordList = data.mnemonic.split(' ');
@@ -1494,7 +1502,7 @@ async function renderOnlySeedView() {
 /* Two steps, in the device's order: scan the message, then load the seed.
  *
  * The seed used to be a one-line note under the QR ("Load seed alice first"),
- * which is the same mistake as leaving it out — signing needs the key on board,
+ * which is the same mistake as leaving it out, signing needs the key on board,
  * the device asks for a seed immediately after the scan, and a demo that stops
  * at the message stops before anything happens. It gets the same handmade
  * SeedQR treatment as the signing flow, for the same reason. */
@@ -1528,7 +1536,7 @@ async function renderMessageView() {
     hintId: 'message-seed-hint',
     segId: 'message-seedqr-seg',
     wordsId: 'message-seed-words',
-    hint: `The device asks which seed to sign with — this message is signed by ${data.seed}.`,
+    hint: `The device asks which seed to sign with, this message is signed by ${data.seed}.`,
     rerender: renderMessageView,
   });
   renumberSteps('view-message');
@@ -1536,8 +1544,8 @@ async function renderMessageView() {
 
 /* Render a "load the seed" step: handmade SeedQR, type picker, word list.
  *
- * Three views need this now — signing, message signing, and verifying a
- * single-sig address — because on the device they all reach the same point:
+ * Three views need this now, signing, message signing, and verifying a
+ * single-sig address, because on the device they all reach the same point:
  * whatever you scanned, it cannot do anything until a key is on board. Shared
  * rather than copied, so the SeedQR presentation (which carries a fair amount
  * of deliberate design: the handmade look, the folded sheet, the per-key ink)
@@ -1575,7 +1583,7 @@ async function renderHandmadeSeed(seedName, opts) {
    painted from a snapshot of the canvas, because a canvas element can only live
    in one place in the DOM and the fold needs its top and bottom halves to move
    independently. Once the flap is flat the stand-ins fade out and the real
-   canvas — which was never display:none, only covered — is what you scan. */
+   canvas, which was never display:none, only covered, is what you scan. */
 function refreshFold(fold, canvas, meta) {
   if (!fold || !canvas.width) return;
   // Match the stage to the CANVAS box, not the container's.
@@ -1583,7 +1591,7 @@ function refreshFold(fold, canvas, meta) {
   // Integer module scaling means the canvas is usually a few percent narrower
   // than the space available, and the card centres it. The stand-in faces size
   // their background to the stage, so a stage spanning the full container
-  // stretched the snapshot ~5% too large — the QR visibly popped down to size
+  // stretched the snapshot ~5% too large, the QR visibly popped down to size
   // the instant the real canvas took over at the end of the unfold, and popped
   // back up when re-folding.
   const stage = fold.querySelector('.fold-stage');
@@ -1610,7 +1618,7 @@ function refreshFold(fold, canvas, meta) {
 
 /* DOM equivalent of drawHandLabel: one span per character, each nudged, tilted
    and sheared a little. A single rotation on the whole line still reads as type
-   that happens to be crooked — the irregularity has to be per letter. */
+   that happens to be crooked, the irregularity has to be per letter. */
 function handwrite(el, text, salt) {
   el.textContent = '';
   [...text].forEach((ch, i) => {
@@ -1654,7 +1662,7 @@ function lockFolds() {
  * to the landing page instead of leaving the site.
  *
  * Every navigation used replaceState, which keeps the URL shareable but leaves
- * the history stack one entry deep — so Back from three steps into the signing
+ * the history stack one entry deep, so Back from three steps into the signing
  * flow exited to whatever was open before. On a phone Back is the primary way
  * out of anything, and a page that answers it by closing itself reads as a
  * crash.
@@ -1668,13 +1676,13 @@ function lockFolds() {
  * It used to be accumulated: selectScenario() wrote `?tx=` unconditionally,
  * including while the landing page was showing, so merely opening the root
  * rewrote the URL to `?tx=<default>`. Refreshing then landed on the signing
- * view instead of the menu — and that made Back unfixable in principle rather
+ * view instead of the menu, and that made Back unfixable in principle rather
  * than merely broken, because the history entry the user started from no longer
  * described the page they had started on. No amount of pushState fixes a stack
  * whose entries lie.
  *
  * `tx` implies the signing view rather than sitting alongside `do=sign`, which
- * keeps the shareable deep link short (`?tx=<id>`) — that shape is documented
+ * keeps the shareable deep link short (`?tx=<id>`), that shape is documented
  * and already in use.
  */
 function syncUrl({ push = false } = {}) {
@@ -1715,7 +1723,7 @@ async function setMode(mode, { push = true } = {}) {
 }
 
 /* Back/forward: rebuild the view from the URL, without writing history again.
-   selectScenario skips its own URL write here — setMode is about to derive the
+   selectScenario skips its own URL write here, setMode is about to derive the
    whole URL a line later, and letting both write means a transient state where
    the URL describes neither the old view nor the new one. */
 async function onPopState() {
@@ -1742,7 +1750,7 @@ async function selectScenario(id, { updateUrl = true } = {}) {
   resetScanUi();
   resetCollected();
 
-  // The blurb lives behind the "What's in this transaction?" accordion — above
+  // The blurb lives behind the "What's in this transaction?" accordion, above
   // the fold it was three lines of prose between the QR and the next step.
   $('scenario-title').textContent = scenario.title;
 
@@ -1756,7 +1764,7 @@ async function selectScenario(id, { updateUrl = true } = {}) {
   // Replace, never push: picking a different transaction is a parameter change
   // within the signing view, so Back should return to the menu rather than walk
   // backwards through every transaction that was browsed. And on the landing
-  // page this writes nothing at all — syncUrl only emits `tx` when the signing
+  // page this writes nothing at all, syncUrl only emits `tx` when the signing
   // view is the one actually showing.
   if (updateUrl) syncUrl();
 }
@@ -1778,7 +1786,7 @@ function matchingScenarios(ignore) {
 }
 
 /* Picking "Multisig" should land on the multisig people actually use, not on
-   whatever the previous single-sig choice was — which would otherwise filter to
+   whatever the previous single-sig choice was, which would otherwise filter to
    nothing and look broken. */
 function defaultScriptFor(sigType) {
   if (sigType === 'multisig') return 'P2WSH';
@@ -1857,13 +1865,13 @@ function scenarioItem(s) {
   b.className = 'scenario-item' + (s.test ? ' is-test' : '');
   b.setAttribute('aria-current', String(state.scenario && s.id === state.scenario.id));
   if (s.test) {
-    // A test row leads with what to load and the screen it should trigger — the
+    // A test row leads with what to load and the screen it should trigger, the
     // only two things you need to run it on device.
     b.innerHTML = `<strong>${s.title}</strong>
       <span>Load ${s.signing_seeds[0]} · expects “${s.expected_screen}”</span>`;
   } else {
     // Just the input count, spelled out. Frame count and PSBT size were noise at
-    // this size — the size now lives in "What's in this transaction?", where
+    // this size; the size now lives in "What's in this transaction?", where
     // there is room to read it.
     const stress = s.tags.includes('stress test') ? ' · stress test' : '';
     b.innerHTML = `<strong>${s.title}</strong>
@@ -1873,30 +1881,41 @@ function scenarioItem(s) {
   return b;
 }
 
-function groupHead(text) {
-  const p = document.createElement('p');
-  p.className = 'list-group-head';
-  p.textContent = text;
-  return p;
+function groupHead(text, sub) {
+  const wrap = document.createElement('div');
+  wrap.className = 'list-group-head';
+  const h = document.createElement('p');
+  h.className = 'list-group-title';
+  h.textContent = text;
+  wrap.appendChild(h);
+  if (sub) {
+    const p = document.createElement('p');
+    p.className = 'list-group-sub';
+    p.textContent = sub;
+    wrap.appendChild(p);
+  }
+  return wrap;
 }
 
 function renderScenarioList() {
   const list = $('scenario-list');
   list.innerHTML = '';
 
-  // Test scenarios, when toggled on, sit in their own labelled group above the
-  // demo transactions. They match on network only — they are a small curated set,
-  // and hiding them behind the script-type/inputs filters would just make the
-  // toggle look broken.
-  if (state.showTest) {
+  // Each enabled PR's test scenarios sit in their own labelled group above the
+  // demo transactions. They match on network only (a small curated set; hiding
+  // them behind the script-type/inputs filters would just make a toggle look
+  // broken). The groups render in the order the index lists the PRs.
+  let shownAnyTest = false;
+  (state.index.test_pr_groups || []).forEach((g) => {
+    if (!state.showPR.has(g.pr)) return;
     const tests = state.index.scenarios.filter(
-      (s) => s.test && s.network === state.filters.network);
-    if (tests.length) {
-      list.appendChild(groupHead('Test scenarios — SeedSigner PR #1013'));
-      tests.forEach((s) => list.appendChild(scenarioItem(s)));
-      list.appendChild(groupHead('Demo transactions'));
-    }
-  }
+      (s) => s.test && s.pr === g.pr && s.network === state.filters.network);
+    if (!tests.length) return;
+    shownAnyTest = true;
+    list.appendChild(groupHead(g.label, g.blurb));
+    tests.forEach((s) => list.appendChild(scenarioItem(s)));
+  });
+  if (shownAnyTest) list.appendChild(groupHead('Demo transactions'));
 
   const matches = matchingScenarios();
   if (!matches.length) {
@@ -1907,8 +1926,30 @@ function renderScenarioList() {
   matches.forEach((s) => list.appendChild(scenarioItem(s)));
 }
 
+/* One "show test scenarios" checkbox per hardening PR, built from the index so a
+   new PR needs no markup change. */
+function renderPickerToggles() {
+  const box = $('picker-toggles');
+  box.innerHTML = '';
+  (state.index.test_pr_groups || []).forEach((g) => {
+    const label = document.createElement('label');
+    label.className = 'picker-toggle';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = state.showPR.has(g.pr);
+    cb.addEventListener('change', () => {
+      if (cb.checked) state.showPR.add(g.pr); else state.showPR.delete(g.pr);
+      renderScenarioList();
+    });
+    const span = document.createElement('span');
+    span.innerHTML = `Show <b>${g.label}</b> <small>test scenarios</small>`;
+    label.append(cb, span);
+    box.appendChild(label);
+  });
+}
+
 function openPicker() {
-  $('show-test').checked = state.showTest;
+  renderPickerToggles();
   renderFilters();
   renderScenarioList();
   $('picker').hidden = false;
@@ -1942,10 +1983,7 @@ function wireControls() {
   $('open-picker').addEventListener('click', openPicker);
   $('picker-close').addEventListener('click', closePicker);
   $('picker').addEventListener('click', (e) => { if (e.target.id === 'picker') closePicker(); });
-  $('show-test').addEventListener('change', (e) => {
-    state.showTest = e.target.checked;
-    renderScenarioList();
-  });
+  // The per-PR test toggles are built and wired in renderPickerToggles().
 
   $('qr-expand').addEventListener('click', openFullscreen);
   $('fs-close').addEventListener('click', closeFullscreen);
@@ -2051,16 +2089,16 @@ async function main() {
   const fallback = state.index.scenarios.find((s) => s.is_default) || state.index.scenarios[0];
   const start = state.index.scenarios.find((s) => s.id === params.get('tx')) || fallback;
   state.filters.network = start.network;
-  // A ?tx= link straight to a test scenario means the picker should already be
-  // showing them, so "Change" lands somewhere that includes the current one.
-  state.showTest = !!start.test;
-  // updateUrl:false — a default transaction is preloaded so the signing view is
+  // A ?tx= link straight to a test scenario means that PR's group should already
+  // be enabled, so "Change" lands somewhere that includes the current one.
+  if (start.test && start.pr) state.showPR.add(start.pr);
+  // updateUrl:false, a default transaction is preloaded so the signing view is
   // instant when it IS opened, but preloading must not announce itself in the
   // URL. Writing `?tx=` here is what made a refresh of the root land on the
   // signing view.
   await selectScenario(start.id, { updateUrl: false });
   // A ?tx= link means someone wants that transaction, not the landing page.
-  // push:false — the first view IS the entry the browser already has. Pushing
+  // push:false, the first view IS the entry the browser already has. Pushing
   // here would put a duplicate on the stack, so the first Back would appear to
   // do nothing.
   await setMode(modeFromUrl(params), { push: false });

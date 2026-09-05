@@ -46,7 +46,7 @@ from embit.psbt import SIGHASH
 from urtypes.crypto import PSBT as URPSBT
 
 from common import bbqr, scenarios as scenario_defs, script_types
-from common.attack_psbt import build_attack_psbt
+from common.attack_psbt import build_attack_psbt, build_d5_psbt
 from common.fixtures import load_seeds, load_wallets, wallet_cosigners
 from common.psbt import build_psbt, summarize
 from common.qr import qr_matrix, qr_matrix_bytes
@@ -64,7 +64,7 @@ STATIC_FILES = ["index.html", "app.js", "styles.css", "seedsigner-logo.svg",
                 # Self-hosted rather than pulled from a font CDN: this thing gets
                 # opened on conference wifi, and a webfont that fails to load
                 # would silently drop the handwritten label back to a system
-                # serif — the exact failure the font is there to avoid.
+                # serif, the exact failure the font is there to avoid.
                 "permanent-marker.woff2",
                 # Custom domain. Ships inside the artifact so the domain travels
                 # with the build rather than living only in repo settings.
@@ -84,7 +84,7 @@ DEFAULT_SEEDQR = "compact"       # CompactSeedQR: smaller symbol, easier scan
 # Sequence number used to size the animation's canvas.
 #
 # Every fountain part carries the same fragment length, so the ONLY thing that
-# grows the payload — and with it the QR version — is the sequence number: as a
+# grows the payload, and with it the QR version, is the sequence number: as a
 # decimal in the URI path, and as a CBOR integer inside the part (1 byte below
 # 24, 2 below 256, 3 below 65536, 5 beyond). The front end has to lock one
 # module scale for a whole animation (see site/app.js), so it needs the ceiling
@@ -101,13 +101,13 @@ LAYOUT_CEILING_SEQ = 999_999
 FORMATS = {
     "ur": {
         "label": "UR",
-        "note": "ur:crypto-psbt — what Sparrow sends by default.",
+        "note": "ur:crypto-psbt, what Sparrow sends by default.",
         "densities": {"normal": 400, "low": 80},     # bytes of CBOR per fragment
         "default_density": "normal",
     },
     "bbqr": {
         "label": "BBQR",
-        "note": "BBQR — Coldcard-Q style. Denser per frame, so Low is the sane default.",
+        "note": "BBQR, Coldcard-Q style. Denser per frame, so Low is the sane default.",
         "densities": {"normal": 2000, "low": 1000},  # CHARS of encoded body per part
         "default_density": "low",
     },
@@ -118,7 +118,7 @@ DENSITY_LABELS = {"normal": "Normal", "low": "Low"}
 
 # Message-signing payloads. SeedSigner's format is
 #   signmessage {derivation_path} ascii:{message}
-# and its type detection is `startswith("signmessage")` — lowercase, so unlike
+# and its type detection is `startswith("signmessage")`, lowercase, so unlike
 # the UR payloads these must NOT be upper-cased for alphanumeric density.
 MESSAGE_DEFS = [
     {"name": "short", "script_type": "P2WPKH", "path_suffix": "/0/0",
@@ -137,7 +137,7 @@ MESSAGE_DEFS = [
 ]
 MESSAGE_SEED = "alice"
 
-WARNING = ("TEST DATA ONLY — every key on this site is published and deterministic. "
+WARNING = ("TEST DATA ONLY, every key on this site is published and deterministic. "
            "These transactions are synthetic and spend UTXOs that do not exist. "
            "Never send real funds to any address here.")
 
@@ -147,7 +147,7 @@ WARNING = ("TEST DATA ONLY — every key on this site is published and determini
 def ur_runtime_spec(raw_psbt: bytes, max_fragment_bytes: int) -> dict:
     """What the browser needs to run the ur:crypto-psbt fountain itself.
 
-    No frames — the browser has the PSBT and the fragment size, and generates
+    No frames, the browser has the PSBT and the fragment size, and generates
     parts on demand with the same cUR codec the ESP32 firmware runs. What Python
     contributes is the two numbers the front end cannot compute without
     encoding: how many pure fragments there are (so the progress line can say
@@ -184,7 +184,7 @@ def ur_runtime_spec(raw_psbt: bytes, max_fragment_bytes: int) -> dict:
 
 def bbqr_parts(raw_psbt: bytes, max_fragment_chars: int) -> list:
     """BBQR parts. Unlike UR this really is a fixed set of slices that a sender
-    loops — BBQR has no fountain coding — so pre-rendering it is faithful."""
+    loops, BBQR has no fountain coding, so pre-rendering it is faithful."""
     parts, _encoding = bbqr.encode(raw_psbt, "P", max_fragment_chars)
     return parts
 
@@ -218,7 +218,7 @@ def text_qr(payload: str, uppercase: bool = True) -> dict:
 
 
 def address_qr(address: str) -> dict:
-    """Address QRs ship verbatim — see the note in common.qr.qr_matrix about
+    """Address QRs ship verbatim, see the note in common.qr.qr_matrix about
     why upper-casing a Bitcoin address is not an option."""
     return text_qr(address, uppercase=False)
 
@@ -243,8 +243,8 @@ def verification_data(psbt, signers: list, threshold: int) -> dict:
 
     That shapes what the check MEANS, and the UI says so: it verifies the
     signature against the sighash of *the transaction this page sent*. If the
-    device had signed anything else — a different amount, a different
-    recipient — the signature would not verify against this digest. That is the
+    device had signed anything else, a different amount, a different
+    recipient, the signature would not verify against this digest. That is the
     property a demo is actually trying to show.
 
     Taproot key-path spends verify against the TWEAKED output key sitting in the
@@ -299,10 +299,16 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
     wallet = wallets[scenario.wallet]
     signers = wallet_cosigners(wallet, seeds)
 
-    # Adversarial / malformed test scenarios (PR #1013) forge the PSBT; the
-    # "fake_change"/"bad_input" cases poison a derivation entry, "wrong_seed"
-    # ships an honest PSBT that the (decoy) loaded seed simply cannot sign.
-    if scenario.attack in ("fake_change", "bad_input"):
+    # Adversarial / malformed test scenarios forge the PSBT. PR #1013's
+    # "fake_change"/"bad_input" poison a derivation entry ("wrong_seed" ships an
+    # honest PSBT the decoy seed cannot sign); PR #1032 / D5 forges the change
+    # output so its script contradicts its ownership claims, or its derivation
+    # bookkeeping is malformed.
+    if scenario.pr == "1032":
+        psbt = build_d5_psbt(scenario.attack, signers, scenario.script_type,
+                             wallet["network"], scenario.num_inputs,
+                             threshold=wallet["threshold"])
+    elif scenario.attack in ("fake_change", "bad_input"):
         psbt = build_attack_psbt(scenario.attack, signers, scenario.script_type,
                                  wallet["network"], scenario.num_inputs,
                                  threshold=wallet["threshold"])
@@ -318,17 +324,24 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
     # wrong-seed case is entirely about loading a decoy).
     signing_seeds = [scenario.load_seed] if scenario.load_seed else wallet["cosigners"]
 
-    # The descriptor step only earns its place when there's an on-device address
-    # to check it against — and never for a test scenario, which the device
-    # rejects during parse, before any descriptor is asked for.
-    has_own_output = any(o["kind"] in ("change", "self_transfer") for o in summary["outputs"])
-    needs_descriptor = info.is_multisig and has_own_output and not scenario.attack
+    # The descriptor step earns its place whenever the device would ask for it.
+    # A fixed build rejects a test scenario during parse, before any descriptor,
+    # but a build from BEFORE the PR still walks the multisig change-verification
+    # flow, so the wallet descriptor is offered for every multisig test scenario
+    # to let a tester reproduce that older behavior. For ordinary demos it needs
+    # an on-device change output to check against.
+    if scenario.attack:
+        needs_descriptor = info.is_multisig
+    else:
+        has_own_output = any(o["kind"] in ("change", "self_transfer")
+                             for o in summary["outputs"])
+        needs_descriptor = info.is_multisig and has_own_output
 
     written = 0
     variant_index = {"ur": {}, "bbqr": {}}
 
     # UR is generated in the browser, so the index carries parameters rather
-    # than a file reference — a few dozen bytes instead of up to 296 KB.
+    # than a file reference, a few dozen bytes instead of up to 296 KB.
     for density, cap in FORMATS["ur"]["densities"].items():
         variant_index["ur"][density] = ur_runtime_spec(raw, cap)
 
@@ -376,6 +389,7 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
         "qr": variant_index,
         # Present (and truthy) only on adversarial / malformed test scenarios.
         "test": bool(scenario.attack),
+        "pr": scenario.pr,
         "attack": scenario.attack,
         "expected": scenario.expected,
         "expected_screen": scenario.expected_screen,
@@ -446,7 +460,7 @@ def build_wallet_files(wallets) -> tuple:
 def build_message_files(seeds, wallets, networks) -> tuple:
     """Message-signing payloads: `signmessage {path} ascii:{message}`.
 
-    Not upper-cased — SeedSigner detects these with a lowercase
+    Not upper-cased, SeedSigner detects these with a lowercase
     `startswith("signmessage")`, so the alphanumeric-mode trick used for UR
     payloads would make them undetectable.
     """
@@ -523,7 +537,7 @@ def main():
 
     # Build into a staging directory and swap at the end, so the previous build
     # keeps serving throughout. Wiping DIST up front left the dev server with no
-    # index.html for the ~2 minutes of a full build — anyone testing on a phone
+    # index.html for the ~2 minutes of a full build, anyone testing on a phone
     # in that window just got a directory listing.
     global DIST
     final = DIST
@@ -540,7 +554,7 @@ def main():
         entry, written = build_scenario(scenario, wallets, seeds)
         scenario_entries.append(entry)
         total_bytes += written
-        # For UR, `count` is the number of PURE fragments — the animation itself
+        # For UR, `count` is the number of PURE fragments, the animation itself
         # is unbounded, so this is "how long before it goes fountain", not a
         # frame total.
         biggest = max(entry["qr"][f][d]["count"]
@@ -571,6 +585,9 @@ def main():
         "sig_type_labels": {script_types.SINGLE_SIG: "Single sig",
                             script_types.MULTISIG: "Multisig"},
         "output_shape_labels": scenario_defs.OUTPUT_SHAPE_LABELS,
+        # One picker toggle per hardening PR; only present when test scenarios
+        # were built (mainnet). The front end renders a checkbox + group per entry.
+        "test_pr_groups": scenario_defs.TEST_PR_GROUPS if "main" in networks else [],
         "scenarios": scenario_entries,
         "seeds": seed_entries,
         "wallets": wallet_entries,

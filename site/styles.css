@@ -44,7 +44,7 @@
 /* The `hidden` attribute must actually hide things.
    The UA stylesheet's `[hidden] { display: none }` lives in the user-agent
    origin, so ANY author-origin `display` declaration beats it regardless of
-   specificity — and .gate/.sheet/.fs/.chooser all set `display: flex`. Without
+   specificity, and .gate/.sheet/.fs/.chooser all set `display: flex`. Without
    this rule the fullscreen overlay (fixed, inset 0, white, z-index 80) renders
    permanently over the page as a blank white screen. */
 [hidden] { display: none !important; }
@@ -160,14 +160,14 @@ main { max-width: 40rem; margin: 0 auto; padding: var(--pad); }
 
 /* Sticky banner would otherwise cover a scrolled-to heading. */
 .step { margin-bottom: 8px; scroll-margin-top: 56px; }
-/* Everything is on one scrolling page now, so each step gets a hard divider —
+/* Everything is on one scrolling page now, so each step gets a hard divider;
    that boundary is what tells you where the next thing to do starts. */
 .step + .step {
   border-top: 2px solid var(--line);
   padding-top: 26px;
   margin-top: 26px;
 }
-/* The step name is the instruction — it should read as a callout, not a label. */
+/* The step name is the instruction, it should read as a callout, not a label. */
 .step-title {
   font-size: 1.45rem;
   display: flex;
@@ -290,7 +290,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .kv th, .kv td { text-align: left; padding: 6px 0; border-top: 1px solid var(--line); vertical-align: top; }
 .kv th { color: var(--muted); font-weight: 500; white-space: nowrap; padding-right: 10px; }
 
-/* Cells holding something long — an address, a descriptor.
+/* Cells holding something long, an address, a descriptor.
  *
  * `.kv th` sets `white-space: nowrap` for the label column, which is right for
  * labels and catastrophic for a 62-character bech32 address: it cannot wrap, so
@@ -302,7 +302,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
  * its content, which gives the flex child below no definite width to ellipsize
  * against; asking for zero and then for everything makes the column take
  * exactly the space the other columns leave. `table-layout: fixed` would also
- * work and was tried first — but it splits the width evenly unless every column
+ * work and was tried first, but it splits the width evenly unless every column
  * is given an explicit size, which breaks the other .kv tables on the page. */
 .kv th.kv-wide { white-space: normal; max-width: 0; width: 100%; }
 .kv td.num {
@@ -316,8 +316,8 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 /* Middle-truncated address: head ellipsizes, tail always visible.
  *
  * End-truncation is the wrong shape for an address. The tail is what you check
- * against the device screen — a wallet showing `bc1q...` and nothing else is
- * useless for confirming a recipient — so the last few characters have to
+ * against the device screen, a wallet showing `bc1q...` and nothing else is
+ * useless for confirming a recipient, so the last few characters have to
  * survive. CSS cannot ellipsize in the middle, hence two spans: the first takes
  * the slack and ellipsizes, the second is fixed and never shrinks.
  *
@@ -428,12 +428,12 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .scenario-item span { display: block; color: var(--muted); font-size: .92rem; margin-top: 4px; }
 .empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: .9rem; }
 
-/* --- test-scenario picker affordances (PR #1013) ------------------------- */
+/* --- test-scenario picker affordances (one toggle per hardening PR) ------- */
+.picker-toggles { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .picker-toggle {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-bottom: 12px;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -445,15 +445,24 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .picker-toggle input { width: 18px; height: 18px; flex: none; }
 .picker-toggle small { color: var(--muted); }
 
-.list-group-head {
+.list-group-head { margin: 4px 0 8px; }
+.list-group-head + .list-group-head { margin-top: 14px; }
+.list-group-title {
   font-size: .78rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .04em;
   color: var(--muted);
-  margin: 4px 0 8px;
+  margin: 0;
 }
-.list-group-head + .list-group-head { margin-top: 14px; }
+.list-group-sub {
+  font-size: .82rem;
+  color: var(--muted);
+  margin: 3px 0 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
 
 /* Test rows carry the warning palette so they never read as ordinary demos. */
 .scenario-item.is-test {
@@ -565,7 +574,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .qr-card-paper::after { bottom: -2px; }
 
 /* Self-hosted so it can't fail to load on conference wifi and silently fall back
-   to a system serif — which is exactly what a font stack alone did. Permanent
+   to a system serif, which is exactly what a font stack alone did. Permanent
    Marker (Apache-2.0, Font Diner) is hand-lettered PRINT rather than cursive, and
    it's marker-drawn, matching the dabs in the QR itself. */
 @font-face {
@@ -583,7 +592,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 
 /* --- the folded sheet ----------------------------------------------------- */
 /* A SeedQR is transcribed BY HAND onto paper. Rather than dressing that up as a
-   vault door, the card itself unfolds to reveal the code — the point of the
+   vault door, the card itself unfolds to reveal the code, the point of the
    gesture is simply to establish that the thing is PAPER.
    
    Note it is not a storage recommendation: creasing a SeedQR risks the very
@@ -599,8 +608,8 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 .fold { position: relative; }
 
 /* While folded, the real canvas is hidden and the two faces stand in for it.
-   The canvas is never display:none — that would measure 0 wide and lay out at
-   one device pixel per module — just visually covered. */
+   The canvas is never display:none, that would measure 0 wide and lay out at
+   one device pixel per module, just visually covered. */
 .fold-stage {
   position: absolute;
   z-index: 1;
@@ -642,7 +651,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
   border-radius: 3px;
 }
 .fold-front { background-position: bottom center; }
-/* The reverse of the sheet: blank paper, shaded along the fold — and still
+/* The reverse of the sheet: blank paper, shaded along the fold, and still
    carrying the vertical crease, because a sheet folded down to this size was
    folded in quarters, not just in half. */
 .fold-back {
@@ -661,7 +670,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 }
 
 /* What the owner wrote on the OUTSIDE, so they can tell one backup from another
-   without unfolding it — which is the actual reason to label the outside.
+   without unfolding it, which is the actual reason to label the outside.
    Deliberately DESCRIPTIVE, never imperative: a "keep this secret!" scrawl would
    read as an instruction to whoever is holding the phone, and since this data is
    published on purpose, that would be both confusing and wrong. The standing
@@ -678,7 +687,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
    baseline and reads as type in a handwriting face rather than as handwriting.
    Scoped to the INNER spans: `.fold-back-note span` also matched .fold-back-name
    and .fold-back-fp (both spans) and, at higher specificity than their own
-   class rules, flipped them to inline-block — so on a wide screen the
+   class rules, flipped them to inline-block, so on a wide screen the
    fingerprint sat beside the name instead of under it. */
 .fold-back-name span,
 .fold-back-fp span { display: inline-block; }
@@ -703,7 +712,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 
 /* While folded, the real canvas must not show through: the sheet's top half is
    folded away, so that region should be bare background, not the upper half of
-   the QR. `visibility` rather than `display` — a display:none canvas measures
+   the QR. `visibility` rather than `display`, a display:none canvas measures
    0 wide and would lay out at one device pixel per module. */
 /* The canvas is never shown: it is the source bitmap and the measurement
    target, and the two stand-in faces (painted from a snapshot of it, and pinned
@@ -731,7 +740,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
   padding-top: 14px;
 }
 /* Sentence case, not uppercase. "SeedQR" carries meaning in its capitalisation
-   — SEEDQR loses the word boundary and reads as an acronym it isn't. Same
+  , SEEDQR loses the word boundary and reads as an acronym it isn't. Same
    reason .control label no longer upper-cases: it was rendering "SEEDQR TYPE". */
 .seed-facts h3 {
   font-size: 1.05rem;
@@ -748,7 +757,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 /* The camera preview. `object-fit: cover` on a fixed-aspect box, because the
    camera's own aspect ratio varies by device and a letterboxed preview makes
    people think the app is broken. What the decoder actually sees is the FULL
-   frame, not this crop — the crop is presentation only, so a QR visible at the
+   frame, not this crop, the crop is presentation only, so a QR visible at the
    edge of the preview still decodes. */
 .scan-stage {
   position: relative;
@@ -790,7 +799,7 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 /* One cell per fragment of the signed transaction, filling left to right as the
    decoder recovers them.
    A plain bar would do the same job; segments make the transaction's size
-   legible at a glance, which is the thing worth showing — a 40-cell row is a
+   legible at a glance, which is the thing worth showing, a 40-cell row is a
    visible explanation of why a big transaction takes longer to read back. */
 .scan-cells {
   display: flex;

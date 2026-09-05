@@ -6,7 +6,7 @@ runtime construction. The matrix is deliberately shaped rather than a full cross
 product (which would be ~340 cases, most of them redundant):
 
   * a **full cross** of all seven script types x all four output shapes at the
-    default input count — this is the "what does each wallet type look like"
+    default input count: this is the "what does each wallet type look like"
     axis, and it's the one people actually poke at;
   * an **input-count sweep** on the two representative types only, because input
     count is really a QR-payload-size axis and doesn't interact with script type
@@ -47,7 +47,7 @@ OUTPUT_SHAPE_LABELS = {
 OUTPUT_SHAPE_BLURBS = {
     "change": "One external recipient, the remainder back to the wallet as change, "
               "plus the network fee.",
-    "full_spend": "Sweeps the whole balance to one external recipient — no change "
+    "full_spend": "Sweeps the whole balance to one external recipient, no change "
                   "output at all.",
     "self_transfer": "Pays back to the wallet's own receive address rather than a "
                      "third party. SeedSigner counts both outputs as change.",
@@ -68,12 +68,14 @@ class Scenario:
     blurb: str
     is_default: bool = False
     tags: list = field(default_factory=list)
-    # Adversarial / malformed test scenarios (SeedSigner PR #1013). None on the
-    # ordinary demo transactions. `attack` selects the forgery in
-    # common/attack_psbt.py; `load_seed` overrides which seed the "Load the seed"
-    # step presents (the point of the wrong-seed case); `expected*` describe what
-    # the device should do so the sample is useful to run on hardware.
-    attack: str = None                 # "fake_change" | "bad_input" | "wrong_seed"
+    # Adversarial / malformed test scenarios. None on the ordinary demo
+    # transactions. `pr` groups them by the SeedSigner PR they exercise (each PR
+    # gets its own picker toggle); `attack` selects the forgery builder;
+    # `load_seed` overrides which seed the "Load the seed" step presents (the
+    # point of the wrong-seed case); `expected*` describe what the device should
+    # do so the sample is useful to run on hardware.
+    pr: str = None                     # "1013" | "1032"
+    attack: str = None
     load_seed: str = None
     expected: str = None
     expected_screen: str = None
@@ -86,7 +88,7 @@ def _make(script_type, shape, num_inputs, network, is_default=False):
     suffix = "" if network == "main" else "-testnet"
     sid = f"{base_wallet}-{shape}-{num_inputs}in{suffix}"
     inputs_label = f"{num_inputs} input" + ("s" if num_inputs != 1 else "")
-    title = f"{info.label} — {OUTPUT_SHAPE_LABELS[shape]}"
+    title = f"{info.label}: {OUTPUT_SHAPE_LABELS[shape]}"
     blurb = f"{inputs_label}. {OUTPUT_SHAPE_BLURBS[shape]}"
     tags = [info.sig_type, info.label]
     if num_inputs >= 20:
@@ -121,14 +123,12 @@ def default_scenario(scenarios: list) -> Scenario:
     return next(s for s in scenarios if s.is_default)
 
 
-# --- adversarial / malformed test scenarios (SeedSigner PR #1013) -------------
+# --- adversarial / malformed test scenarios ----------------------------------
 #
-# These are hidden behind a "show test scenarios" toggle in the picker. They are
-# NOT part of the demo — they exist to run against a build of the PR on real
-# hardware and watch the device reject each one. Deliberately small and curated:
-# the two forgeries across the three script-type families the PR reasons about,
-# plus the one non-forged case (wrong seed loaded). Mainnet only; the ownership
-# scan is network-agnostic and the demo defaults to mainnet anyway.
+# Hidden behind per-PR "show test scenarios" toggles in the picker. These are NOT
+# part of the demo; each exists to run against a build of the named PR on real
+# hardware and watch the device reject it. Deliberately small and curated, and
+# mainnet only (the checks are network-agnostic and the demo defaults to mainnet).
 
 # The seed the forgeries impersonate: the honest signer of the single-sig test
 # wallets and a cosigner of the multisig one, so "load this seed" is unambiguous.
@@ -136,20 +136,40 @@ TEST_VICTIM_SEED = "alice"
 # A seed that is NOT a key in the native-segwit test wallet, for "Seed Can't Sign".
 TEST_DECOY_SEED = "bob"
 
-# script_type -> (short family name, wallet fixture base name)
+# One picker toggle per PR, in listing order. `blurb` heads the group so a tester
+# knows what the whole set probes.
+TEST_PR_GROUPS = [
+    {
+        "pr": "1013",
+        "label": "PR #1013: ownership scan",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1013",
+        "blurb": ("Re-derive every claim of this seed's fingerprint and reject a psbt "
+                  "that names our fingerprint on a key the seed cannot derive."),
+    },
+    {
+        "pr": "1032",
+        "label": "PR #1032: change output ownership (D5)",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1032",
+        "blurb": ("An output counts as change only when the script rebuilt from this "
+                  "seed matches what the output commits to. Contradictions and "
+                  "malformed derivation bookkeeping are refused."),
+    },
+]
+
+# script_type -> (short family name, wallet fixture base name), for PR #1013.
 TEST_SCRIPT_FAMILIES = [
     ("P2WPKH", "Native SegWit"),
     ("P2TR", "Taproot"),
     ("P2WSH", "Multisig (2-of-3)"),
 ]
 
-_ATTACK_DEFS = {
+_ATTACK_DEFS = {  # PR #1013
     "fake_change": {
         "label": "Fake change attack",
         "expected_screen": "Suspicious Transaction / Likely an Attack!",
         "expected": "Device should refuse it as likely an attack.",
         "blurb": ("An output is dressed up as change back to your own wallet, but the "
-                  "key it names is one your seed does not own — the funds actually "
+                  "key it names is one your seed does not own, so the funds actually "
                   "leave to an attacker. The device re-derives the key and the claim "
                   "collapses."),
     },
@@ -165,38 +185,105 @@ _ATTACK_DEFS = {
         "label": "Wrong seed loaded",
         "expected_screen": "Seed Can't Sign",
         "expected": "Device should say this seed can't sign it.",
-        "blurb": ("A perfectly ordinary, honest transaction — for a wallet this "
-                  "seed is not part of. Load the decoy seed and the device finds no "
-                  "input it can sign."),
+        "blurb": ("A perfectly ordinary, honest transaction, for a wallet this seed is "
+                  "not part of. Load the decoy seed and the device finds no input it "
+                  "can sign."),
     },
 }
 
 
-def _make_test(attack, script_type, family, is_default=False):
+def _make_test(attack, script_type, family):
     info = script_types.get(script_type)
     base_wallet = WALLET_FOR_SCRIPT_TYPE[script_type]
     d = _ATTACK_DEFS[attack]
     slug = script_type.lower().replace("-", "_")
     sid = f"test-{attack.replace('_', '-')}-{slug}"
-    title = f"⚠ {d['label']} — {family}"
     load_seed = TEST_DECOY_SEED if attack == "wrong_seed" else TEST_VICTIM_SEED
     return Scenario(
         id=sid, wallet=base_wallet, script_type=script_type,
         num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
-        title=title, blurb=d["blurb"], is_default=False,
+        title=f"⚠ {d['label']} ({family})", blurb=d["blurb"], is_default=False,
         tags=["test", d["label"], info.label],
-        attack=attack, load_seed=load_seed,
+        pr="1013", attack=attack, load_seed=load_seed,
         expected=d["expected"], expected_screen=d["expected_screen"],
     )
 
 
+# PR #1032 / stage D5: output ownership. Each entry pins the forgery builder
+# (common/attack_psbt.build_d5_psbt), the wallet it runs on, and the device screen
+# it should route to. Contradictions land on the attack warning; the structural
+# refusals (surplus paths, mixed maps) land on the plain "Transaction Problem".
+_D5_ATTACK_SCREEN = "Suspicious Transaction / Likely an Attack!"
+_D5_PROBLEM_SCREEN = "Transaction Problem"
+_D5_REFUSE = "Device should refuse it as likely an attack."
+_D5_MALFORMED = "Device should reject it as a malformed transaction."
+
+_D5_DEFS = [
+    {"kind": "contradiction_singlesig", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Fake change pays another key",
+     "screen": _D5_ATTACK_SCREEN, "expected": _D5_REFUSE,
+     "blurb": ("Annotated as change back to this seed at a path it genuinely owns, but "
+               "the scriptPubKey pays a different key. The script rebuilt from the seed "
+               "no longer matches what the output commits to, so the claim is a lie.")},
+    {"kind": "contradiction_multisig", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Fake change to a foreign multisig",
+     "screen": _D5_ATTACK_SCREEN, "expected": _D5_REFUSE,
+     "blurb": ("The output commits to an attacker's 2-of-3 (hashed correctly, same shape "
+               "as the wallet) but is annotated with this seed's fingerprint. The "
+               "committed script holds no key of ours, so it is not change coming back.")},
+    {"kind": "contradiction_multisig_unclaimed", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Change hidden behind relabeled fingerprints",
+     "screen": _D5_ATTACK_SCREEN, "expected": _D5_REFUSE,
+     "blurb": ("The committed script really is the wallet's change script, but every "
+               "derivation entry is relabeled with a foreign fingerprint so nothing "
+               "appears to claim this seed. Deriving at each supplied path still finds "
+               "our key in the script, exposing the concealment.")},
+    {"kind": "surplus_singlesig", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Surplus derivation paths (single-key)",
+     "screen": _D5_PROBLEM_SCREEN, "expected": _D5_MALFORMED,
+     "blurb": ("A single-key output lists two derivation paths. One script pays one key, "
+               "so a second path is structurally wrong.")},
+    {"kind": "surplus_multisig", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Surplus derivation paths (multisig)",
+     "screen": _D5_PROBLEM_SCREEN, "expected": _D5_MALFORMED,
+     "blurb": ("A confirmed 2-of-3 change output lists four derivation paths for a script "
+               "that has only three keys.")},
+    {"kind": "surplus_taproot", "script_type": "P2TR", "family": "Taproot",
+     "label": "Surplus internal keys (taproot)",
+     "screen": _D5_PROBLEM_SCREEN, "expected": _D5_MALFORMED,
+     "blurb": ("A taproot output claims two internal keys. An output has exactly one, so "
+               "the extra claim is malformed.")},
+    {"kind": "mixed_types", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Mixed derivation path types",
+     "screen": _D5_PROBLEM_SCREEN, "expected": _D5_MALFORMED,
+     "blurb": ("One output declares entries in both the ecdsa and the taproot derivation "
+               "maps. No script type can use both.")},
+]
+
+
+def _make_d5(d):
+    info = script_types.get(d["script_type"])
+    base_wallet = WALLET_FOR_SCRIPT_TYPE[d["script_type"]]
+    slug = d["kind"].replace("_", "-")
+    return Scenario(
+        id=f"test-d5-{slug}", wallet=base_wallet, script_type=d["script_type"],
+        num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
+        title=f"⚠ {d['label']} ({d['family']})", blurb=d["blurb"], is_default=False,
+        tags=["test", d["label"], info.label],
+        pr="1032", attack=d["kind"], load_seed=TEST_VICTIM_SEED,
+        expected=d["expected"], expected_screen=d["screen"],
+    )
+
+
 def test_scenarios() -> list:
-    """Adversarial / malformed transactions for exercising PR #1013 on device."""
+    """Adversarial / malformed transactions for exercising the hardening PRs on device."""
     out = []
-    # Both forgeries across all three script-type families.
+    # PR #1013: both forgeries across the three families, plus one wrong-seed case
+    # (not script-type-sensitive, so native segwit stands in for it).
     for attack in ("fake_change", "bad_input"):
         for script_type, family in TEST_SCRIPT_FAMILIES:
             out.append(_make_test(attack, script_type, family))
-    # One wrong-seed case; it isn't script-type-sensitive, so native segwit stands in.
     out.append(_make_test("wrong_seed", "P2WPKH", "Native SegWit"))
+    # PR #1032 / D5: output-ownership contradictions and malformed derivation data.
+    out.extend(_make_d5(d) for d in _D5_DEFS)
     return out

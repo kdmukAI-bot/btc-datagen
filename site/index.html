@@ -28,7 +28,7 @@
 
   <!-- ============ LANDING ============ -->
   <!-- One warning line and four buttons. Nobody reads body copy on a phone at a
-       demo table, and someone may only have the device for 20 seconds — so this
+       demo table, and someone may only have the device for 20 seconds, so this
        is one glance and one tap, with no prose to wade through. -->
   <section id="view-home">
     <p class="view-intro-warn">
@@ -57,7 +57,7 @@
        be on screen, not below a heading and a paragraph. -->
   <section id="view-sign" hidden>
 
-    <!-- STEP 1 — the transaction -->
+    <!-- STEP 1, the transaction -->
     <section class="step" id="step-tx">
       <h2 class="step-title"><span class="step-num">1</span> Scan the transaction</h2>
       <p class="step-hint">Wallet software like Sparrow builds the transaction and
@@ -75,8 +75,8 @@
         <button id="open-picker" class="btn btn-ghost">Change<span aria-hidden="true"> ▾</span></button>
       </div>
 
-      <!-- Shown only for the PR #1013 test scenarios: what to load and what the
-           device should do. Ordinary demo transactions never see this. -->
+      <!-- Shown only for a PR test scenario: what to load and what the device
+           should do. Ordinary demo transactions never see this. -->
       <div id="test-banner" class="test-banner" hidden></div>
 
       <div class="qr-stage" id="qr-stage">
@@ -125,7 +125,7 @@
 
     </section>
 
-    <!-- STEP 2 — the seed -->
+    <!-- STEP 2, the seed -->
     <section class="step" id="step-seed">
       <h2 class="step-title"><span class="step-num">2</span> Load the seed</h2>
       <p class="step-hint" id="seed-hint"></p>
@@ -183,7 +183,7 @@
 
     </section>
 
-    <!-- STEP 3 — the wallet descriptor. Multisig only, and NOT address
+    <!-- STEP 3, the wallet descriptor. Multisig only, and NOT address
          verification: it's what lets the device recognise its own change
          outputs while reviewing the transaction. -->
     <section class="step" id="step-descriptor" hidden>
@@ -212,7 +212,7 @@
 
     </section>
 
-    <!-- LAST STEP — read the signature back off the device.
+    <!-- LAST STEP, read the signature back off the device.
          The device shows the signed transaction as its own animated QR; this
          reads it with the camera and checks the signatures are real. The step
          number is filled in by renumberSteps(), because the descriptor step
@@ -315,7 +315,7 @@
       <select id="verify-wallet" class="btn btn-block"></select>
     </div>
 
-    <!-- The address comes FIRST — that is the device's own order: you point
+    <!-- The address comes FIRST, that is the device's own order: you point
          Verify Address at an address, and only then does it need to know what
          to check it against. -->
     <section class="step">
@@ -331,7 +331,7 @@
 
     <!-- Single-sig only: the device derives addresses from the seed itself, so
          that is what it asks for after the scan. There is no single-sig wallet
-         descriptor to load — SeedSigner does not support importing one. -->
+         descriptor to load, SeedSigner does not support importing one. -->
     <section class="step" id="verify-step-seed" hidden>
       <h2 class="step-title"><span class="step-num"></span> Load the seed</h2>
       <p class="step-hint" id="verify-seed-hint"></p>
@@ -479,12 +479,10 @@
       <button id="picker-close" class="btn btn-tiny">Close</button>
     </div>
     <div class="filters" id="filters"></div>
-    <!-- Hidden by default: the adversarial / malformed transactions built to
-         exercise SeedSigner PR #1013 on real hardware. Not part of the demo. -->
-    <label class="picker-toggle">
-      <input type="checkbox" id="show-test">
-      <span>Show test scenarios <small>(attack &amp; malformed — PR #1013)</small></span>
-    </label>
+    <!-- One checkbox per hardening PR, built by renderPickerToggles() from the
+         index. Hidden by default: these are the adversarial / malformed
+         transactions built to exercise a PR on real hardware, not the demo. -->
+    <div class="picker-toggles" id="picker-toggles"></div>
     <div class="sheet-list" id="scenario-list"></div>
   </div>
 </div>
