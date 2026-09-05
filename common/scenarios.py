@@ -168,10 +168,19 @@ _ATTACK_DEFS = {  # PR #1013
         "label": "Fake change attack",
         "expected_screen": "Suspicious Transaction / Likely an Attack!",
         "expected": "Device should refuse it as likely an attack.",
+        # Single-key families (native segwit, taproot): the scriptPubKey is
+        # repointed at the attacker, so the funds really leave.
         "blurb": ("An output is dressed up as change back to your own wallet, but the "
                   "key it names is one your seed does not own, so the funds actually "
                   "leave to an attacker. The device re-derives the key and the claim "
                   "collapses."),
+        # Multisig: the real change script is left in place (the funds return to
+        # your own 2-of-3); only the ownership claim is forged. This is the case
+        # 0.8.7 misses, because it checks the script, not the claimed key.
+        "blurb_multisig": ("The output really is your own change, back to your 2-of-3, "
+                           "so no funds move. But the psbt annotates it with a key your "
+                           "seed cannot derive, a false ownership claim that nothing in "
+                           "0.8.7 objects to."),
     },
     "bad_input": {
         "label": "Malformed input ownership",
@@ -198,11 +207,14 @@ def _make_test(attack, script_type, family):
     d = _ATTACK_DEFS[attack]
     slug = script_type.lower().replace("-", "_")
     sid = f"test-{attack.replace('_', '-')}-{slug}"
+    # Some forgeries behave differently for multisig (see fake_change: single-key
+    # families redirect the funds, multisig does not), so a per-family blurb wins.
+    blurb = d["blurb_multisig"] if (info.is_multisig and "blurb_multisig" in d) else d["blurb"]
     load_seed = TEST_DECOY_SEED if attack == "wrong_seed" else TEST_VICTIM_SEED
     return Scenario(
         id=sid, wallet=base_wallet, script_type=script_type,
         num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
-        title=f"⚠ {d['label']} ({family})", blurb=d["blurb"], is_default=False,
+        title=f"⚠ {d['label']} ({family})", blurb=blurb, is_default=False,
         tags=["test", d["label"], info.label],
         pr="1013", attack=attack, load_seed=load_seed,
         expected=d["expected"], expected_screen=d["expected_screen"],

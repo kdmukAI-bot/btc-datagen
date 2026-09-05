@@ -6,10 +6,12 @@ attacker really could hand it to a signer, whose *derivation metadata lies*. The
 device only finds out by re-deriving keys from the loaded seed and comparing the
 actual key material, which is exactly what the PR added.
 
-    fake_change  A change output pays an attacker but carries a derivation entry
-                 naming THIS seed's fingerprint on a key the seed cannot derive.
-                 A naive signer counts it as "back to your wallet"; the funds
-                 leave. -> PSBTOutputOwnershipClaimError -> "Likely an Attack!"
+    fake_change  A change output carries a derivation entry naming THIS seed's
+                 fingerprint on a key the seed cannot derive. Single-sig and
+                 taproot also repoint the scriptPubKey at the attacker, so the
+                 funds leave; multisig keeps the wallet's real change script, so
+                 the funds return and only the ownership claim is false. Either
+                 way -> PSBTOutputOwnershipClaimError -> "Likely an Attack!"
 
     bad_input    An input does the same false claim. It gains an attacker nothing
                  (embit refuses to sign it either), so it reads as malformed data
@@ -116,7 +118,13 @@ def forge_fake_change(signers: list, script_type: str, network: str = "main",
     # discarded. The ownership scan keys on the derivation entry either way, but
     # repointing the real scriptPubKey is what makes the funds actually leave.
     if info.is_multisig:
-        # Keep the real p2wsh change scriptPubKey; poison only our entry.
+        # Deliberately NOT symmetric with the single-key branches below: keep the
+        # wallet's real p2wsh change script and poison only our derivation entry.
+        # The funds still come home to the real 2-of-3; what is false is the claim
+        # about which key in that script is ours. Isolating the false claim from
+        # any fund movement is the whole point of this vector, and it is the case
+        # 0.8.7 misses entirely (its descriptor.owns() check tests the script, not
+        # the claimed derivation path). Do not "fix" this to repoint the script.
         _forge_scope_claim(out, forged_fp, forged_path, attacker_key, is_taproot=False)
     elif script_type == "P2TR":
         _forge_scope_claim(out, forged_fp, forged_path, attacker_key, is_taproot=True)
