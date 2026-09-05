@@ -148,7 +148,7 @@ TEST_PR_GROUPS = [
     },
     {
         "pr": "1032",
-        "label": "PR #1032: change output ownership (D5)",
+        "label": "PR #1032: change output ownership",
         "url": "https://github.com/seedsigner/seedsigner/pull/1032",
         "blurb": ("An output counts as change only when the script rebuilt from this "
                   "seed matches what the output commits to. Contradictions and "
@@ -222,42 +222,38 @@ _D5_DEFS = [
     {"kind": "contradiction_singlesig", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Fake change pays another key",
      "screen": _D5_ATTACK_SCREEN, "expected": _D5_REFUSE,
-     "blurb": ("Annotated as change back to this seed at a path it genuinely owns, but "
-               "the scriptPubKey pays a different key. The script rebuilt from the seed "
-               "no longer matches what the output commits to, so the claim is a lie.")},
+     "blurb": ("It is labeled as change back to this seed, but the scriptPubKey pays a "
+               "key you do not own, so the funds really leave.")},
     {"kind": "contradiction_multisig", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Fake change to a foreign multisig",
      "screen": _D5_ATTACK_SCREEN, "expected": _D5_REFUSE,
-     "blurb": ("The output commits to an attacker's 2-of-3 (hashed correctly, same shape "
-               "as the wallet) but is annotated with this seed's fingerprint. The "
-               "committed script holds no key of ours, so it is not change coming back.")},
+     "blurb": ("It is labeled as change back to this seed, but it pays an attacker's "
+               "2-of-3 that holds none of your keys, so the funds really leave.")},
     {"kind": "contradiction_multisig_unclaimed", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Change hidden behind relabeled fingerprints",
      "screen": _D5_ATTACK_SCREEN, "expected": _D5_REFUSE,
-     "blurb": ("The committed script really is the wallet's change script, but every "
-               "derivation entry is relabeled with a foreign fingerprint so nothing "
-               "appears to claim this seed. Deriving at each supplied path still finds "
-               "our key in the script, exposing the concealment.")},
+     "blurb": ("It really is your own change output, but every derivation fingerprint is "
+               "relabeled to a stranger's, hiding that it belongs to you.")},
     {"kind": "surplus_singlesig", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Surplus derivation paths (single-key)",
      "screen": _D5_PROBLEM_SCREEN, "expected": _D5_MALFORMED,
-     "blurb": ("A single-key output lists two derivation paths. One script pays one key, "
-               "so a second path is structurally wrong.")},
+     "blurb": ("It is a valid change output back to this seed, but it lists two "
+               "derivation paths for a single-key script.")},
     {"kind": "surplus_multisig", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Surplus derivation paths (multisig)",
      "screen": _D5_PROBLEM_SCREEN, "expected": _D5_MALFORMED,
-     "blurb": ("A confirmed 2-of-3 change output lists four derivation paths for a script "
-               "that has only three keys.")},
+     "blurb": ("It is a valid 2-of-3 change output, but it lists four derivation paths "
+               "for a script that has only three keys.")},
     {"kind": "surplus_taproot", "script_type": "P2TR", "family": "Taproot",
      "label": "Surplus internal keys (taproot)",
      "screen": _D5_PROBLEM_SCREEN, "expected": _D5_MALFORMED,
-     "blurb": ("A taproot output claims two internal keys. An output has exactly one, so "
-               "the extra claim is malformed.")},
+     "blurb": ("It is a valid taproot change output, but it claims two internal keys "
+               "where there can be only one.")},
     {"kind": "mixed_types", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Mixed derivation path types",
      "screen": _D5_PROBLEM_SCREEN, "expected": _D5_MALFORMED,
-     "blurb": ("One output declares entries in both the ecdsa and the taproot derivation "
-               "maps. No script type can use both.")},
+     "blurb": ("It is a valid change output, but its scope lists derivation paths in "
+               "both the ecdsa and taproot maps, which no script type can use.")},
 ]
 
 
@@ -266,7 +262,7 @@ def _make_d5(d):
     base_wallet = WALLET_FOR_SCRIPT_TYPE[d["script_type"]]
     slug = d["kind"].replace("_", "-")
     return Scenario(
-        id=f"test-d5-{slug}", wallet=base_wallet, script_type=d["script_type"],
+        id=f"test-1032-{slug}", wallet=base_wallet, script_type=d["script_type"],
         num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
         title=f"⚠ {d['label']} ({d['family']})", blurb=d["blurb"], is_default=False,
         tags=["test", d["label"], info.label],
