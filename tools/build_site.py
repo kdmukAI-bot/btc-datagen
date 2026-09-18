@@ -46,7 +46,8 @@ from embit.psbt import SIGHASH
 from urtypes.crypto import PSBT as URPSBT
 
 from common import bbqr, scenarios as scenario_defs, script_types
-from common.attack_psbt import build_attack_psbt, build_d5_psbt
+from common.attack_psbt import (build_attack_psbt, build_d5_psbt,
+                                build_negative_fee_psbt)
 from common.fixtures import load_seeds, load_wallets, wallet_cosigners
 from common.psbt import build_psbt, summarize
 from common.qr import qr_matrix, qr_matrix_bytes
@@ -303,11 +304,16 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
     # "fake_change"/"bad_input" poison a derivation entry ("wrong_seed" ships an
     # honest PSBT the decoy seed cannot sign); PR #1032 / D5 forges the change
     # output so its script contradicts its ownership claims, or its derivation
-    # bookkeeping is malformed.
+    # bookkeeping is malformed. "negative_fee" forges nothing at all: it inflates
+    # the change output past what the inputs hold.
     if scenario.pr == "1032":
         psbt = build_d5_psbt(scenario.attack, signers, scenario.script_type,
                              wallet["network"], scenario.num_inputs,
                              threshold=wallet["threshold"])
+    elif scenario.attack == "negative_fee":
+        psbt = build_negative_fee_psbt(signers, scenario.script_type,
+                                       wallet["network"], scenario.num_inputs,
+                                       threshold=wallet["threshold"])
     elif scenario.attack in ("fake_change", "bad_input"):
         psbt = build_attack_psbt(scenario.attack, signers, scenario.script_type,
                                  wallet["network"], scenario.num_inputs,
