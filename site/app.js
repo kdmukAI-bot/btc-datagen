@@ -958,7 +958,8 @@ function renderTxSummary() {
   const rows = s.outputs.map((o) => {
     const cls = o.kind === 'external' ? 'pill-external' : 'pill-change';
     const label = o.kind === 'external' ? 'recipient'
-      : (o.kind === 'change' ? 'change' : 'self-transfer');
+      : (o.kind === 'change' ? 'change'
+      : (o.kind === 'op_return' ? 'OP_RETURN' : 'self-transfer'));
     return `<tr><th class="kv-wide"><span class="pill ${cls}">${label}</span>${truncatedAddr(o.address)}</th>
             <td class="num">${sats(o.value)}</td></tr>`;
   }).join('');
@@ -1081,6 +1082,8 @@ function outcomePhrase(s) {
     case 'spend':
     case 'change':
       return `should parse with no warning, and show the output <b>${scr.toLowerCase()}</b>`;
+    case 'display':
+      return `should parse with no warning, and reach the <b>${scr}</b> screen`;
     default: return `should route to “<b>${scr}</b>”`;
   }
 }

@@ -74,7 +74,7 @@ class Scenario:
     # `load_seed` overrides which seed the "Load the seed" step presents (the
     # point of the wrong-seed case); `expected*` describe what the device should
     # do so the sample is useful to run on hardware.
-    pr: str = None                     # "1013" | "1032"
+    pr: str = None                     # "1013" | "1032" | "1041" | "1042" | "1043"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -84,6 +84,7 @@ class Scenario:
     #   error   aborts to the generic error screen (unsupported input)
     #   spend   parses fine; the output is shown as a payment out, not change
     #   change  parses fine; the output is shown as change (a documented limit)
+    #   display parses fine; the point is what the device puts on screen
     outcome: str = None
 
 
@@ -159,6 +160,34 @@ TEST_PR_GROUPS = [
         "blurb": ("An output counts as change only when the script rebuilt from this "
                   "seed matches what the output commits to. Contradictions and "
                   "malformed derivation bookkeeping are refused."),
+    },
+    {
+        "pr": "1041",
+        "label": "PR #1041: outputs exceed inputs",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1041",
+        "blurb": ("A transaction cannot pay out more than it takes in. embit computes "
+                  "the fee as inputs minus outputs and does not check the sign, so "
+                  "without this the device reviews the transaction quoting a negative "
+                  "fee."),
+    },
+    {
+        "pr": "1042",
+        "label": "PR #1042: OP_RETURN push encodings",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1042",
+        "blurb": ("Honest transactions, no forgery. Each carries an OP_RETURN encoded "
+                  "a different legal way. Before the fix the payload was read at a "
+                  "fixed offset that only OP_PUSHDATA1 satisfies, so every other "
+                  "encoding lost or gained a byte at the front. Fixes issue #963."),
+    },
+    {
+        "pr": "1043",
+        "label": "PR #1043: OP_RETURN display and accounting",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1043",
+        "blurb": ("What the device does with an OP_RETURN once it has parsed it. "
+                  "Before the fix only the last of several survived the parse, sats "
+                  "attached to one were added to no total so the amounts on screen "
+                  "stopped adding up to the inputs, and the payload was drawn with no "
+                  "bound on its size."),
     },
 ]
 
@@ -384,6 +413,174 @@ def _make_d5(d):
     )
 
 
+# --- negative fee ------------------------------------------------------------
+#
+# Not a forgery: every key claim in this psbt is honest and the change output is
+# genuinely ours. Only the arithmetic is impossible, the outputs move more than
+# the inputs hold. The check is a single comparison on the parsed fee, so it is
+# script-type agnostic and one family is enough to exercise it.
+
+_NEGATIVE_FEE_SCRIPT_TYPE = "P2WPKH"
+
+
+def _make_negative_fee() -> Scenario:
+    info = script_types.get(_NEGATIVE_FEE_SCRIPT_TYPE)
+    return Scenario(
+        id="test-1041-negative-fee",
+        wallet=WALLET_FOR_SCRIPT_TYPE[_NEGATIVE_FEE_SCRIPT_TYPE],
+        script_type=_NEGATIVE_FEE_SCRIPT_TYPE,
+        num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
+        title=f"\u26a0 Outputs exceed inputs ({info.label})",
+        blurb=("An ordinary change transaction with its change output inflated past "
+               "what the inputs hold, so the fee comes out negative. Nothing about "
+               "the keys is false; the transaction is simply impossible and no "
+               "network would relay it."),
+        is_default=False,
+        tags=["test", "Negative fee", info.label],
+        pr="1041", attack="negative_fee", load_seed=TEST_VICTIM_SEED,
+        expected="Device should reject it as a malformed transaction.",
+        expected_screen="Transaction Problem", outcome="refuse",
+    )
+
+
+# --- OP_RETURN push encodings / PR #1042 --------------------------------------------------
+#
+# Nothing here is forged. These are transactions a coordinator legitimately
+# produces; what varies is how the OP_RETURN output is encoded and how much it
+# carries. The builder is common/op_return_psbt.py, which documents each case.
+#
+# Single-sig native segwit throughout: OP_RETURN handling is script-type
+# agnostic, and the single-sig flow keeps the tester on the screen that matters
+# instead of walking a descriptor step first.
+
+_OP_RETURN_SCRIPT_TYPE = "P2WPKH"
+
+_OP_RETURN_SCREEN = "OP_RETURN"
+
+# The push-encoding cases, for #1042. Ordered the way a tester should work through
+# them: the two that show the mis-slice most plainly first, then the remaining
+# encodings, then the control that must look identical either way, then the empty edge
+# case. The cases for #1043, the display and accounting follow-up, are in
+# _OP_RETURN_DISPLAY_DEFS below; they fail on defects #1042 does not touch, so mixing
+# them in would read as failures against it.
+_OP_RETURN_DEFS = [
+    {"kind": "direct_push", "label": "Payload loses its first byte",
+     "expected": "Device should show the payload with its leading C intact.",
+     "blurb": ("A 40 byte message pushed the way Bitcoin Core encodes one: the push "
+               "opcode is itself the length, so the prefix is two bytes, not three. "
+               "Before the fix the device read past three and showed the message "
+               "missing its first letter. With the fix it shows the message whole.")},
+
+    {"kind": "binary", "label": "Binary payload, shown as hex",
+     "expected": "Device should show hex starting 8081 82, not 8182 83.",
+     "blurb": ("75 bytes that are not text, the largest a direct push can carry, "
+               "shown as hex. Before the fix the hex started 81 82 83, a byte in, "
+               "with nothing in a wall of hex to give it away. With the fix it starts "
+               "80 81 82.")},
+
+    {"kind": "multi_push", "label": "Two pushes in one script",
+     "expected": "Device should show both pushes with no opcode left between them.",
+     "blurb": ("One OP_RETURN script holding two pushes rather than one. Unusual but "
+               "legal; the data the transaction commits to is both. Before the fix "
+               "the device dropped the first byte and left the second push's length "
+               "byte sitting in the middle of the data. With the fix it shows both "
+               "pushes back to back.")},
+
+    {"kind": "pushdata2", "label": "300 bytes needs a two-byte length",
+     "expected": "Device should show the payload with no stray leading byte.",
+     "blurb": ("300 bytes, which needs a two byte length on the push. Before the fix "
+               "the device read past only one of them, leaving the other stuck on the "
+               "front of the payload. With the fix the payload starts where it "
+               "should; it still runs off the bottom of the screen until the follow- "
+               "up pages it.")},
+
+    {"kind": "pushdata1", "label": "80 bytes, the old relay ceiling",
+     "expected": "Device should look exactly as it did before the fix.",
+     "blurb": ("80 bytes pushed with OP_PUSHDATA1, the one encoding the device "
+               "already read correctly, and the largest payload relay policy allowed "
+               "before Bitcoin Core v30. This screen looks the same before and after "
+               "the fix.")},
+
+    {"kind": "empty", "label": "Bare OP_RETURN, no payload",
+     "expected": "Device should show the screen, reporting no data.",
+     "blurb": ("An OP_RETURN output that pushes nothing at all. The output is still "
+               "there and still unspendable. Before and after this fix the device "
+               "skips its screen, since it routes on whether there is any data; the "
+               "follow-up gives it a screen that says (no data).")},
+]
+
+
+# --- OP_RETURN display and accounting / PR #1043 -----------------------------
+#
+# These parse correctly even with the push-opcode fix in place. What they exercise is
+# everything after the parse: how many OP_RETURNs survive it, whether their value is
+# counted, and whether the screen can show a payload of any size.
+
+_OP_RETURN_DISPLAY_DEFS = [
+    {"kind": "two_outputs", "label": "Two OP_RETURN outputs",
+     "expected": "Device should show both payloads, in output order.",
+     "blurb": ("Two OP_RETURN outputs in one transaction. Several have always been "
+               "consensus-valid, and Bitcoin Core v30 dropped the one-per-transaction "
+               "relay limit. Before the fix the device showed only the second. With "
+               "the fix it shows both, numbered, in output order.")},
+
+    {"kind": "many_outputs", "label": "Five outputs, a burn hidden among them",
+     "expected": "Device should show all five, and warn on the elided overview row.",
+     "blurb": ("Five OP_RETURN outputs, the middle one burning 10,000 sats. Before "
+               "the fix the device showed only the last of the five and the burn "
+               "nowhere. With the fix the overview lists them as first, [ ... ], last "
+               "and marks the ellipsis (!) because the burn is behind it, and the "
+               "math screen shows 10,000 burned.")},
+
+    {"kind": "nonzero_value", "label": "Sats burned on the OP_RETURN",
+     "expected": "Device should show the burned amount and balance the totals.",
+     "blurb": ("The OP_RETURN output carries 10,000 sats, which the transaction "
+               "destroys. Before the fix that amount appeared on no screen, and "
+               "inputs no longer equalled spend + change + fee. With the fix the "
+               "overview marks the row (!), the math screen gets a burned line, and "
+               "the OP_RETURN screen says burns 10,000 sats.")},
+
+    {"kind": "max_pages", "label": "Paged to the limit, nothing dropped",
+     "expected": "Device should page to the end with no truncation warning.",
+     "blurb": ("800 bytes, exactly as much as the paged screen will show. Before the "
+               "fix the whole payload was drawn on one screen, running far past the "
+               "button. With the fix it is ten pages of 80 with no truncation notice; "
+               "one byte more and the device would have to say it could not show "
+               "everything.")},
+
+    {"kind": "large_burn", "label": "Too large to show, and burning sats",
+     "expected": "Device should warn on every page and say what it could not show.",
+     "blurb": ("4 KB of payload and 10,000 sats burned, on the same output. Before "
+               "the fix the device drew the payload off the screen and never "
+               "mentioned the sats. With the fix every page carries the burn warning, "
+               "and the last page says how many bytes could not be shown.")},
+
+    {"kind": "kitchen_sink", "label": "Everything at once",
+     "expected": "Device should show all six outputs and balance the totals.",
+     "blurb": ("One transaction carrying six OP_RETURN outputs: a readable payload, a "
+               "binary one shown as hex, one long enough to page, one too large to "
+               "page through, two pushes in a single script, and a bare OP_RETURN "
+               "that also burns sats. Before the fix the device showed only the last "
+               "one and none of the sats. With the fix it walks through all six and "
+               "the totals add up.")},
+]
+
+
+def _make_op_return(d, pr: str = "1042") -> Scenario:
+    info = script_types.get(_OP_RETURN_SCRIPT_TYPE)
+    return Scenario(
+        id=f"test-{pr}-{d['kind'].replace('_', '-')}",
+        wallet=WALLET_FOR_SCRIPT_TYPE[_OP_RETURN_SCRIPT_TYPE],
+        script_type=_OP_RETURN_SCRIPT_TYPE,
+        num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
+        title=f"\u2139 {d['label']}",
+        blurb=d["blurb"], is_default=False,
+        tags=["test", "OP_RETURN", info.label],
+        pr=pr, attack=d["kind"], load_seed=TEST_VICTIM_SEED,
+        expected=d["expected"], expected_screen=_OP_RETURN_SCREEN, outcome="display",
+    )
+
+
 def test_scenarios() -> list:
     """Adversarial / malformed transactions for exercising the hardening PRs on device."""
     out = []
@@ -395,4 +592,10 @@ def test_scenarios() -> list:
     out.append(_make_test("wrong_seed", "P2WPKH", "Native SegWit"))
     # PR #1032 / D5: output-ownership contradictions and malformed derivation data.
     out.extend(_make_d5(d) for d in _D5_DEFS)
+    # Outputs that exceed the inputs: one case, the check does not vary by type.
+    out.append(_make_negative_fee())
+    # PR #1042: OP_RETURN push encodings.
+    out.extend(_make_op_return(d) for d in _OP_RETURN_DEFS)
+    # Its follow-up: what the device does with an OP_RETURN once it has parsed it.
+    out.extend(_make_op_return(d, pr="1043") for d in _OP_RETURN_DISPLAY_DEFS)
     return out

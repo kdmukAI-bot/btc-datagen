@@ -1,4 +1,4 @@
-"""Adversarial and malformed PSBTs that exercise SeedSigner's ownership scan.
+"""Adversarial and malformed PSBTs that exercise SeedSigner's psbt validation.
 
 These reproduce the three conditions SeedSigner PR #1013 ("scan seed ownership")
 was written to catch. Each one is a structurally valid PSBT, a coordinator or an
@@ -692,3 +692,46 @@ def build_d5_psbt(kind: str, signers: list, script_type: str,
     if kind in _D5_MULTISIG_KINDS:
         return builder(signers, network, num_inputs, threshold)
     return builder(signers, network, num_inputs)
+
+
+# --- negative fee: outputs that spend more than the inputs hold --------------
+#
+# Nothing about the keys is forged here. Every derivation entry is truthful and
+# the seed really owns what the psbt says it owns; the transaction is simply
+# impossible, its outputs move more coin than its inputs bring in, so the fee
+# comes out negative. embit computes the fee as inputs minus outputs and never
+# looks at the sign, so a signer that does not check it shows the user a
+# negative fee and offers to sign.
+#
+# This is malformed rather than adversarial: no honest coordinator builds one,
+# and an attacker gains nothing by sending one because the network would refuse
+# to relay the result.
+
+# How far the outputs overrun the inputs, in sats. Large enough that the bogus
+# fee is unmistakable on the device's overview and math screens (the scenarios
+# spend 3 x 100,000 sats), rather than a one-sat curiosity a tester could miss.
+NEGATIVE_FEE_OVERRUN = 100_000
+
+
+def build_negative_fee_psbt(signers: list, script_type: str, network: str = "main",
+                            num_inputs: int = 3, threshold: int = None):
+    """An otherwise honest psbt whose change output is inflated past the inputs.
+
+    The change output is the one to grow: it keeps every ownership claim in the
+    psbt true (this really is our change, at the real change address), so the
+    only thing wrong with the transaction is the arithmetic.
+    """
+    psbt = build_psbt(signers, script_type, num_inputs, "change", threshold=threshold)
+    idx = _change_output_index(psbt)
+
+    input_total = sum(inp.utxo.value for inp in psbt.inputs)
+    output_total = sum(out.value for out in psbt.outputs)
+
+    # Add back the fee the builder left, then overrun the inputs by a fixed
+    # amount, so the resulting fee is exactly -NEGATIVE_FEE_OVERRUN whatever the
+    # input count. Note the value has to be set on the OUTPUT SCOPE: psbt.tx is a
+    # property that rebuilds the transaction from the scopes on every access, so
+    # an edit to psbt.tx.vout[i] is silently discarded.
+    psbt.outputs[idx].value += (input_total - output_total) + NEGATIVE_FEE_OVERRUN
+
+    return psbt
