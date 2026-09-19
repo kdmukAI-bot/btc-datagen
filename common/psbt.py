@@ -32,6 +32,8 @@ FEE = 10_000                # flat network fee for every scenario
 RECEIVE_BRANCH = 0
 CHANGE_BRANCH = 1
 
+OP_RETURN = 0x6a
+
 # Output shapes. Each entry lists what the transaction pays to, in order.
 #   external      -> a third-party recipient (no derivation info in the PSBT)
 #   change        -> back to this wallet on the change branch
@@ -251,13 +253,19 @@ def build_multisig_psbt(cosigners: list, threshold: int, script_type: str,
 
 
 def _output_kind(out) -> str:
-    """external | change | self_transfer, decided the way SeedSigner decides it.
+    """op_return | external | change | self_transfer, decided the way SeedSigner does.
 
     An output is ours if it carries our BIP32 derivations; the second-to-last
     path element then says which branch it's on (1 = change, 0 = receive, i.e.
     a self-transfer). Note SeedSigner's PSBTParser lumps both of ours into
     `change_data`, so a self-transfer shows on-device as two change outputs.
+
+    A data carrier is called out separately. It has no derivations, so it would
+    otherwise fall through to "external" and the picker would label a burn as a
+    payment to a recipient.
     """
+    if out.script_pubkey is not None and out.script_pubkey.data[:1] == bytes([OP_RETURN]):
+        return "op_return"
     if out.bip32_derivations:
         _, der = next(iter(out.bip32_derivations.items()))
         return "change" if der.derivation[-2] == CHANGE_BRANCH else "self_transfer"
@@ -281,12 +289,17 @@ def summarize(psbt: PSBT, network: str = "main") -> dict:
         value = psbt.tx.vout[i].value
         output_total += value
         spk = psbt.tx.vout[i].script_pubkey
-        try:
-            address = spk.address(net)
-        except Exception:
-            # A script embit cannot turn into an address (e.g. bare p2pk, used by
-            # the "unsupported script type" test scenario). Show the raw script.
-            address = spk.data.hex()
+        if spk.data[:1] == bytes([OP_RETURN]):
+            # A data carrier has no address, and printing the raw script would put
+            # the whole payload in the picker (which can now be tens of kilobytes).
+            address = f"OP_RETURN ({len(spk.data):,}-byte script)"
+        else:
+            try:
+                address = spk.address(net)
+            except Exception:
+                # A script embit cannot turn into an address (e.g. bare p2pk, used by
+                # the "unsupported script type" test scenario). Show the raw script.
+                address = spk.data.hex()
         outputs.append({
             "address": address,
             "value": value,

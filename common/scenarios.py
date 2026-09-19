@@ -74,7 +74,7 @@ class Scenario:
     # `load_seed` overrides which seed the "Load the seed" step presents (the
     # point of the wrong-seed case); `expected*` describe what the device should
     # do so the sample is useful to run on hardware.
-    pr: str = None                     # "1013" | "1032" | "1041"
+    pr: str = None                     # "1013" | "1032" | "1041" | "1042"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -84,6 +84,7 @@ class Scenario:
     #   error   aborts to the generic error screen (unsupported input)
     #   spend   parses fine; the output is shown as a payment out, not change
     #   change  parses fine; the output is shown as change (a documented limit)
+    #   display parses fine; the point is what the device puts on screen
     outcome: str = None
 
 
@@ -168,6 +169,15 @@ TEST_PR_GROUPS = [
                   "the fee as inputs minus outputs and does not check the sign, so "
                   "without this the device reviews the transaction quoting a negative "
                   "fee."),
+    },
+    {
+        "pr": "1042",
+        "label": "PR #1042: OP_RETURN push encodings",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1042",
+        "blurb": ("Honest transactions, no forgery. Each carries an OP_RETURN encoded a "
+                  "different legal way. The payload is read at a fixed offset that only "
+                  "OP_PUSHDATA1 satisfies, so every other encoding loses or gains a byte "
+                  "at the front. Fixes issue #963."),
     },
 ]
 
@@ -423,6 +433,90 @@ def _make_negative_fee() -> Scenario:
     )
 
 
+# --- OP_RETURN push encodings / PR #1042 --------------------------------------------------
+#
+# Nothing here is forged. These are transactions a coordinator legitimately
+# produces; what varies is how the OP_RETURN output is encoded and how much it
+# carries. The builder is common/op_return_psbt.py, which documents each case.
+#
+# Single-sig native segwit throughout: OP_RETURN handling is script-type
+# agnostic, and the single-sig flow keeps the tester on the screen that matters
+# instead of walking a descriptor step first.
+
+_OP_RETURN_SCRIPT_TYPE = "P2WPKH"
+
+_OP_RETURN_SCREEN = "OP_RETURN"
+
+# Ordered the way a tester should work through them: the two cases that show the
+# mis-slice most plainly first, then the remaining push encodings, then the control
+# that must look identical either way, then the empty edge case.
+#
+# Three more cases exist in common/op_return_psbt.py and are deliberately NOT listed
+# here, because they fail on defects #1042 does not touch and would read as failures
+# against it:
+#   large          4 KB payload; the screen has no bound on what it draws
+#   nonzero_value  sats burned on the OP_RETURN, counted in no total
+#   two_outputs    two OP_RETURN outputs, only the last survives the parse
+# They belong to the display and accounting follow-up, and should get their own picker
+# group once that PR is open.
+_OP_RETURN_DEFS = [
+    {"kind": "direct_push", "label": "Payload loses its first byte",
+     "expected": ("Payload should read \u201cChancellor on the brink of third bailout\u201d. "
+                  "Before the fix the leading C is missing."),
+     "blurb": ("A 40 byte message pushed the way Bitcoin Core encodes one: the push opcode "
+               "is itself the length, two bytes of prefix rather than three. The parser "
+               "assumes three and eats the first byte of the message. Worth seeing on a "
+               "device, because when a payload is not text it renders as hex and a one "
+               "byte shift looks like ordinary data.")},
+
+    {"kind": "binary", "label": "Binary payload, shown as hex",
+     "expected": ("Hex should start \u201c8081 82\u2026\u201d. Before the fix it starts "
+                  "\u201c8182 83\u2026\u201d, one byte in."),
+     "blurb": ("75 bytes that are not text, so the screen falls back to hex. This is the "
+               "case the fix is really about: the payload starts 80 81 82, the old parser "
+               "shows it starting 81 82 83, and a wall of hex gives a reviewer nothing to "
+               "notice. 75 bytes is also the largest a direct push can carry.")},
+
+    {"kind": "multi_push", "label": "Two pushes in one script",
+     "expected": ("Payload should read \u201cfirst push, second push\u201d with no push "
+                  "opcode left in the middle."),
+     "blurb": ("One OP_RETURN script holding two pushes. Unusual but legal, and it pins "
+               "down what the device does with the boundary between them.")},
+
+    {"kind": "pushdata2", "label": "300 bytes needs a two-byte length",
+     "expected": ("Payload should begin \u201c0000 0001\u201d with no stray byte, and the "
+                  "screen should bound what it draws."),
+     "blurb": ("Past 255 bytes the push carries a two byte length, so the fixed offset "
+               "leaves one of those bytes stuck on the front of the payload. The text also "
+               "runs off the bottom of the screen with nothing to say it was cut.")},
+
+    {"kind": "pushdata1", "label": "80 bytes, the old relay ceiling",
+     "expected": "Payload should read as text and fit on the screen.",
+     "blurb": ("80 bytes pushed with OP_PUSHDATA1, which is the one encoding the current "
+               "parser reads correctly. Here as the control, and to show how little room "
+               "is left: 80 bytes already fills the screen down to the button.")},
+
+    {"kind": "empty", "label": "Bare OP_RETURN, no payload",
+     "expected": "Should show an empty payload rather than failing.",
+     "blurb": "An OP_RETURN output that pushes nothing at all."},
+]
+
+
+def _make_op_return(d) -> Scenario:
+    info = script_types.get(_OP_RETURN_SCRIPT_TYPE)
+    return Scenario(
+        id=f"test-1042-{d['kind'].replace('_', '-')}",
+        wallet=WALLET_FOR_SCRIPT_TYPE[_OP_RETURN_SCRIPT_TYPE],
+        script_type=_OP_RETURN_SCRIPT_TYPE,
+        num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
+        title=f"\u2139 {d['label']}",
+        blurb=d["blurb"], is_default=False,
+        tags=["test", "OP_RETURN", info.label],
+        pr="1042", attack=d["kind"], load_seed=TEST_VICTIM_SEED,
+        expected=d["expected"], expected_screen=_OP_RETURN_SCREEN, outcome="display",
+    )
+
+
 def test_scenarios() -> list:
     """Adversarial / malformed transactions for exercising the hardening PRs on device."""
     out = []
@@ -436,4 +530,6 @@ def test_scenarios() -> list:
     out.extend(_make_d5(d) for d in _D5_DEFS)
     # Outputs that exceed the inputs: one case, the check does not vary by type.
     out.append(_make_negative_fee())
+    # PR #1042: OP_RETURN push encodings.
+    out.extend(_make_op_return(d) for d in _OP_RETURN_DEFS)
     return out
