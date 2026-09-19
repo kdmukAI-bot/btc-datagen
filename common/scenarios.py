@@ -74,7 +74,7 @@ class Scenario:
     # `load_seed` overrides which seed the "Load the seed" step presents (the
     # point of the wrong-seed case); `expected*` describe what the device should
     # do so the sample is useful to run on hardware.
-    pr: str = None                     # "1013" | "1032" | "1041" | "1042" | "1042b"
+    pr: str = None                     # "1013" | "1032" | "1041" | "1042" | "1043"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -180,10 +180,9 @@ TEST_PR_GROUPS = [
                   "encoding lost or gained a byte at the front. Fixes issue #963."),
     },
     {
-        # TODO: swap the label and url for the follow-up PR's number once it is opened.
-        "pr": "1042b",
-        "label": "OP_RETURN display and accounting (follow-up to #1042)",
-        "url": "https://github.com/seedsigner/seedsigner/pull/1042",
+        "pr": "1043",
+        "label": "PR #1043: OP_RETURN display and accounting",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1043",
         "blurb": ("What the device does with an OP_RETURN once it has parsed it. "
                   "Before the fix only the last of several survived the parse, sats "
                   "attached to one were added to no total so the amounts on screen "
@@ -461,9 +460,9 @@ _OP_RETURN_SCREEN = "OP_RETURN"
 # The push-encoding cases, for #1042. Ordered the way a tester should work through
 # them: the two that show the mis-slice most plainly first, then the remaining
 # encodings, then the control that must look identical either way, then the empty edge
-# case. The cases for the display and accounting follow-up are in _OP_RETURN_DISPLAY_DEFS
-# below; they fail on defects #1042 does not touch, so mixing them in would read as
-# failures against it.
+# case. The cases for #1043, the display and accounting follow-up, are in
+# _OP_RETURN_DISPLAY_DEFS below; they fail on defects #1042 does not touch, so mixing
+# them in would read as failures against it.
 _OP_RETURN_DEFS = [
     {"kind": "direct_push", "label": "Payload loses its first byte",
      "expected": "Device should show the payload with its leading C intact.",
@@ -511,7 +510,7 @@ _OP_RETURN_DEFS = [
 ]
 
 
-# --- OP_RETURN display and accounting / follow-up to #1042 -------------------
+# --- OP_RETURN display and accounting / PR #1043 -----------------------------
 #
 # These parse correctly even with the push-opcode fix in place. What they exercise is
 # everything after the parse: how many OP_RETURNs survive it, whether their value is
@@ -598,5 +597,5 @@ def test_scenarios() -> list:
     # PR #1042: OP_RETURN push encodings.
     out.extend(_make_op_return(d) for d in _OP_RETURN_DEFS)
     # Its follow-up: what the device does with an OP_RETURN once it has parsed it.
-    out.extend(_make_op_return(d, pr="1042b") for d in _OP_RETURN_DISPLAY_DEFS)
+    out.extend(_make_op_return(d, pr="1043") for d in _OP_RETURN_DISPLAY_DEFS)
     return out
