@@ -1,51 +1,28 @@
 """OP_RETURN transactions that exercise SeedSigner's data-carrier handling.
 
 Unlike common/attack_psbt.py, nothing here is a forgery. Every psbt is honest and
-ordinary; what varies is how the OP_RETURN output is encoded and how much data it
-carries. These are the shapes a coordinator legitimately produces and a signer has
-to render correctly, and each one lands on a different defect in 0.8.7:
+ordinary; what varies is how the OP_RETURN output is encoded, how much data it
+carries, and whether it destroys value. Each case's user-facing description lives
+with its scenario in common/scenarios.py.
 
-    direct_push    A 40 byte payload pushed with the minimal (direct) opcode, the
-                   canonical encoding. The parser reads the payload at a fixed
-                   3-byte offset, which only holds for OP_PUSHDATA1, so the first
-                   byte is eaten: the screen shows "hancellor on the brink of
-                   third bailout". Rendered as hex a one byte shift is invisible,
-                   which is what makes this worth seeing on a device.
+    direct_push    40 bytes pushed with the minimal (direct) opcode
+    binary         75 bytes that are not valid UTF-8, so the screen shows hex
+    pushdata1      80 bytes, the pre-v30 relay ceiling, pushed with OP_PUSHDATA1
+    pushdata2      300 bytes, so the push carries a two byte length
+    multi_push     two pushes in one script rather than one
+    empty          a bare OP_RETURN, pushing nothing
 
-    binary         75 bytes that are not valid UTF-8, pushed directly. The screen
-                   falls back to hex, and this is the case the whole fix is about:
-                   the payload starts 80 81 82, 0.8.7 shows it starting 81 82 83,
-                   and nothing about a wall of hex tells you a byte went missing.
-                   75 is also the largest payload a direct push can carry.
+    nonzero_value  10,000 sats on the output, which the transaction destroys
+    two_outputs    two OP_RETURN outputs
+    many_outputs   five, with the burn on one the overview elides
+    max_pages      800 bytes, exactly what the paged screen will show
+    large          4 KB, more than paging can show in full
+    large_burn     4 KB and 10,000 sats destroyed, on the same output
+    kitchen_sink   all of the above in one transaction
 
-    pushdata1      An 80 byte payload, the old relay ceiling, pushed with
-                   OP_PUSHDATA1. This is the one encoding 0.8.7 gets right; it is
-                   here as the control, and to show that 80 bytes of hex already
-                   fills the screen down to the button.
-
-    pushdata2      A 300 byte payload. Past 255 bytes the length needs two bytes,
-                   so 0.8.7 leaves a stray length byte at the front AND the text
-                   runs off the bottom of the screen.
-
-    large          4 KB. Bitcoin Core v30 raised the default -datacarriersize to
-                   100,000 bytes and consensus never limited OP_RETURN data at
-                   all, so this is now an ordinary transaction to receive. 0.8.7
-                   builds thousands of hex lines and renders them off-screen.
-
-    nonzero_value  Sats attached to the OP_RETURN output, i.e. burned. Its value
-                   is added to neither spend_amount nor change_amount, so the
-                   amount never appears on screen and the overview's
-                   inputs = spend + change + fee no longer balances.
-
-    two_outputs    Two OP_RETURN outputs. Always consensus-valid, and Bitcoin Core
-                   v30 dropped the one-per-transaction relay limit. op_return_data
-                   is a single value that the parse loop overwrites, so only the
-                   second is ever shown.
-
-    empty          A bare OP_RETURN with nothing pushed.
-
-    multi_push     Two pushes in one OP_RETURN script. Unusual but legal, and it
-                   pins down what the device does with the boundary between them.
+Bitcoin Core v30 raised the default -datacarriersize to 100,000 bytes, and consensus
+never limited OP_RETURN data at all, so the larger payloads here are sizes a signer
+can now be handed rather than exotic ones.
 
 Throwaway keys only; none of this is signable into a broadcastable transaction.
 """
@@ -104,8 +81,7 @@ def _filler(length: int, seed: bytes = b"btc-datagen-op-return") -> bytes:
     Readable rather than random so a tester can tell at a glance whether the
     device is showing the start of the payload, the middle, or nothing at all.
     """
-    body = (b"".join(b"%04d " % i for i in range(length // 5 + 1)))[:length]
-    return body if body else b""
+    return (b"".join(b"%04d " % i for i in range(length // 5 + 1)))[:length]
 
 
 # kind -> [(scriptPubKey, value_in_sats), ...]
@@ -114,12 +90,27 @@ _CASES = {
     "binary":        lambda: [(op_return_script(BINARY_PAYLOAD), 0)],
     "pushdata1":     lambda: [(op_return_script(_filler(80), opcode=OP_PUSHDATA1), 0)],
     "pushdata2":     lambda: [(op_return_script(_filler(300)), 0)],
+    "max_pages":     lambda: [(op_return_script(_filler(800)), 0)],
     "large":         lambda: [(op_return_script(_filler(4096)), 0)],
+    "large_burn":    lambda: [(op_return_script(_filler(4096)), BURNED_SATS)],
     "nonzero_value": lambda: [(op_return_script(CHANCELLOR), BURNED_SATS)],
     "two_outputs":   lambda: [(op_return_script(b"first OP_RETURN payload"), 0),
                               (op_return_script(b"second OP_RETURN payload"), 0)],
+    "many_outputs":  lambda: [(op_return_script(b"OP_RETURN payload %d" % i),
+                               BURNED_SATS if i == 3 else 0)
+                              for i in range(1, 6)],
     "empty":         lambda: [(Script(bytes([OP_RETURN])), 0)],
     "multi_push":    lambda: [(op_return_script(b"first push, ", b"second push"), 0)],
+
+    # In output order, which is the order the outputs are reviewed in.
+    "kitchen_sink":  lambda: [
+        (op_return_script(CHANCELLOR), 0),                          # readable, one page
+        (op_return_script(BINARY_PAYLOAD), 0),                      # not text, so hex
+        (op_return_script(_filler(300)), 0),                        # pages, not truncated
+        (op_return_script(_filler(4096)), 0),                       # too large to page
+        (op_return_script(b"first push, ", b"second push"), 0),     # two pushes
+        (Script(bytes([OP_RETURN])), BURNED_SATS),                  # bare, and destroys sats
+    ],
 }
 
 

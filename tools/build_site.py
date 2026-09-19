@@ -311,7 +311,7 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
     # The other two forge nothing. "negative_fee" inflates the change output past
     # what the inputs hold, and issue #963's OP_RETURN cases are honest
     # transactions that only vary how the data carrier is encoded.
-    if scenario.pr == "1042":
+    if scenario.pr in ("1042", "1042b"):
         psbt = build_op_return_psbt(scenario.attack, signers, scenario.script_type,
                                     scenario.num_inputs, threshold=wallet["threshold"])
     elif scenario.pr == "1032":

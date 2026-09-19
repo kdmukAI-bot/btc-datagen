@@ -74,7 +74,7 @@ class Scenario:
     # `load_seed` overrides which seed the "Load the seed" step presents (the
     # point of the wrong-seed case); `expected*` describe what the device should
     # do so the sample is useful to run on hardware.
-    pr: str = None                     # "1013" | "1032" | "1041" | "1042"
+    pr: str = None                     # "1013" | "1032" | "1041" | "1042" | "1042b"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -178,6 +178,16 @@ TEST_PR_GROUPS = [
                   "different legal way. The payload is read at a fixed offset that only "
                   "OP_PUSHDATA1 satisfies, so every other encoding loses or gains a byte "
                   "at the front. Fixes issue #963."),
+    },
+    {
+        # TODO: swap the label and url for the follow-up PR's number once it is opened.
+        "pr": "1042b",
+        "label": "OP_RETURN display and accounting (follow-up to #1042)",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1042",
+        "blurb": ("What the device does with an OP_RETURN once it has parsed it. Only the "
+                  "last of several survives the parse, any sats attached to one are added "
+                  "to no total so the amounts on screen stop reconciling against the "
+                  "inputs, and the payload is drawn with no bound on its size."),
     },
 ]
 
@@ -447,72 +457,105 @@ _OP_RETURN_SCRIPT_TYPE = "P2WPKH"
 
 _OP_RETURN_SCREEN = "OP_RETURN"
 
-# Ordered the way a tester should work through them: the two cases that show the
-# mis-slice most plainly first, then the remaining push encodings, then the control
-# that must look identical either way, then the empty edge case.
-#
-# Three more cases exist in common/op_return_psbt.py and are deliberately NOT listed
-# here, because they fail on defects #1042 does not touch and would read as failures
-# against it:
-#   large          4 KB payload; the screen has no bound on what it draws
-#   nonzero_value  sats burned on the OP_RETURN, counted in no total
-#   two_outputs    two OP_RETURN outputs, only the last survives the parse
-# They belong to the display and accounting follow-up, and should get their own picker
-# group once that PR is open.
+# The push-encoding cases, for #1042. Ordered the way a tester should work through
+# them: the two that show the mis-slice most plainly first, then the remaining
+# encodings, then the control that must look identical either way, then the empty edge
+# case. The cases for the display and accounting follow-up are in _OP_RETURN_DISPLAY_DEFS
+# below; they fail on defects #1042 does not touch, so mixing them in would read as
+# failures against it.
 _OP_RETURN_DEFS = [
     {"kind": "direct_push", "label": "Payload loses its first byte",
-     "expected": ("Payload should read \u201cChancellor on the brink of third bailout\u201d. "
-                  "Before the fix the leading C is missing."),
-     "blurb": ("A 40 byte message pushed the way Bitcoin Core encodes one: the push opcode "
-               "is itself the length, two bytes of prefix rather than three. The parser "
-               "assumes three and eats the first byte of the message. Worth seeing on a "
-               "device, because when a payload is not text it renders as hex and a one "
-               "byte shift looks like ordinary data.")},
+     "expected": "Device should show the payload with its leading C intact.",
+     "blurb": ("A 40 byte message, pushed the way Bitcoin Core encodes one: the push opcode "
+               "is itself the length, so the prefix is two bytes rather than three. The "
+               "device reads it at a fixed three and shows the message a byte short.")},
 
     {"kind": "binary", "label": "Binary payload, shown as hex",
-     "expected": ("Hex should start \u201c8081 82\u2026\u201d. Before the fix it starts "
-                  "\u201c8182 83\u2026\u201d, one byte in."),
-     "blurb": ("75 bytes that are not text, so the screen falls back to hex. This is the "
-               "case the fix is really about: the payload starts 80 81 82, the old parser "
-               "shows it starting 81 82 83, and a wall of hex gives a reviewer nothing to "
-               "notice. 75 bytes is also the largest a direct push can carry.")},
+     "expected": "Device should show hex starting 8081 82, not 8182 83.",
+     "blurb": ("75 bytes that are not text, so the device shows them as hex. The payload "
+               "starts 80 81 82 and the device shows it starting 81 82 83, a byte in, with "
+               "nothing about a wall of hex to say so. 75 bytes is the largest a direct "
+               "push can carry.")},
 
     {"kind": "multi_push", "label": "Two pushes in one script",
-     "expected": ("Payload should read \u201cfirst push, second push\u201d with no push "
-                  "opcode left in the middle."),
-     "blurb": ("One OP_RETURN script holding two pushes. Unusual but legal, and it pins "
-               "down what the device does with the boundary between them.")},
+     "expected": "Device should show both pushes with no opcode left between them.",
+     "blurb": ("One OP_RETURN script holding two pushes rather than one. Unusual but legal; "
+               "the data the transaction commits to is both of them.")},
 
     {"kind": "pushdata2", "label": "300 bytes needs a two-byte length",
-     "expected": ("Payload should begin \u201c0000 0001\u201d with no stray byte, and the "
-                  "screen should bound what it draws."),
-     "blurb": ("Past 255 bytes the push carries a two byte length, so the fixed offset "
-               "leaves one of those bytes stuck on the front of the payload. The text also "
-               "runs off the bottom of the screen with nothing to say it was cut.")},
+     "expected": "Device should show the payload with no stray leading byte.",
+     "blurb": ("300 bytes, which needs a two byte length on the push. The device reads past "
+               "only one of them, leaving the other stuck on the front of the payload, and "
+               "draws the rest off the bottom of the screen.")},
 
     {"kind": "pushdata1", "label": "80 bytes, the old relay ceiling",
-     "expected": "Payload should read as text and fit on the screen.",
-     "blurb": ("80 bytes pushed with OP_PUSHDATA1, which is the one encoding the current "
-               "parser reads correctly. Here as the control, and to show how little room "
-               "is left: 80 bytes already fills the screen down to the button.")},
+     "expected": "Device should look exactly as it did before the fix.",
+     "blurb": ("80 bytes pushed with OP_PUSHDATA1, the encoding the device already reads "
+               "correctly, and the largest payload relay policy allowed before Bitcoin Core "
+               "v30. It fills the screen down to the button.")},
 
     {"kind": "empty", "label": "Bare OP_RETURN, no payload",
-     "expected": "Should show an empty payload rather than failing.",
-     "blurb": "An OP_RETURN output that pushes nothing at all."},
+     "expected": "Device should show the screen, reporting no data.",
+     "blurb": ("An OP_RETURN output that pushes nothing at all. The output is still there "
+               "and still unspendable.")},
 ]
 
 
-def _make_op_return(d) -> Scenario:
+# --- OP_RETURN display and accounting / follow-up to #1042 -------------------
+#
+# These parse correctly even with the push-opcode fix in place. What they exercise is
+# everything after the parse: how many OP_RETURNs survive it, whether their value is
+# counted, and whether the screen can show a payload of any size.
+
+_OP_RETURN_DISPLAY_DEFS = [
+    {"kind": "two_outputs", "label": "Two OP_RETURN outputs",
+     "expected": "Device should show both payloads, in output order.",
+     "blurb": ("Two OP_RETURN outputs in one transaction. Several have always been "
+               "consensus-valid, and Bitcoin Core v30 dropped the one-per-transaction relay "
+               "limit. The device shows only the second of them.")},
+
+    {"kind": "many_outputs", "label": "Five outputs, a burn hidden among them",
+     "expected": "Device should show all five, and warn on the elided overview row.",
+     "blurb": ("Five OP_RETURN outputs, the middle one destroying 10,000 sats. Past a "
+               "handful the overview's flow diagram elides the middle rows into an ellipsis, "
+               "which is where this burn falls. The device shows only the last of the five.")},
+
+    {"kind": "nonzero_value", "label": "Sats burned on the OP_RETURN",
+     "expected": "Device should show the burned amount and balance the totals.",
+     "blurb": ("The OP_RETURN output carries 10,000 sats, which the transaction destroys. "
+               "The device adds that to neither the spend nor the change total, so the amount "
+               "never appears and inputs = spend + change + fee no longer balances.")},
+
+    {"kind": "max_pages", "label": "Paged to the limit, nothing dropped",
+     "expected": "Device should page to the end with no truncation warning.",
+     "blurb": ("800 bytes, exactly as much as the paged screen will show. One byte more and "
+               "the device would have to say it could not show all of it.")},
+
+    {"kind": "large_burn", "label": "Too large to show, and burning sats",
+     "expected": "Device should warn on every page and say what it could not show.",
+     "blurb": ("4 KB of payload and 10,000 sats destroyed, on the same output. The device "
+               "has to warn about the burn on every page of it while also saying how much of "
+               "the payload it could not show.")},
+
+    {"kind": "kitchen_sink", "label": "Everything at once",
+     "expected": "Device should show all six outputs and balance the totals.",
+     "blurb": ("One transaction carrying six OP_RETURN outputs: a readable payload, a binary "
+               "one shown as hex, one long enough to page, one too large to page through, two "
+               "pushes in a single script, and a bare OP_RETURN that also destroys sats.")},
+]
+
+
+def _make_op_return(d, pr: str = "1042") -> Scenario:
     info = script_types.get(_OP_RETURN_SCRIPT_TYPE)
     return Scenario(
-        id=f"test-1042-{d['kind'].replace('_', '-')}",
+        id=f"test-{pr}-{d['kind'].replace('_', '-')}",
         wallet=WALLET_FOR_SCRIPT_TYPE[_OP_RETURN_SCRIPT_TYPE],
         script_type=_OP_RETURN_SCRIPT_TYPE,
         num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
         title=f"\u2139 {d['label']}",
         blurb=d["blurb"], is_default=False,
         tags=["test", "OP_RETURN", info.label],
-        pr="1042", attack=d["kind"], load_seed=TEST_VICTIM_SEED,
+        pr=pr, attack=d["kind"], load_seed=TEST_VICTIM_SEED,
         expected=d["expected"], expected_screen=_OP_RETURN_SCREEN, outcome="display",
     )
 
@@ -532,4 +575,6 @@ def test_scenarios() -> list:
     out.append(_make_negative_fee())
     # PR #1042: OP_RETURN push encodings.
     out.extend(_make_op_return(d) for d in _OP_RETURN_DEFS)
+    # Its follow-up: what the device does with an OP_RETURN once it has parsed it.
+    out.extend(_make_op_return(d, pr="1042b") for d in _OP_RETURN_DISPLAY_DEFS)
     return out
