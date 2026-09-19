@@ -174,20 +174,21 @@ TEST_PR_GROUPS = [
         "pr": "1042",
         "label": "PR #1042: OP_RETURN push encodings",
         "url": "https://github.com/seedsigner/seedsigner/pull/1042",
-        "blurb": ("Honest transactions, no forgery. Each carries an OP_RETURN encoded a "
-                  "different legal way. The payload is read at a fixed offset that only "
-                  "OP_PUSHDATA1 satisfies, so every other encoding loses or gains a byte "
-                  "at the front. Fixes issue #963."),
+        "blurb": ("Honest transactions, no forgery. Each carries an OP_RETURN encoded "
+                  "a different legal way. Before the fix the payload was read at a "
+                  "fixed offset that only OP_PUSHDATA1 satisfies, so every other "
+                  "encoding lost or gained a byte at the front. Fixes issue #963."),
     },
     {
         # TODO: swap the label and url for the follow-up PR's number once it is opened.
         "pr": "1042b",
         "label": "OP_RETURN display and accounting (follow-up to #1042)",
         "url": "https://github.com/seedsigner/seedsigner/pull/1042",
-        "blurb": ("What the device does with an OP_RETURN once it has parsed it. Only the "
-                  "last of several survives the parse, any sats attached to one are added "
-                  "to no total so the amounts on screen stop reconciling against the "
-                  "inputs, and the payload is drawn with no bound on its size."),
+        "blurb": ("What the device does with an OP_RETURN once it has parsed it. "
+                  "Before the fix only the last of several survived the parse, sats "
+                  "attached to one were added to no total so the amounts on screen "
+                  "stopped adding up to the inputs, and the payload was drawn with no "
+                  "bound on its size."),
     },
 ]
 
@@ -466,38 +467,47 @@ _OP_RETURN_SCREEN = "OP_RETURN"
 _OP_RETURN_DEFS = [
     {"kind": "direct_push", "label": "Payload loses its first byte",
      "expected": "Device should show the payload with its leading C intact.",
-     "blurb": ("A 40 byte message, pushed the way Bitcoin Core encodes one: the push opcode "
-               "is itself the length, so the prefix is two bytes rather than three. The "
-               "device reads it at a fixed three and shows the message a byte short.")},
+     "blurb": ("A 40 byte message pushed the way Bitcoin Core encodes one: the push "
+               "opcode is itself the length, so the prefix is two bytes, not three. "
+               "Before the fix the device read past three and showed the message "
+               "missing its first letter. With the fix it shows the message whole.")},
 
     {"kind": "binary", "label": "Binary payload, shown as hex",
      "expected": "Device should show hex starting 8081 82, not 8182 83.",
-     "blurb": ("75 bytes that are not text, so the device shows them as hex. The payload "
-               "starts 80 81 82 and the device shows it starting 81 82 83, a byte in, with "
-               "nothing about a wall of hex to say so. 75 bytes is the largest a direct "
-               "push can carry.")},
+     "blurb": ("75 bytes that are not text, the largest a direct push can carry, "
+               "shown as hex. Before the fix the hex started 81 82 83, a byte in, "
+               "with nothing in a wall of hex to give it away. With the fix it starts "
+               "80 81 82.")},
 
     {"kind": "multi_push", "label": "Two pushes in one script",
      "expected": "Device should show both pushes with no opcode left between them.",
-     "blurb": ("One OP_RETURN script holding two pushes rather than one. Unusual but legal; "
-               "the data the transaction commits to is both of them.")},
+     "blurb": ("One OP_RETURN script holding two pushes rather than one. Unusual but "
+               "legal; the data the transaction commits to is both. Before the fix "
+               "the device dropped the first byte and left the second push's length "
+               "byte sitting in the middle of the data. With the fix it shows both "
+               "pushes back to back.")},
 
     {"kind": "pushdata2", "label": "300 bytes needs a two-byte length",
      "expected": "Device should show the payload with no stray leading byte.",
-     "blurb": ("300 bytes, which needs a two byte length on the push. The device reads past "
-               "only one of them, leaving the other stuck on the front of the payload, and "
-               "draws the rest off the bottom of the screen.")},
+     "blurb": ("300 bytes, which needs a two byte length on the push. Before the fix "
+               "the device read past only one of them, leaving the other stuck on the "
+               "front of the payload. With the fix the payload starts where it "
+               "should; it still runs off the bottom of the screen until the follow- "
+               "up pages it.")},
 
     {"kind": "pushdata1", "label": "80 bytes, the old relay ceiling",
      "expected": "Device should look exactly as it did before the fix.",
-     "blurb": ("80 bytes pushed with OP_PUSHDATA1, the encoding the device already reads "
-               "correctly, and the largest payload relay policy allowed before Bitcoin Core "
-               "v30. It fills the screen down to the button.")},
+     "blurb": ("80 bytes pushed with OP_PUSHDATA1, the one encoding the device "
+               "already read correctly, and the largest payload relay policy allowed "
+               "before Bitcoin Core v30. This screen looks the same before and after "
+               "the fix.")},
 
     {"kind": "empty", "label": "Bare OP_RETURN, no payload",
      "expected": "Device should show the screen, reporting no data.",
-     "blurb": ("An OP_RETURN output that pushes nothing at all. The output is still there "
-               "and still unspendable.")},
+     "blurb": ("An OP_RETURN output that pushes nothing at all. The output is still "
+               "there and still unspendable. Before and after this fix the device "
+               "skips its screen, since it routes on whether there is any data; the "
+               "follow-up gives it a screen that says (no data).")},
 ]
 
 
@@ -511,37 +521,49 @@ _OP_RETURN_DISPLAY_DEFS = [
     {"kind": "two_outputs", "label": "Two OP_RETURN outputs",
      "expected": "Device should show both payloads, in output order.",
      "blurb": ("Two OP_RETURN outputs in one transaction. Several have always been "
-               "consensus-valid, and Bitcoin Core v30 dropped the one-per-transaction relay "
-               "limit. The device shows only the second of them.")},
+               "consensus-valid, and Bitcoin Core v30 dropped the one-per-transaction "
+               "relay limit. Before the fix the device showed only the second. With "
+               "the fix it shows both, numbered, in output order.")},
 
     {"kind": "many_outputs", "label": "Five outputs, a burn hidden among them",
      "expected": "Device should show all five, and warn on the elided overview row.",
-     "blurb": ("Five OP_RETURN outputs, the middle one destroying 10,000 sats. Past a "
-               "handful the overview's flow diagram elides the middle rows into an ellipsis, "
-               "which is where this burn falls. The device shows only the last of the five.")},
+     "blurb": ("Five OP_RETURN outputs, the middle one burning 10,000 sats. Before "
+               "the fix the device showed only the last of the five and the burn "
+               "nowhere. With the fix the overview lists them as first, [ ... ], last "
+               "and marks the ellipsis (!) because the burn is behind it, and the "
+               "math screen shows 10,000 burned.")},
 
     {"kind": "nonzero_value", "label": "Sats burned on the OP_RETURN",
      "expected": "Device should show the burned amount and balance the totals.",
-     "blurb": ("The OP_RETURN output carries 10,000 sats, which the transaction destroys. "
-               "The device adds that to neither the spend nor the change total, so the amount "
-               "never appears and inputs = spend + change + fee no longer balances.")},
+     "blurb": ("The OP_RETURN output carries 10,000 sats, which the transaction "
+               "destroys. Before the fix that amount appeared on no screen, and "
+               "inputs no longer equalled spend + change + fee. With the fix the "
+               "overview marks the row (!), the math screen gets a burned line, and "
+               "the OP_RETURN screen says burns 10,000 sats.")},
 
     {"kind": "max_pages", "label": "Paged to the limit, nothing dropped",
      "expected": "Device should page to the end with no truncation warning.",
-     "blurb": ("800 bytes, exactly as much as the paged screen will show. One byte more and "
-               "the device would have to say it could not show all of it.")},
+     "blurb": ("800 bytes, exactly as much as the paged screen will show. Before the "
+               "fix the whole payload was drawn on one screen, running far past the "
+               "button. With the fix it is ten pages of 80 with no truncation notice; "
+               "one byte more and the device would have to say it could not show "
+               "everything.")},
 
     {"kind": "large_burn", "label": "Too large to show, and burning sats",
      "expected": "Device should warn on every page and say what it could not show.",
-     "blurb": ("4 KB of payload and 10,000 sats destroyed, on the same output. The device "
-               "has to warn about the burn on every page of it while also saying how much of "
-               "the payload it could not show.")},
+     "blurb": ("4 KB of payload and 10,000 sats burned, on the same output. Before "
+               "the fix the device drew the payload off the screen and never "
+               "mentioned the sats. With the fix every page carries the burn warning, "
+               "and the last page says how many bytes could not be shown.")},
 
     {"kind": "kitchen_sink", "label": "Everything at once",
      "expected": "Device should show all six outputs and balance the totals.",
-     "blurb": ("One transaction carrying six OP_RETURN outputs: a readable payload, a binary "
-               "one shown as hex, one long enough to page, one too large to page through, two "
-               "pushes in a single script, and a bare OP_RETURN that also destroys sats.")},
+     "blurb": ("One transaction carrying six OP_RETURN outputs: a readable payload, a "
+               "binary one shown as hex, one long enough to page, one too large to "
+               "page through, two pushes in a single script, and a bare OP_RETURN "
+               "that also burns sats. Before the fix the device showed only the last "
+               "one and none of the sats. With the fix it walks through all six and "
+               "the totals add up.")},
 ]
 
 
