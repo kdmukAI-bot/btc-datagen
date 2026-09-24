@@ -1093,7 +1093,7 @@ function renderTestBanner() {
   const group = (state.index.test_pr_groups || []).find((g) => g.pr === s.pr);
   const tag = group ? group.label : `PR #${s.pr}`;
   banner.innerHTML = `
-    <strong>Test transaction (${tag}), not a demo</strong>
+    <strong>Test transaction (${tag})</strong>
     <p>${s.blurb}</p>
     <p class="test-banner-do">Load <b>${seed}</b>'s seed below. On a device with the
       fix, this ${outcomePhrase(s)}.</p>`;
