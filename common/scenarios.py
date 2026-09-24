@@ -74,7 +74,7 @@ class Scenario:
     # `load_seed` overrides which seed the "Load the seed" step presents (the
     # point of the wrong-seed case); `expected*` describe what the device should
     # do so the sample is useful to run on hardware.
-    pr: str = None                     # "1013" | "1032" | "1044" | "1040"
+    pr: str = None                     # "1013" | "1032" | "1044" | "1040" | "1046"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -176,6 +176,15 @@ TEST_PR_GROUPS = [
         "blurb": ("A key's derivation entry and the global xpub that derives it both name "
                   "a fingerprint. When they disagree the psbt contradicts itself and is "
                   "refused; an all-zero fingerprint is a missing value, not a second answer."),
+    },
+    {
+        "pr": "1046",
+        "label": "PR #1046: nested change with no redeem script",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1046",
+        "blurb": ("A nested single sig output may leave out its redeem script, which "
+                  "makes it look like plain p2sh and drops it out of the change check "
+                  "entirely. Such an output is now rebuilt from this seed and either "
+                  "counted as change or refused."),
     },
 ]
 
@@ -467,6 +476,49 @@ _PR1040_DEFS = [
 ]
 
 
+# PR #1046: nested single sig change whose redeem script is omitted. BIP-174 makes
+# that field optional and BlueWallet's BIP-49 wallets really do leave it out, so the
+# first case is an ordinary transaction rather than a forgery. The last three pin the
+# conditions that keep the new admission narrow; each must stay a plain spend, and
+# the PR notes its own suite does not cover them individually.
+_PR1046_DEFS = [
+    {"kind": "nested_change_no_redeem", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
+     "label": "Own change, redeem script omitted", "outcome": "change",
+     "screen": _CHANGE_OK_RESULT, "expected": _CHANGE_OK,
+     "blurb": ("Your own nested single sig change, with the optional redeem script left "
+               "out, which is what BlueWallet emits. Nothing is forged. Before the fix "
+               "the output looked like plain p2sh, missed the change check and was shown "
+               "as a payment out to a stranger; now it is counted as change.")},
+    {"kind": "nested_change_repointed", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
+     "label": "Claims your key, pays an attacker", "outcome": "refuse",
+     "screen": _ATTACK_SCREEN, "expected": _REFUSE,
+     "blurb": ("The same output with the redeem script still omitted, but the "
+               "scriptPubKey repointed at an attacker's nested address. The derivation "
+               "entry still truthfully names a key you own, so the claim and the script "
+               "contradict each other. Before the fix this passed as an ordinary "
+               "external spend and the contradiction was never looked at.")},
+    {"kind": "bare_p2sh_unclaimed", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
+     "label": "Bare p2sh claiming nobody", "outcome": "spend",
+     "screen": _SPEND_RESULT, "expected": _SPEND,
+     "blurb": ("A bare p2sh output with no derivation entries at all. There is no claim "
+               "on your seed to verify, so the output is not admitted to the change "
+               "check and stays a plain payment out, before and after the fix.")},
+    {"kind": "bare_p2sh_two_entries", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
+     "label": "Bare p2sh listing two of your keys", "outcome": "spend",
+     "screen": _SPEND_RESULT, "expected": _SPEND,
+     "blurb": ("A bare p2sh output listing two derivation entries, both genuinely yours. "
+               "The one-entry condition exists to avoid a false alarm rather than to "
+               "catch anything: admitting this would end the review on a surplus-paths "
+               "warning. It stays a payment out.")},
+    {"kind": "p2sh_multisig_output", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
+     "label": "Legacy p2sh multisig output", "outcome": "spend",
+     "screen": _SPEND_RESULT, "expected": _SPEND,
+     "blurb": ("A legacy p2sh multisig output paid from this nested single sig wallet. "
+               "It supplies its own redeem script, so its policy carries m-of-n and the "
+               "new admission does not apply. It stays a payment out.")},
+]
+
+
 def _make_pr_test(pr, d):
     info = script_types.get(d["script_type"])
     base_wallet = WALLET_FOR_SCRIPT_TYPE[d["script_type"]]
@@ -497,4 +549,6 @@ def test_scenarios() -> list:
     out.extend(_make_pr_test("1044", d) for d in _PR1044_DEFS)
     # PR #1040: the two fingerprint records for a key must agree.
     out.extend(_make_pr_test("1040", d) for d in _PR1040_DEFS)
+    # PR #1046: nested single sig change that leaves out its redeem script.
+    out.extend(_make_pr_test("1046", d) for d in _PR1046_DEFS)
     return out

@@ -806,6 +806,111 @@ def _pr1040_mismatch_beneath_contradiction(signers, network, num_inputs, thresho
     return psbt
 
 
+# --- PR #1046: nested single sig change that omits its redeem script ---------
+#
+# A p2sh-p2wpkh output's scriptPubKey is a bare p2sh hash, and BIP-174 leaves the
+# redeem script optional on an output. Omit it and _get_policy types the output as
+# plain p2sh, which does not match a p2sh-p2wpkh wallet policy, so the output never
+# reaches the ownership check at all. BlueWallet's BIP-49 wallets really do emit
+# psbts this shape, so the first case below is an ordinary transaction, not a
+# forgery.
+#
+# #1046 admits such an output as a change candidate on five conditions: the inputs
+# are p2sh-p2wpkh, the output is bare p2sh, it is not multisig, it lists exactly
+# one derivation entry, and that entry is verified as ours. The redeem script is
+# never needed as evidence, because the parser rebuilds p2sh(p2wpkh(K)) from the
+# seed itself and compares that to the committed scriptPubKey.
+#
+# Two outcomes follow, and the first two builders cover them: our own change stops
+# being reported as a payment out, and an output that keeps a true claim on this
+# seed while repointing its scriptPubKey is refused instead of passing silently.
+#
+# The last three builders pin the narrowing conditions, each of which must leave
+# the output a plain spend. The PR notes its own suite does not pin them
+# individually, since no fixture there pays a legacy p2sh multisig or an unclaimed
+# p2sh output under p2sh-p2wpkh inputs.
+
+
+def _nested_change_output(signers, num_inputs):
+    """A nested single sig psbt and its change output, with the redeem script
+    dropped. That one omission is what every case here is built on."""
+    psbt = build_psbt(signers, "P2SH-P2WPKH", num_inputs, "change")
+    out = psbt.outputs[_change_output_index(psbt)]
+    out.redeem_script = None
+    return psbt, out
+
+
+def _pr1046_nested_change_no_redeem(signers, network, num_inputs):
+    """Our own nested single sig change, with the redeem script omitted.
+
+    Nothing is forged: the scriptPubKey is the wallet's real change address and the
+    lone derivation entry truthfully claims our key. Only the optional redeem
+    script is absent, which is what BlueWallet emits. Before #1046 the output typed
+    as bare p2sh, missed the change check and was displayed as a payment out to a
+    stranger; with it the rebuild matches and it counts as change.
+    """
+    psbt, _ = _nested_change_output(signers, num_inputs)
+    return psbt
+
+
+def _pr1046_nested_change_repointed(signers, network, num_inputs):
+    """The same output, repointed at an attacker while keeping our claim.
+
+    The redeem script is still omitted, the derivation entry still truthfully names
+    a key we own, but the scriptPubKey now commits to p2sh(p2wpkh(attacker)). The
+    rebuild from our seed cannot match it, so the claim and the script contradict
+    each other. Before #1046 this passed as an ordinary external spend, with the
+    contradiction never looked at.
+    """
+    psbt, out = _nested_change_output(signers, num_inputs)
+    out.script_pubkey = script.p2sh(script.p2wpkh(
+        _attacker_pubkey(network, CHANGE_BRANCH, 0)))
+    return psbt
+
+
+def _pr1046_bare_p2sh_unclaimed(signers, network, num_inputs):
+    """A bare p2sh output claiming nobody, under p2sh-p2wpkh inputs.
+
+    Pins the "that one key must be ours" condition. With the derivation entries
+    dropped there is no claim to verify, so the output is not admitted and stays a
+    plain spend, before and after the fix.
+    """
+    psbt, out = _nested_change_output(signers, num_inputs)
+    out.bip32_derivations.clear()
+    return psbt
+
+
+def _pr1046_bare_p2sh_two_entries(signers, network, num_inputs):
+    """A bare p2sh output listing two derivation entries, both genuinely ours.
+
+    Pins the "exactly one entry" condition, which exists to avoid a false refusal
+    rather than to catch anything: the single sig arm raises
+    PSBTSurplusDerivationPathsError on an output claiming more than one path, so
+    admitting this one would end the review on a warning screen. It stays a spend.
+    """
+    psbt, out = _nested_change_output(signers, num_inputs)
+    victim = signers[0]
+    out.bip32_derivations[_victim_key(victim, RECEIVE_BRANCH, 0)] = DerivationPath(
+        bytes.fromhex(victim.fingerprint), _forged_path(victim, RECEIVE_BRANCH, 0))
+    return psbt
+
+
+def _pr1046_p2sh_multisig_output(signers, network, num_inputs):
+    """A legacy p2sh multisig output under p2sh-p2wpkh inputs.
+
+    Pins the m-of-n exclusion. The output supplies its multisig redeem script, so
+    its policy carries m-of-n and the admission does not apply; legacy p2sh
+    multisig keeps its own path, which has a redeem script to work from. It stays
+    a spend.
+    """
+    psbt, out = _nested_change_output(signers, num_inputs)
+    multisig_script = _attacker_multisig_script(network, 2, 3)
+    out.redeem_script = multisig_script
+    out.witness_script = None
+    out.script_pubkey = script.p2sh(multisig_script)
+    return psbt
+
+
 _TEST_BUILDERS = {
     "contradiction_singlesig": _d5_contradiction_singlesig,
     "contradiction_pays_us_claims_other": _d5_contradiction_pays_us_claims_other,
@@ -835,6 +940,11 @@ _TEST_BUILDERS = {
     "cosigner_mismatch_no_xpubs": _pr1040_cosigner_mismatch_no_xpubs,
     "singlesig_xpub_mismatch": _pr1040_singlesig_xpub_mismatch,
     "mismatch_beneath_contradiction": _pr1040_mismatch_beneath_contradiction,
+    "nested_change_no_redeem": _pr1046_nested_change_no_redeem,
+    "nested_change_repointed": _pr1046_nested_change_repointed,
+    "bare_p2sh_unclaimed": _pr1046_bare_p2sh_unclaimed,
+    "bare_p2sh_two_entries": _pr1046_bare_p2sh_two_entries,
+    "p2sh_multisig_output": _pr1046_p2sh_multisig_output,
 }
 
 # Kinds that need the wallet threshold passed through (multisig builders).
@@ -853,7 +963,7 @@ def build_test_psbt(kind: str, signers: list, script_type: str,
                     network: str = "main", num_inputs: int = 3, threshold: int = None):
     """The PSBT for one test scenario, by its `attack` kind. Covers every PR:
     #1013's two forgeries and its honest wrong-seed psbt, then the per-output
-    builders for #1032, #1044, and #1040."""
+    builders for #1032, #1044, #1040, and #1046."""
     if kind in ("fake_change", "bad_input"):
         return build_attack_psbt(kind, signers, script_type, network, num_inputs, threshold)
     if kind == "wrong_seed":
