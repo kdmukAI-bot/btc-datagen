@@ -18,6 +18,7 @@ Both are built for both networks.
 from dataclasses import dataclass, field
 
 from common import script_types
+from common.attack_psbt import PR1047_CASES
 
 DEFAULT_NUM_INPUTS = 3
 
@@ -74,7 +75,7 @@ class Scenario:
     # `load_seed` overrides which seed the "Load the seed" step presents (the
     # point of the wrong-seed case); `expected*` describe what the device should
     # do so the sample is useful to run on hardware.
-    pr: str = None                     # "1013" | "1032" | "1044" | "1040" | "1046"
+    pr: str = None                     # "1013" | "1032" | "1044" | "1040" | "1046" | "1047"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -183,8 +184,17 @@ TEST_PR_GROUPS = [
         "url": "https://github.com/seedsigner/seedsigner/pull/1046",
         "blurb": ("A nested single sig output may leave out its redeem script, which "
                   "makes it look like plain p2sh and drops it out of the change check "
-                  "entirely. Such an output is now rebuilt from this seed and either "
-                  "counted as change or refused."),
+                  "entirely. Such an output is now rebuilt from this seed, whatever the "
+                  "psbt claims about it, and either counted as change or refused."),
+    },
+    {
+        "pr": "1047",
+        "label": "PR #1047: input scripts",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1047",
+        "blurb": ("A p2sh or p2wsh input commits to a script by its hash, so the psbt has "
+                  "to supply that script and it has to hash correctly. An input carrying "
+                  "a missing, wrong, or extra script is refused, whoever the input "
+                  "belongs to."),
     },
 ]
 
@@ -478,9 +488,11 @@ _PR1040_DEFS = [
 
 # PR #1046: nested single sig change whose redeem script is omitted. BIP-174 makes
 # that field optional and BlueWallet's BIP-49 wallets really do leave it out, so the
-# first case is an ordinary transaction rather than a forgery. The last three pin the
-# conditions that keep the new admission narrow; each must stay a plain spend, and
-# the PR notes its own suite does not cover them individually.
+# first case is an ordinary transaction rather than a forgery. Candidacy rests on
+# three conditions: nested single sig inputs, an output that parses as plain p2sh,
+# and an output that omits its redeem script. The last three cases pin those, each
+# paying another wallet of this same seed so that the condition under test is the
+# only thing keeping the output a spend.
 _PR1046_DEFS = [
     {"kind": "nested_change_no_redeem", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
      "label": "Own change, redeem script omitted", "outcome": "change",
@@ -497,25 +509,158 @@ _PR1046_DEFS = [
                "entry still truthfully names a key you own, so the claim and the script "
                "contradict each other. Before the fix this passed as an ordinary "
                "external spend and the contradiction was never looked at.")},
+    {"kind": "nested_change_pays_us_lists_other", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
+     "label": "Pays your key, names someone else's", "outcome": "refuse",
+     "screen": _ATTACK_SCREEN, "expected": _REFUSE,
+     "blurb": ("The mirror of the last one: the output really is your change address, "
+               "but its entry names a stranger's key and fingerprint at the same path. "
+               "The rebuild uses the path, not the name, so the output is reached and "
+               "the disagreement refused. Earlier builds, including the first revision "
+               "of this PR, showed it as a payment out to your own address.")},
+    {"kind": "bare_p2sh_two_entries", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
+     "label": "Bare p2sh listing two of your keys", "outcome": "refuse",
+     "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("A bare p2sh output listing two derivation entries, both genuinely yours. "
+               "One key cannot own two paths, so once the output is admitted the single "
+               "sig surplus check refuses it. The first revision of this PR kept it out "
+               "of the rebuild entirely and showed it as a payment out.")},
     {"kind": "bare_p2sh_unclaimed", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
      "label": "Bare p2sh claiming nobody", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
-     "blurb": ("A bare p2sh output with no derivation entries at all. There is no claim "
-               "on your seed to verify, so the output is not admitted to the change "
-               "check and stays a plain payment out, before and after the fix.")},
-    {"kind": "bare_p2sh_two_entries", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
-     "label": "Bare p2sh listing two of your keys", "outcome": "spend",
+     "blurb": ("A bare p2sh output with no derivation entries at all. It meets every "
+               "condition and is admitted, but with no path to derive from there is "
+               "nothing to compare against the scriptPubKey. Being admitted is not "
+               "being proved: it stays a payment out.")},
+    {"kind": "other_wallet_nested_output", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Native segwit inputs paying your nested wallet", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
-     "blurb": ("A bare p2sh output listing two derivation entries, both genuinely yours. "
-               "The one-entry condition exists to avoid a false alarm rather than to "
-               "catch anything: admitting this would end the review on a surplus-paths "
-               "warning. It stays a payment out.")},
-    {"kind": "p2sh_multisig_output", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
-     "label": "Legacy p2sh multisig output", "outcome": "spend",
+     "blurb": ("A payment from your native segwit wallet to your own nested segwit "
+               "wallet, with the output's redeem script omitted. The output looks "
+               "exactly like the admitted case, but the inputs are not nested single "
+               "sig, so there is no rebuild to attempt. A payment out, correctly.")},
+    {"kind": "other_wallet_native_output", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
+     "label": "Nested inputs paying your native segwit wallet", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
-     "blurb": ("A legacy p2sh multisig output paid from this nested single sig wallet. "
-               "It supplies its own redeem script, so its policy carries m-of-n and the "
-               "new admission does not apply. It stays a payment out.")},
+     "blurb": ("A payment from your nested wallet to your own native segwit wallet. That "
+               "output names its key directly rather than hiding it behind a script "
+               "hash, so it never looks like plain p2sh and the exception does not "
+               "apply. A payment out, correctly.")},
+    {"kind": "other_wallet_legacy_multisig_output", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
+     "label": "Nested inputs paying a multisig you are in", "outcome": "spend",
+     "screen": _SPEND_RESULT, "expected": _SPEND,
+     "blurb": ("A payment from your nested wallet to a legacy 2-of-3 you are a cosigner "
+               "of. It parses as plain p2sh just like the admitted case, but it supplies "
+               "its redeem script, and a supplied script is exactly what the exception "
+               "exists to cover the absence of. A payment out, correctly.")},
+]
+
+
+# PR #1047: every input must supply exactly the scripts its scriptPubKey commits to.
+# The script type is not a free choice here, it is the variable under test, so each
+# case reads its type from PR1047_CASES in common/attack_psbt.py rather than
+# repeating it. `before` is what a pre-#1047 build did with the same psbt, measured
+# at #1046's head; it goes at the end of every blurb because that is what tells a
+# tester whether the build in front of them has the fix.
+_PR1047_MIXED = ("Before the fix the input's apparent type changed with the script "
+                 "gone, so it aborted on \"Mixed inputs in the transaction\" instead.")
+_PR1047_CRASH = ("Before the fix the extra witness script made the parser read this as "
+                 "nested segwit multisig and then fail inside embit with a raw "
+                 "\"Not a multisig script\" error.")
+_PR1047_SILENT = "Before the fix the psbt parsed and the transaction was reviewed as normal."
+
+_PR1047_DEFS = [
+    # --- a script the input commits to is absent (correctness problem) -------
+    {"kind": "missing_witness_p2wsh", "label": "Witness script omitted",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("A native segwit multisig input whose witness script is left out. The "
+               "scriptPubKey is only a hash of it, so with the script gone there is "
+               "nothing to check and nothing to read the wallet policy from. " + _PR1047_MIXED)},
+    {"kind": "missing_redeem_p2sh", "label": "Redeem script omitted",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("A legacy p2sh multisig input with no redeem script. For legacy p2sh the "
+               "redeem script is the multisig itself, so this is the whole script the "
+               "input spends with. " + _PR1047_MIXED)},
+    {"kind": "missing_redeem_nested_singlesig", "label": "Redeem script omitted",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("A nested single sig input with no redeem script. Note this is the input "
+               "side of the same omission PR #1046 handles on an output, where leaving "
+               "it out is legal; on an input it is the one thing being checked. " + _PR1047_MIXED)},
+    {"kind": "missing_witness_nested_multisig", "label": "Witness script omitted",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("A nested segwit multisig input missing the second of its two layers. The "
+               "redeem script is present and commits to a witness script that is not "
+               "there. " + _PR1047_CRASH)},
+    {"kind": "missing_redeem_nested_multisig", "label": "Redeem script omitted",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("The same input missing its outer layer instead. This one is inert: the "
+               "signature and the wallet policy both read the witness script, which is "
+               "still correct, so nothing downstream is affected. It is refused because "
+               "a rule about which script matters would move with the policy code. " + _PR1047_SILENT)},
+
+    # --- a supplied script hashes to the wrong value (attack) ----------------
+    {"kind": "wrong_witness_p2wsh", "label": "Witness script is a stranger's",
+     "outcome": "refuse", "screen": _ATTACK_SCREEN, "expected": _REFUSE,
+     "blurb": ("A native segwit multisig input supplying a 2-of-3 that holds none of "
+               "your keys. It does not hash to the scriptPubKey, so the input's own "
+               "account of what it spends contradicts itself. " + _PR1047_SILENT)},
+    {"kind": "wrong_redeem_p2sh", "label": "Redeem script is a stranger's",
+     "outcome": "refuse", "screen": _ATTACK_SCREEN, "expected": _REFUSE,
+     "blurb": ("A legacy p2sh multisig input supplying a stranger's 2-of-3 as its redeem "
+               "script. " + _PR1047_SILENT)},
+    {"kind": "wrong_redeem_nested_singlesig", "label": "Redeem script is a stranger's",
+     "outcome": "refuse", "screen": _ATTACK_SCREEN, "expected": _REFUSE,
+     "blurb": ("A nested single sig input whose redeem script wraps a key you do not "
+               "own. " + _PR1047_SILENT)},
+    {"kind": "wrong_witness_nested_multisig", "label": "Witness script is a stranger's",
+     "outcome": "refuse", "screen": _ATTACK_SCREEN, "expected": _REFUSE,
+     "blurb": ("A nested segwit multisig input whose witness script does not hash to the "
+               "redeem script that is supplied beside it. The inner of the two layers "
+               "fails. " + _PR1047_SILENT)},
+    {"kind": "wrong_redeem_nested_multisig", "label": "Redeem script is a stranger's",
+     "outcome": "refuse", "screen": _ATTACK_SCREEN, "expected": _REFUSE,
+     "blurb": ("The outer layer failing instead: the redeem script does not hash to the "
+               "scriptPubKey. Inert for the same reason as the omitted redeem script "
+               "above, and refused anyway. " + _PR1047_SILENT)},
+
+    # --- a script the input commits to nowhere (ungraded) --------------------
+    {"kind": "extra_witness_p2sh", "label": "Extra witness script",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("A legacy p2sh multisig input with a witness script added. Legacy p2sh "
+               "commits to no witness script, so there is no hash it could be checked "
+               "against. This is the shape that distorts the wallet policy. " + _PR1047_CRASH)},
+    {"kind": "extra_redeem_p2wpkh", "label": "Extra redeem script",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("A native segwit input with a redeem script added. The scriptPubKey names "
+               "the key directly and commits to no script at all. " + _PR1047_SILENT)},
+    {"kind": "extra_witness_nested_singlesig", "label": "Extra witness script",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("A nested single sig input with a witness script added. Its redeem script "
+               "is a p2wpkh, not a script hash, so nothing commits to a witness "
+               "script. " + _PR1047_CRASH)},
+    {"kind": "extra_redeem_p2wsh", "label": "Extra redeem script",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("A native segwit multisig input with a redeem script added. Native segwit "
+               "has no p2sh layer to commit to one. Inert, and refused because a script "
+               "outside the input's commitments is provably foreign to it. " + _PR1047_SILENT)},
+
+    # --- the rule applies to another party's input too -----------------------
+    {"kind": "payjoin_ok", "label": "Collaborative spend, well formed",
+     "outcome": "change", "screen": _CHANGE_OK_RESULT, "expected": _CHANGE_OK,
+     "blurb": ("Two inputs: yours, and another party's that claims none of your keys, as "
+               "a payjoin would. Every script is correct. Nothing should be refused "
+               "here; this is the case that shows the new check leaves an honest "
+               "collaborative spend alone.")},
+    {"kind": "payjoin_missing_redeem", "label": "Their input omits its redeem script",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("The same collaborative spend with the other party's redeem script left "
+               "out. Whose input it is rests on the psbt's own claims, so exempting "
+               "another party's input would let a coordinator claim the exemption for "
+               "any input by stripping its derivation paths. " + _PR1047_MIXED)},
+    {"kind": "payjoin_wrong_redeem", "label": "Their input supplies the wrong script",
+     "outcome": "refuse", "screen": _ATTACK_SCREEN, "expected": _REFUSE,
+     "blurb": ("The other party's redeem script built from their next address rather "
+               "than the one their scriptPubKey commits to. Checked exactly as your own "
+               "input would be. " + _PR1047_SILENT)},
 ]
 
 
@@ -551,4 +696,12 @@ def test_scenarios() -> list:
     out.extend(_make_pr_test("1040", d) for d in _PR1040_DEFS)
     # PR #1046: nested single sig change that leaves out its redeem script.
     out.extend(_make_pr_test("1046", d) for d in _PR1046_DEFS)
+    # PR #1047: an input must supply exactly the scripts it commits to. The script
+    # type and the family label come from PR1047_CASES so they cannot drift from the
+    # psbt each builder produces.
+    for d in _PR1047_DEFS:
+        script_type = PR1047_CASES[d["kind"]][0]
+        out.append(_make_pr_test("1047", dict(
+            d, script_type=script_type,
+            family=script_types.get(script_type).label)))
     return out

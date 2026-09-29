@@ -34,6 +34,8 @@ it can say anything, and only re-derivation settles ownership.
 Throwaway keys only; none of this is signable into a broadcastable transaction.
 """
 import hashlib
+from copy import deepcopy
+from functools import partial
 
 from embit import bip32, script
 from embit.networks import NETWORKS
@@ -815,20 +817,27 @@ def _pr1040_mismatch_beneath_contradiction(signers, network, num_inputs, thresho
 # psbts this shape, so the first case below is an ordinary transaction, not a
 # forgery.
 #
-# #1046 admits such an output as a change candidate on five conditions: the inputs
-# are p2sh-p2wpkh, the output is bare p2sh, it is not multisig, it lists exactly
-# one derivation entry, and that entry is verified as ours. The redeem script is
-# never needed as evidence, because the parser rebuilds p2sh(p2wpkh(K)) from the
-# seed itself and compares that to the committed scriptPubKey.
+# #1046 admits such an output as a change candidate on three conditions: the inputs
+# are p2sh-p2wpkh, the output parses as plain p2sh, and the output omits its redeem
+# script. The redeem script is never needed as evidence, because the parser rebuilds
+# p2sh(p2wpkh(K)) from the seed itself and compares that to the committed
+# scriptPubKey.
 #
-# Two outcomes follow, and the first two builders cover them: our own change stops
-# being reported as a payment out, and an output that keeps a true claim on this
-# seed while repointing its scriptPubKey is refused instead of passing silently.
+# The candidacy test reads nothing about who the output claims. An earlier revision
+# also required exactly one derivation entry and required that entry to verify as
+# ours; both were dropped, because the rebuild derives our key from the entry's path
+# whatever fingerprint the entry lists. So an output paying our key under someone
+# else's name is now reached and refused rather than shown as a payment out, and an
+# output annotated with several keys reaches the single sig surplus check.
 #
-# The last three builders pin the narrowing conditions, each of which must leave
-# the output a plain spend. The PR notes its own suite does not pin them
-# individually, since no fixture there pays a legacy p2sh multisig or an unclaimed
-# p2sh output under p2sh-p2wpkh inputs.
+# Three outcomes follow, covered by the first three builders: our own change stops
+# being reported as a payment out, an output that keeps a true claim on this seed
+# while repointing its scriptPubKey is refused, and so is one that pays us while
+# naming another key.
+#
+# The remaining builders pin the three conditions. Each pays another wallet of this
+# same seed, annotated truthfully, and each fails exactly one condition, so each
+# must stay a plain spend.
 
 
 def _nested_change_output(signers, num_inputs):
@@ -871,9 +880,9 @@ def _pr1046_nested_change_repointed(signers, network, num_inputs):
 def _pr1046_bare_p2sh_unclaimed(signers, network, num_inputs):
     """A bare p2sh output claiming nobody, under p2sh-p2wpkh inputs.
 
-    Pins the "that one key must be ours" condition. With the derivation entries
-    dropped there is no claim to verify, so the output is not admitted and stays a
-    plain spend, before and after the fix.
+    Meets all three conditions, so it is admitted as a candidate, but with no
+    derivation entries there is no path to rebuild a key from and nothing to compare
+    to the scriptPubKey. Admission is not proof: the output stays a plain spend.
     """
     psbt, out = _nested_change_output(signers, num_inputs)
     out.bip32_derivations.clear()
@@ -883,10 +892,9 @@ def _pr1046_bare_p2sh_unclaimed(signers, network, num_inputs):
 def _pr1046_bare_p2sh_two_entries(signers, network, num_inputs):
     """A bare p2sh output listing two derivation entries, both genuinely ours.
 
-    Pins the "exactly one entry" condition, which exists to avoid a false refusal
-    rather than to catch anything: the single sig arm raises
-    PSBTSurplusDerivationPathsError on an output claiming more than one path, so
-    admitting this one would end the review on a warning screen. It stays a spend.
+    An earlier revision kept this out of the rebuild by requiring exactly one entry.
+    That condition is gone, so the output is admitted and the single sig arm refuses
+    it with PSBTSurplusDerivationPathsError: one key cannot own two paths.
     """
     psbt, out = _nested_change_output(signers, num_inputs)
     victim = signers[0]
@@ -895,20 +903,229 @@ def _pr1046_bare_p2sh_two_entries(signers, network, num_inputs):
     return psbt
 
 
-def _pr1046_p2sh_multisig_output(signers, network, num_inputs):
-    """A legacy p2sh multisig output under p2sh-p2wpkh inputs.
+def _pr1046_pays_us_lists_other(signers, network, num_inputs):
+    """Pays our key, but the entry names someone else's key at the same path.
 
-    Pins the m-of-n exclusion. The output supplies its multisig redeem script, so
-    its policy carries m-of-n and the admission does not apply; legacy p2sh
-    multisig keeps its own path, which has a redeem script to work from. It stays
-    a spend.
+    The redeem script is omitted and the scriptPubKey is still our real change
+    address, so the rebuild from our seed matches it. Only the derivation entry is
+    swapped, for a stranger's key and fingerprint at the same path. The candidacy
+    test reads none of that, so the output is reached and the mismatch between what
+    it pays and what it claims is refused. An earlier revision required the entry to
+    verify as ours, which kept this output out of the rebuild entirely and left it
+    displayed as a payment out to the user's own address.
     """
     psbt, out = _nested_change_output(signers, num_inputs)
-    multisig_script = _attacker_multisig_script(network, 2, 3)
-    out.redeem_script = multisig_script
-    out.witness_script = None
-    out.script_pubkey = script.p2sh(multisig_script)
+    claimed_path = next(iter(out.bip32_derivations.values())).derivation
+    out.bip32_derivations.clear()
+    out.bip32_derivations[_attacker_pubkey(network, CHANGE_BRANCH, 0)] = DerivationPath(
+        _attacker_fingerprint(network), claimed_path)
     return psbt
+
+
+def _pr1046_repoint_at_wallet(out, wallet_name: str):
+    """Rebuild `out` as the first change address of another wallet of this same
+    seed, annotated truthfully with that wallet's own derivation entries. Used for
+    the three condition controls, each of which pays somewhere the seed really owns
+    so the only thing keeping it a spend is the condition under test."""
+    from common.fixtures import load_seeds, load_wallets, wallet_cosigners
+    from common.psbt import _ScriptContext
+
+    wallet = load_wallets()[wallet_name]
+    ctx = _ScriptContext(wallet_cosigners(wallet, load_seeds()), wallet["threshold"],
+                         wallet["script_type"], CHANGE_BRANCH, 0)
+    out.script_pubkey = ctx.script_pubkey
+    out.redeem_script = None
+    out.witness_script = None
+    out.bip32_derivations.clear()
+    out.taproot_bip32_derivations.clear()
+    ctx.apply_to_output(out)
+    return out
+
+
+def _pr1046_other_wallet_nested_output(signers, network, num_inputs):
+    """Fails the inputs condition: native segwit inputs paying this seed's nested
+    wallet, with the output's redeem script omitted. The output looks exactly like
+    the admitted case, but the inputs are not nested single sig, so there is no
+    p2sh-p2wpkh rebuild to try. A spend."""
+    psbt = build_psbt(signers, "P2WPKH", num_inputs, "change")
+    out = _pr1046_repoint_at_wallet(psbt.outputs[_change_output_index(psbt)],
+                                    "ss_nested_segwit")
+    out.redeem_script = None
+    return psbt
+
+
+def _pr1046_other_wallet_native_output(signers, network, num_inputs):
+    """Fails the output type condition: nested single sig inputs paying this seed's
+    native segwit wallet. A p2wpkh scriptPubKey names its key directly, so it never
+    parses as plain p2sh and the outlier does not apply. A spend."""
+    psbt, out = _nested_change_output(signers, num_inputs)
+    _pr1046_repoint_at_wallet(out, "ss_native_segwit")
+    return psbt
+
+
+def _pr1046_other_wallet_legacy_multisig_output(signers, network, num_inputs):
+    """Fails the redeem script condition: nested single sig inputs paying a legacy
+    p2sh multisig this seed is a cosigner of. It parses as plain p2sh like the
+    admitted case, but it supplies its redeem script, which is what the outlier is
+    there to cover the absence of. A spend."""
+    psbt, out = _nested_change_output(signers, num_inputs)
+    _pr1046_repoint_at_wallet(out, "2of3_p2sh")
+    return psbt
+
+
+# --- PR #1047: an input must supply exactly the scripts it commits to --------
+#
+# A p2sh or p2wsh scriptPubKey holds only a hash of the script the input spends
+# with, so BIP-174 asks the signer to supply that script and check the hash.
+# Nested segwit multisig has two layers: the redeem script is itself a hash of the
+# witness script. #1047 adds _verify_input_scripts, which runs on every input
+# before the wallet policy is read, and refuses three shapes:
+#
+#   PSBTMissingInputScriptError     a script the input commits to is absent
+#   PSBTInputScriptMismatchError    a supplied script hashes to the wrong value
+#   PSBTExtraneousInputScriptError  a script the input commits to nowhere
+#
+# Only the mismatch is graded as an attack; the other two are correctness
+# problems. Outputs are deliberately exempt, since an honest payment to a
+# stranger's p2wsh carries no witness script.
+#
+# Nothing here is a plausible coordinator product: these are malformed psbts, and
+# the PR identifies no honest emitter of any of them. What makes them worth
+# running on hardware is how differently a pre-#1047 build treats them. Measured
+# at #1046's head, the same three refusals land in three different places:
+#
+#   * "Mixed inputs in the transaction", because dropping a script changes the
+#     input's apparent type and it stops matching the untouched inputs;
+#   * a raw ValueError out of embit ("Not a multisig script"), because an
+#     extraneous witness script makes _get_policy read a p2sh input as nested
+#     segwit and then parse a multisig out of whatever it finds;
+#   * nothing at all: the psbt parses and the transaction is reviewed as normal,
+#     which is the case for every wrong-script shape.
+#
+# Each scenario's blurb in common/scenarios.py names which of the three it was.
+
+
+# The extraneous script's content is irrelevant to the check, so the cases that add
+# one use the shortest valid script there is.
+_PR1047_ARBITRARY_SCRIPT = script.Script(b"\x51")   # OP_TRUE
+
+
+def _pr1047_base(signers, script_type, num_inputs, threshold):
+    """A genuine psbt of the given type, plus its first input to tamper with."""
+    psbt = build_psbt(signers, script_type, num_inputs, "change", threshold=threshold)
+    return psbt, psbt.inputs[0]
+
+
+def _pr1047_foreign_script(script_type: str, field: str, network: str):
+    """A script of the right shape for `field` but built from keys nobody owns, so
+    it fails the hash it is checked against rather than being malformed."""
+    foreign_multisig = _attacker_multisig_script(network, 2, 3)
+    if field == "witness_script":
+        # Checked against the scriptPubKey (p2wsh) or the redeem script (p2sh-p2wsh);
+        # either way the witness script itself is the multisig.
+        return foreign_multisig
+    if script_type == "P2SH":
+        # Legacy p2sh multisig: the multisig script IS the redeem script.
+        return foreign_multisig
+    if script_type == "P2SH-P2WSH":
+        return script.p2wsh(foreign_multisig)
+    # P2SH-P2WPKH: the redeem script is a p2wpkh of the single key.
+    return script.p2wpkh(_attacker_pubkey(network, RECEIVE_BRANCH, 0))
+
+
+def _pr1047_omit(signers, network, num_inputs, threshold=None, *, script_type, field):
+    """Drop a script the input commits to. Nothing is left to check the hash
+    against, so the field's absence alone is the refusal."""
+    psbt, inp = _pr1047_base(signers, script_type, num_inputs, threshold)
+    if getattr(inp, field) is None:
+        raise ValueError(f"{script_type} input has no {field} to omit")
+    setattr(inp, field, None)
+    return psbt
+
+
+def _pr1047_wrong(signers, network, num_inputs, threshold=None, *, script_type, field):
+    """Replace a committed script with a foreign one of the same shape. Every other
+    field is left alone, so only the hash comparison objects."""
+    psbt, inp = _pr1047_base(signers, script_type, num_inputs, threshold)
+    setattr(inp, field, _pr1047_foreign_script(script_type, field, network))
+    return psbt
+
+
+def _pr1047_extra(signers, network, num_inputs, threshold=None, *, script_type, field):
+    """Add a script this input type commits to nowhere, leaving the scripts it does
+    commit to intact so the check reaches the extraneous-script rule."""
+    psbt, inp = _pr1047_base(signers, script_type, num_inputs, threshold)
+    if getattr(inp, field) is not None:
+        raise ValueError(f"{script_type} input already supplies a {field}")
+    setattr(inp, field, _PR1047_ARBITRARY_SCRIPT)
+    return psbt
+
+
+def _pr1047_add_foreign_input(psbt, network):
+    """Append another party's nested single sig input, as a payjoin would: their
+    utxo, their key, their redeem script, and none of our derivation paths. Returns
+    the new input so a caller can tamper with it."""
+    foreign = deepcopy(psbt.inputs[0])
+    foreign.bip32_derivations.clear()
+    foreign.redeem_script = script.p2wpkh(_attacker_pubkey(network, RECEIVE_BRANCH, 50))
+    foreign.witness_utxo.script_pubkey = script.p2sh(foreign.redeem_script)
+    psbt.inputs.append(foreign)
+    return foreign
+
+
+def _pr1047_payjoin_ok(signers, network, num_inputs, threshold=None, *,
+                       script_type="P2SH-P2WPKH", field=None):
+    """A well formed collaborative spend: another party's input beside ours, with
+    its own correct redeem script. The control for the two below, and the case that
+    proves the new check does not refuse an honest payjoin."""
+    psbt, _ = _pr1047_base(signers, script_type, num_inputs, threshold)
+    _pr1047_add_foreign_input(psbt, network)
+    return psbt
+
+
+def _pr1047_payjoin_omit(signers, network, num_inputs, threshold=None, *,
+                         script_type="P2SH-P2WPKH", field=None):
+    """The other party's input with its redeem script omitted."""
+    psbt, _ = _pr1047_base(signers, script_type, num_inputs, threshold)
+    _pr1047_add_foreign_input(psbt, network).redeem_script = None
+    return psbt
+
+
+def _pr1047_payjoin_wrong(signers, network, num_inputs, threshold=None, *,
+                          script_type="P2SH-P2WPKH", field=None):
+    """The other party's input with a redeem script built from their next address
+    rather than the one its scriptPubKey commits to."""
+    psbt, _ = _pr1047_base(signers, script_type, num_inputs, threshold)
+    foreign = _pr1047_add_foreign_input(psbt, network)
+    foreign.redeem_script = script.p2wpkh(_attacker_pubkey(network, RECEIVE_BRANCH, 51))
+    return psbt
+
+
+# kind -> (script_type, builder, tampered field). The script type is read from here
+# by common/scenarios.py too, so a scenario can never disagree with the psbt its
+# builder produces. Ordered by refusal, then by script type within each.
+PR1047_CASES = {
+    "missing_witness_p2wsh":           ("P2WSH", _pr1047_omit, "witness_script"),
+    "missing_redeem_p2sh":             ("P2SH", _pr1047_omit, "redeem_script"),
+    "missing_redeem_nested_singlesig": ("P2SH-P2WPKH", _pr1047_omit, "redeem_script"),
+    "missing_witness_nested_multisig": ("P2SH-P2WSH", _pr1047_omit, "witness_script"),
+    "missing_redeem_nested_multisig":  ("P2SH-P2WSH", _pr1047_omit, "redeem_script"),
+
+    "wrong_witness_p2wsh":             ("P2WSH", _pr1047_wrong, "witness_script"),
+    "wrong_redeem_p2sh":               ("P2SH", _pr1047_wrong, "redeem_script"),
+    "wrong_redeem_nested_singlesig":   ("P2SH-P2WPKH", _pr1047_wrong, "redeem_script"),
+    "wrong_witness_nested_multisig":   ("P2SH-P2WSH", _pr1047_wrong, "witness_script"),
+    "wrong_redeem_nested_multisig":    ("P2SH-P2WSH", _pr1047_wrong, "redeem_script"),
+
+    "extra_witness_p2sh":              ("P2SH", _pr1047_extra, "witness_script"),
+    "extra_redeem_p2wpkh":             ("P2WPKH", _pr1047_extra, "redeem_script"),
+    "extra_witness_nested_singlesig":  ("P2SH-P2WPKH", _pr1047_extra, "witness_script"),
+    "extra_redeem_p2wsh":              ("P2WSH", _pr1047_extra, "redeem_script"),
+
+    "payjoin_ok":                      ("P2SH-P2WPKH", _pr1047_payjoin_ok, None),
+    "payjoin_missing_redeem":          ("P2SH-P2WPKH", _pr1047_payjoin_omit, None),
+    "payjoin_wrong_redeem":            ("P2SH-P2WPKH", _pr1047_payjoin_wrong, None),
+}
 
 
 _TEST_BUILDERS = {
@@ -944,7 +1161,10 @@ _TEST_BUILDERS = {
     "nested_change_repointed": _pr1046_nested_change_repointed,
     "bare_p2sh_unclaimed": _pr1046_bare_p2sh_unclaimed,
     "bare_p2sh_two_entries": _pr1046_bare_p2sh_two_entries,
-    "p2sh_multisig_output": _pr1046_p2sh_multisig_output,
+    "nested_change_pays_us_lists_other": _pr1046_pays_us_lists_other,
+    "other_wallet_nested_output": _pr1046_other_wallet_nested_output,
+    "other_wallet_native_output": _pr1046_other_wallet_native_output,
+    "other_wallet_legacy_multisig_output": _pr1046_other_wallet_legacy_multisig_output,
 }
 
 # Kinds that need the wallet threshold passed through (multisig builders).
@@ -958,12 +1178,23 @@ _MULTISIG_KINDS = {"contradiction_multisig", "contradiction_multisig_unclaimed",
                    "cosigner_mismatch", "cosigner_mismatch_input", "cosigner_missing",
                    "cosigner_mismatch_no_xpubs", "mismatch_beneath_contradiction"}
 
+# PR #1047's kinds are registered from PR1047_CASES rather than listed by hand, so
+# the builder, the script type and the threshold requirement all come from the one
+# table above.
+for _kind, (_script_type, _builder, _field) in PR1047_CASES.items():
+    _kwargs = {"script_type": _script_type}
+    if _field is not None:
+        _kwargs["field"] = _field
+    _TEST_BUILDERS[_kind] = partial(_builder, **_kwargs)
+    if script_types.get(_script_type).is_multisig:
+        _MULTISIG_KINDS.add(_kind)
+
 
 def build_test_psbt(kind: str, signers: list, script_type: str,
                     network: str = "main", num_inputs: int = 3, threshold: int = None):
     """The PSBT for one test scenario, by its `attack` kind. Covers every PR:
     #1013's two forgeries and its honest wrong-seed psbt, then the per-output
-    builders for #1032, #1044, #1040, and #1046."""
+    builders for #1032, #1044, #1040, #1046, and #1047."""
     if kind in ("fake_change", "bad_input"):
         return build_attack_psbt(kind, signers, script_type, network, num_inputs, threshold)
     if kind == "wrong_seed":
