@@ -736,6 +736,8 @@ def _pr1044_decoy_substituted(signers, network, num_inputs, threshold):
 # the witness_utxo claims the second. The gap is what burns as miner fee.
 PR995_REAL_INPUT_VALUE = 5_000_000
 PR995_CLAIMED_INPUT_VALUE = 100_000
+# What the tampered previous transaction's amount is inflated by.
+PR995_TAMPER_DELTA = 100_000
 
 
 def _pr995_relink_prevout(psbt, idx: int, real_value: int):
@@ -834,7 +836,7 @@ def _pr995_prev_tx_tampered(signers, network, num_inputs):
     the txid the outpoint claims to spend. Before #995 nothing hashed it at all
     and the edited value was summed straight into the fee."""
     psbt = build_psbt(signers, "P2PKH", num_inputs, "change")
-    psbt.inputs[0].non_witness_utxo.vout[0].value += 100_000
+    psbt.inputs[0].non_witness_utxo.vout[0].value += PR995_TAMPER_DELTA
     return psbt
 
 

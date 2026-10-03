@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from common import script_types
 from common.attack_psbt import (PR1047_CASES, PR995_CLAIMED_INPUT_VALUE,
-                                PR995_REAL_INPUT_VALUE)
+                                PR995_REAL_INPUT_VALUE, PR995_TAMPER_DELTA)
 from common.psbt import FEE, IN_VALUE
 
 DEFAULT_NUM_INPUTS = 3
@@ -90,6 +90,11 @@ class Scenario:
     #   change  parses fine; the output is shown as change (correctly, or as a
     #           documented limit; expected_screen says which)
     outcome: str = None
+    # Rendered under the site's "What's in this transaction?" table, only where that
+    # table gets a number wrong. It reads the psbt's own fields, so for PR #995's
+    # amount lies it makes the same mistake a device without the fix makes. The
+    # blurb, shown in the banner above the QR, stays about the device.
+    summary_note: str = None
 
 
 def _make(script_type, shape, num_inputs, network, is_default=False):
@@ -519,7 +524,7 @@ _PR1040_DEFS = [
 
 # PR #995: the fee a device that trusts the forged amount displays, and the fee
 # the transaction really pays. The lie replaces one input's honest IN_VALUE with
-# PR995_CLAIMED_INPUT_VALUE while the previous transaction it ships really pays
+# PR995_CLAIMED_INPUT_VALUE while the non_witness_utxo it carries really pays
 # PR995_REAL_INPUT_VALUE. Derived, never hardcoded, so the two cannot drift.
 _PR995_OUTPUT_TOTAL = DEFAULT_NUM_INPUTS * IN_VALUE - FEE
 _PR995_SHOWN_INPUT_TOTAL = PR995_CLAIMED_INPUT_VALUE + (DEFAULT_NUM_INPUTS - 1) * IN_VALUE
@@ -528,47 +533,56 @@ _PR995_SHOWN_FEE = _PR995_SHOWN_INPUT_TOTAL - _PR995_OUTPUT_TOTAL
 _PR995_REAL_FEE = _PR995_REAL_INPUT_TOTAL - _PR995_OUTPUT_TOTAL
 
 _PR995_FEE_LIE_BLURB = (
-    f"The previous transaction is genuine and really pays {PR995_REAL_INPUT_VALUE:,} "
-    f"sats for input 0, but a witness_utxo slipped in alongside it claims only "
-    f"{PR995_CLAIMED_INPUT_VALUE:,}. The summary above repeats that claim, so the "
-    f"{_PR995_SHOWN_FEE:,}-sat fee it shows is itself the lie: the transaction really "
-    f"pays {_PR995_REAL_FEE:,} sats to the miner. The cross-check refuses the "
-    f"disagreement.")
+    f"Input 0's non-witness UTXO hashes to its txid and proves the input is worth "
+    f"{PR995_REAL_INPUT_VALUE:,} sats, but a witness UTXO slipped in beside it claims "
+    f"only {PR995_CLAIMED_INPUT_VALUE:,}. A device without the fix believes the witness "
+    f"UTXO and shows a {_PR995_SHOWN_FEE:,}-sat fee, while the transaction really pays "
+    f"{_PR995_REAL_FEE:,} sats to the miner. The cross-check refuses the disagreement.")
+
+_PR995_FEE_LIE_NOTE = (
+    f"Like a device without the fix, this table counts input 0 at the witness UTXO's "
+    f"{PR995_CLAIMED_INPUT_VALUE:,} sats, so its fee is wrong: input 0 is really worth "
+    f"{PR995_REAL_INPUT_VALUE:,} and the real fee is {_PR995_REAL_FEE:,} sats.")
 
 _PR995_NO_PREV_TX_BLURB = (
-    "Every input carries a witness_utxo and no previous transaction at all, so not one "
+    "Every input carries a witness UTXO and no non-witness UTXO at all, so not one "
     "input amount here can be proven from the psbt. These particular amounts are "
-    f"honest, so the {FEE:,}-sat fee in the summary above happens to be correct, and "
-    "nothing in the file says so. A legacy sighash commits to no amount, which is why "
-    "a coordinator that did lie here would still collect a valid signature.")
+    f"honest, so a device without the fix shows the correct {FEE:,}-sat fee, with "
+    "nothing to back it. A legacy sighash commits to no amount, which is why a "
+    "coordinator that did lie here would still collect a valid signature.")
 
 _PR995_TAMPERED_BLURB = (
-    "Input 0's previous transaction has its amount edited, so it no longer hashes to "
-    "the txid the outpoint claims to spend. The summary above counts that edited value: "
-    "before this check nothing hashed the previous transaction at all, so whatever it "
-    "claimed was summed straight into the fee.")
+    "Input 0's non-witness UTXO has its amount edited, so it no longer hashes to the "
+    "txid the outpoint claims to spend. A device without the fix never hashes it, so "
+    f"it counts the edited amount and shows a {FEE + PR995_TAMPER_DELTA:,}-sat fee "
+    f"where the real fee is {FEE:,}.")
+
+_PR995_TAMPERED_NOTE = (
+    f"Like a device without the fix, this table counts the edited "
+    f"{IN_VALUE + PR995_TAMPER_DELTA:,} sats for input 0, so its fee is wrong: the "
+    f"coin the txid names holds {IN_VALUE:,} and the real fee is {FEE:,} sats.")
 
 _PR995_DEFS = [
     {"kind": "legacy_fee_lie", "script_type": "P2PKH", "family": "Legacy",
      "label": "Forged input amount (single-sig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": _PR995_FEE_LIE_BLURB},
+     "blurb": _PR995_FEE_LIE_BLURB, "summary_note": _PR995_FEE_LIE_NOTE},
     {"kind": "legacy_fee_lie_multisig", "script_type": "P2SH", "family": "Legacy multisig (2-of-3)",
      "label": "Forged input amount (multisig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": _PR995_FEE_LIE_BLURB},
+     "blurb": _PR995_FEE_LIE_BLURB, "summary_note": _PR995_FEE_LIE_NOTE},
     {"kind": "legacy_no_prev_tx", "script_type": "P2PKH", "family": "Legacy",
-     "label": "No previous transaction (single-sig)", "outcome": "refuse",
+     "label": "No non-witness UTXO (single-sig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
      "blurb": _PR995_NO_PREV_TX_BLURB},
     {"kind": "legacy_no_prev_tx_multisig", "script_type": "P2SH", "family": "Legacy multisig (2-of-3)",
-     "label": "No previous transaction (multisig)", "outcome": "refuse",
+     "label": "No non-witness UTXO (multisig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
      "blurb": _PR995_NO_PREV_TX_BLURB},
     {"kind": "legacy_prev_tx_tampered", "script_type": "P2PKH", "family": "Legacy",
-     "label": "Previous transaction doesn't match (single-sig)", "outcome": "refuse",
+     "label": "Non-witness UTXO doesn't match its txid (single-sig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": _PR995_TAMPERED_BLURB},
+     "blurb": _PR995_TAMPERED_BLURB, "summary_note": _PR995_TAMPERED_NOTE},
 
     # The two shapes that crash a build without the check rather than merely
     # misreporting the fee. Nothing is forged in either: both are simply psbts
@@ -576,8 +590,8 @@ _PR995_DEFS = [
     {"kind": "legacy_outpoint_out_of_range", "script_type": "P2PKH", "family": "Legacy",
      "label": "Outpoint index does not exist", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": ("The previous transaction is genuine, but input 0 claims to spend an "
-               "output one past the end of it, so no amount can be read for that input "
+     "blurb": ("Input 0's non-witness UTXO is genuine, but the input claims to "
+               "spend an output one past the end of it, so no amount can be read for it "
                "at all. Checking the txid does not catch this, since the txid is "
                "correct and only the index is impossible. Without the check the first "
                "code to use that index is the code adding the amounts up, which fails "
@@ -585,7 +599,7 @@ _PR995_DEFS = [
     {"kind": "legacy_no_utxo_data", "script_type": "P2PKH", "family": "Legacy",
      "label": "No input amount data at all", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": ("Input 0 ships neither a previous transaction nor a witness_utxo, so the "
+     "blurb": ("Input 0 carries neither a non-witness UTXO nor a witness UTXO, so the "
                "psbt says nothing at all about what it is worth: there is not even a "
                "claim to disbelieve. Without the check this one also aborts on an "
                "unhandled error, part way through reading the input.")},
@@ -809,6 +823,7 @@ def _make_pr_test(pr, d):
         tags=["test", d["label"], info.label],
         pr=pr, attack=d["kind"], load_seed=TEST_VICTIM_SEED,
         expected=d["expected"], expected_screen=d["screen"], outcome=d["outcome"],
+        summary_note=d.get("summary_note"),
     )
 
 

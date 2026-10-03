@@ -963,8 +963,11 @@ function renderTxSummary() {
             <td class="num">${sats(o.value)}</td></tr>`;
   }).join('');
 
+  // A test scenario's blurb is already in the banner above the QR, so here it
+  // would only say the same thing twice.
+  const sc = state.scenario;
   $('tx-summary').innerHTML = `
-    <p class="qr-note" style="margin-top:0">${state.scenario.blurb}</p>
+    ${sc.test ? '' : `<p class="qr-note" style="margin-top:0">${sc.blurb}</p>`}
     <table class="kv">
       <tr><th>Inputs</th><td class="num">${s.num_inputs} · ${
         s.input_amount === null ? 'amount not stated' : sats(s.input_amount)}</td></tr>
@@ -973,6 +976,7 @@ function renderTxSummary() {
         s.fee === null ? 'not knowable' : sats(s.fee)}</td></tr>
       <tr><th>PSBT size</th><td class="num">${state.scenarioData.psbt_bytes.toLocaleString()} bytes</td></tr>
     </table>
+    ${sc.summary_note ? `<p class="qr-note qr-note-warn">${sc.summary_note}</p>` : ''}
     <p class="qr-note">Signable, but unbroadcastable, these UTXOs do not exist.</p>`;
 }
 
