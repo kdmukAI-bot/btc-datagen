@@ -304,6 +304,25 @@ _CHANGE_OK = "Device should parse it and show the output as change."
 _CHANGE_NO_XPUBS = "With no global xpubs there is nothing to compare, so the device shows it as change."
 _UNVERIFIED = "Device should discard it: the input amounts cannot be confirmed."
 
+# `expected` serves two readers: whoever maintains these definitions, and the
+# tester holding the device. Most of them only restate `outcome` and the screen
+# name, which the banner already prints, and on-screen text here is deliberately
+# minimal, so those are not shipped to the site. An expectation reaches the page
+# only when it says something a tester cannot read off the screen title: that a
+# refusal is a known gap rather than the right answer, or what to load to catch
+# what the device just missed.
+_OBVIOUS_EXPECTATIONS = frozenset({
+    _REFUSE, _MALFORMED, _ERROR, _SPEND, _CHANGE_OK, _UNVERIFIED,
+    "Device should say this seed can't sign it.",
+})
+
+
+def tester_note(scenario) -> str:
+    """The scenario's expectation, or None where it only restates the screen."""
+    if scenario.expected in _OBVIOUS_EXPECTATIONS:
+        return None
+    return scenario.expected
+
 # Icon by outcome: a warning triangle where the device stops, an arrow where the
 # output leaves as a spend, an info mark where it is (mis)counted as change.
 _ICON = {"refuse": "⚠", "error": "⚠", "spend": "→", "change": "ℹ"}

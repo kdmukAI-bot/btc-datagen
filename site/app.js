@@ -1096,7 +1096,8 @@ function renderTestBanner() {
     <strong>Test transaction (${tag})</strong>
     <p>${s.blurb}</p>
     <p class="test-banner-do">Load <b>${seed}</b>'s seed below. On a device with the
-      fix, this ${outcomePhrase(s)}.</p>`;
+      fix, this ${outcomePhrase(s)}.</p>
+    ${s.expected ? `<p class="test-banner-note">${s.expected}</p>` : ''}`;
   banner.hidden = false;
 }
 

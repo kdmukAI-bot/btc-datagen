@@ -385,7 +385,9 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
         "test": bool(scenario.attack),
         "pr": scenario.pr,
         "attack": scenario.attack,
-        "expected": scenario.expected,
+        # Only where it adds something beyond the screen name; see
+        # scenarios.tester_note.
+        "expected": scenario_defs.tester_note(scenario),
         "expected_screen": scenario.expected_screen,
         "outcome": scenario.outcome,
     }
