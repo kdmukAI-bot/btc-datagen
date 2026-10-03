@@ -347,8 +347,9 @@ _PR1032_DEFS = [
     {"kind": "contradiction_taproot_claims_other", "script_type": "P2TR", "family": "Taproot",
      "label": "Taproot change claims a stranger", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _REFUSE,
-     "blurb": ("The taproot version of the above: the output pays your internal key, but "
-               "the entry claims a stranger's fingerprint.")},
+     "blurb": ("It really is your taproot change and the output pays your internal key, "
+               "but the derivation entry claims a stranger's fingerprint. Any wrong "
+               "ownership claim is refused.")},
     {"kind": "contradiction_multisig", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Fake change to a foreign multisig", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _REFUSE,
@@ -420,8 +421,9 @@ _PR1032_DEFS = [
     {"kind": "taproot_scripttree_leaf", "script_type": "P2TR", "family": "Taproot",
      "label": "Taproot script-path change", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
-     "blurb": ("A script-path-only taproot address whose leaf holds your key. Same "
-               "limitation: the tree is unparsed, so the output is shown as a spend.")},
+     "blurb": ("A script-path-only taproot address whose leaf holds your key. The "
+               "device does not yet parse script trees, so it cannot confirm the output "
+               "and shows it as a spend.")},
     {"kind": "diff_quorum_xpubs", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Different quorum, global xpubs", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
@@ -431,16 +433,18 @@ _PR1032_DEFS = [
     {"kind": "diff_quorum_outsider_xpub", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Different quorum, outsider xpub supplied", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
-     "blurb": ("The same different-quorum output, with the outsider's xpub also in the "
-               "global xpubs. Every key resolves, but the cosigner set still differs, so "
-               "it is shown as a spend.")},
+     "blurb": ("The output pays a 2-of-3 that holds your key but swaps one cosigner for "
+               "an outsider, and the outsider's xpub is in the global xpubs too. Every "
+               "key resolves, but the cosigner set still differs, so it is shown as a "
+               "spend.")},
 
     # --- accepted, shown as change (documented limitation) -------------------
     {"kind": "diff_quorum_no_xpubs", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Different quorum, no global xpubs", "outcome": "change",
      "screen": _CHANGE_RESULT, "expected": _CHANGE,
-     "blurb": ("The same different-quorum output, but with no global xpubs. Without them "
-               "the device cannot compare cosigners, so the matching shape lets it be "
+     "blurb": ("The output pays a 2-of-3 that holds your key but swaps one cosigner for "
+               "an outsider, and the psbt carries no global xpubs. Without them the "
+               "device cannot compare cosigners, so the matching shape lets it be "
                "shown as your change though it pays a different wallet. Load the "
                "descriptor to catch it.")},
 ]
@@ -461,15 +465,17 @@ _PR1044_DEFS = [
     {"kind": "decoy_last", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Decoy key listed last", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _REFUSE,
-     "blurb": ("The same decoy listed after your real entry. A #1032 build stops at the "
-               "first verified entry and only the surplus count objects, a plain "
+     "blurb": ("A genuine multisig change output, plus a decoy entry (a key you own that "
+               "is not in the script) listed after your real one. A #1032 build stops at "
+               "the first verified entry and only the surplus count objects, a plain "
                "\"Transaction Problem\". Now every claim is held to the script and the "
                "decoy is refused as an attack.")},
     {"kind": "decoy_substituted", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Decoy key in a cosigner's place", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _REFUSE,
-     "blurb": ("The decoy replaces another cosigner's entry, so the output lists exactly "
-               "three entries for three keys and the surplus count has nothing to say. A "
+     "blurb": ("A genuine multisig change output where a decoy entry (a key you own that "
+               "is not in the script) replaces another cosigner's entry, so the output "
+               "lists exactly three entries for three keys and the surplus count has nothing to say. A "
                "#1032 build shows this as change with no warning at all.")},
     {"kind": "surplus_multisig", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Padded with a stranger's entry", "outcome": "refuse",
@@ -493,8 +499,9 @@ _PR1040_DEFS = [
     {"kind": "cosigner_mismatch_input", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Cosigner fingerprint disagrees on an input", "outcome": "refuse",
      "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
-     "blurb": ("The same mislabel on an input entry instead of the change output. The "
-               "check walks inputs and outputs alike.")},
+     "blurb": ("Honest change, global xpubs present, but one cosigner's entry on an "
+               "input names a different fingerprint than that cosigner's xpub. The check "
+               "walks inputs and outputs alike.")},
     {"kind": "singlesig_xpub_mismatch", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Global xpub fingerprint disagrees with its keys", "outcome": "refuse",
      "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
@@ -511,13 +518,15 @@ _PR1040_DEFS = [
     {"kind": "cosigner_missing", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Cosigner fingerprint is all zeros", "outcome": "change",
      "screen": _CHANGE_OK_RESULT, "expected": _CHANGE_OK,
-     "blurb": ("The same cosigner entry with the all-zero fingerprint a coordinator "
-               "writes for a key it cannot identify. A missing value is not a second "
+     "blurb": ("Honest change, global xpubs present, but one cosigner's entry on the "
+               "change output carries the all-zero fingerprint a coordinator writes for a "
+               "key it cannot identify. A missing value is not a second "
                "answer, so it is skipped and the output is correctly counted as change.")},
     {"kind": "cosigner_mismatch_no_xpubs", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Mismatch with no global xpubs", "outcome": "change",
      "screen": _CHANGE_RESULT, "expected": _CHANGE_NO_XPUBS,
-     "blurb": ("The mislabeled cosigner entry, but the psbt carries no global xpubs. "
+     "blurb": ("Honest change where one cosigner's entry on the change output names the "
+               "wrong fingerprint, but the psbt carries no global xpubs. "
                "With no second record there is nothing to compare, so the mislabel "
                "goes unnoticed and the output is shown as change.")},
 ]
@@ -624,7 +633,7 @@ _PR1046_DEFS = [
     {"kind": "nested_change_repointed", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
      "label": "Claims your key, pays an attacker", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _REFUSE,
-     "blurb": ("The same output with the redeem script still omitted, but the "
+     "blurb": ("Nested single sig change with its redeem script omitted, but the "
                "scriptPubKey repointed at an attacker's nested address. The derivation "
                "entry still truthfully names a key you own, so the claim and the script "
                "contradict each other. Before the fix this passed as an ordinary "
@@ -632,8 +641,8 @@ _PR1046_DEFS = [
     {"kind": "nested_change_pays_us_lists_other", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
      "label": "Pays your key, names someone else's", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _REFUSE,
-     "blurb": ("The mirror of the last one: the output really is your change address, "
-               "but its entry names a stranger's key and fingerprint at the same path. "
+     "blurb": ("Nested single sig change with its redeem script omitted. The output "
+               "really is your change address, but its entry names a stranger's key and fingerprint at the same path. "
                "The rebuild uses the path, not the name, so the output is reached and "
                "the disagreement refused. Earlier builds, including the first revision "
                "of this PR, showed it as a payment out to your own address.")},
@@ -641,22 +650,23 @@ _PR1046_DEFS = [
      "label": "Bare p2sh listing two of your keys", "outcome": "refuse",
      "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
      "blurb": ("A bare p2sh output listing two derivation entries, both genuinely yours. "
-               "One key cannot own two paths, so once the output is admitted the single "
-               "sig surplus check refuses it. The first revision of this PR kept it out "
+               "One key cannot own two paths, so once the output is admitted to the "
+               "rebuild the single sig surplus check refuses it. The first revision of this PR kept it out "
                "of the rebuild entirely and showed it as a payment out.")},
     {"kind": "bare_p2sh_unclaimed", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
      "label": "Bare p2sh claiming nobody", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
-     "blurb": ("A bare p2sh output with no derivation entries at all. It meets every "
-               "condition and is admitted, but with no path to derive from there is "
-               "nothing to compare against the scriptPubKey. Being admitted is not "
-               "being proved: it stays a payment out.")},
+     "blurb": ("A bare p2sh output with no derivation entries at all, under nested "
+               "single sig inputs. With its redeem script omitted it qualifies for the "
+               "rebuild, but with no path to derive from there is nothing to compare "
+               "against the scriptPubKey. Qualifying is not proof: it stays a payment "
+               "out.")},
     {"kind": "other_wallet_nested_output", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Native segwit inputs paying your nested wallet", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
      "blurb": ("A payment from your native segwit wallet to your own nested segwit "
                "wallet, with the output's redeem script omitted. The output looks "
-               "exactly like the admitted case, but the inputs are not nested single "
+               "exactly like nested change with no redeem script, but the inputs are not nested single "
                "sig, so there is no rebuild to attempt. A payment out, correctly.")},
     {"kind": "other_wallet_native_output", "script_type": "P2SH-P2WPKH", "family": "Nested SegWit",
      "label": "Nested inputs paying your native segwit wallet", "outcome": "spend",
@@ -669,7 +679,8 @@ _PR1046_DEFS = [
      "label": "Nested inputs paying a multisig you are in", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
      "blurb": ("A payment from your nested wallet to a legacy 2-of-3 you are a cosigner "
-               "of. It parses as plain p2sh just like the admitted case, but it supplies "
+               "of. It parses as plain p2sh just like nested change with no redeem "
+               "script, but it supplies "
                "its redeem script, and a supplied script is exactly what the exception "
                "exists to cover the absence of. A payment out, correctly.")},
 ]
@@ -713,7 +724,8 @@ _PR1047_DEFS = [
                "there. " + _PR1047_CRASH)},
     {"kind": "missing_redeem_nested_multisig", "label": "Redeem script omitted",
      "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
-     "blurb": ("The same input missing its outer layer instead. This one is inert: the "
+     "blurb": ("A nested segwit multisig input with its redeem script, the outer of its "
+               "two layers, left out. This one is inert: the "
                "signature and the wallet policy both read the witness script, which is "
                "still correct, so nothing downstream is affected. It is refused because "
                "a rule about which script matters would move with the policy code. " + _PR1047_SILENT)},
@@ -739,9 +751,11 @@ _PR1047_DEFS = [
                "fails. " + _PR1047_SILENT)},
     {"kind": "wrong_redeem_nested_multisig", "label": "Redeem script is a stranger's",
      "outcome": "refuse", "screen": _ATTACK_SCREEN, "expected": _REFUSE,
-     "blurb": ("The outer layer failing instead: the redeem script does not hash to the "
-               "scriptPubKey. Inert for the same reason as the omitted redeem script "
-               "above, and refused anyway. " + _PR1047_SILENT)},
+     "blurb": ("A nested segwit multisig input whose redeem script does not hash to the "
+               "scriptPubKey, while its witness script is still correct. This one is "
+               "inert: the signature and the wallet policy both read the witness script, "
+               "so nothing downstream is affected. It is refused anyway, because a rule "
+               "about which script matters would move with the policy code. " + _PR1047_SILENT)},
 
     # --- a script the input commits to nowhere (ungraded) --------------------
     {"kind": "extra_witness_p2sh", "label": "Extra witness script",
@@ -773,8 +787,8 @@ _PR1047_DEFS = [
                "collaborative spend alone.")},
     {"kind": "payjoin_missing_redeem", "label": "Their input omits its redeem script",
      "outcome": "refuse", "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
-     "blurb": ("The same collaborative spend with the other party's redeem script left "
-               "out. Whose input it is rests on the psbt's own claims, so exempting "
+     "blurb": ("A collaborative spend, as a payjoin would build, with the other party's "
+               "redeem script left out. Whose input it is rests on the psbt's own claims, so exempting "
                "another party's input would let a coordinator claim the exemption for "
                "any input by stripping its derivation paths. " + _PR1047_MIXED)},
     {"kind": "payjoin_finalized", "label": "Their input is already finalized",
@@ -790,9 +804,9 @@ _PR1047_DEFS = [
                "inputs in the transaction\".")},
     {"kind": "payjoin_wrong_redeem", "label": "Their input supplies the wrong script",
      "outcome": "refuse", "screen": _ATTACK_SCREEN, "expected": _REFUSE,
-     "blurb": ("The other party's redeem script built from their next address rather "
-               "than the one their scriptPubKey commits to. Checked exactly as your own "
-               "input would be. " + _PR1047_SILENT)},
+     "blurb": ("A collaborative spend where the other party's redeem script is built "
+               "from their next address rather than the one their scriptPubKey commits "
+               "to. Their input is checked exactly as yours would be. " + _PR1047_SILENT)},
 ]
 
 
