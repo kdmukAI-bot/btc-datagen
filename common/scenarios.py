@@ -18,8 +18,9 @@ Both are built for both networks.
 from dataclasses import dataclass, field
 
 from common import script_types
-from common.attack_psbt import (PR1047_CASES, PR995_CLAIMED_INPUT_VALUE,
-                                PR995_REAL_INPUT_VALUE, PR995_TAMPER_DELTA)
+from common.attack_psbt import (NEGATIVE_FEE_OVERRUN, PR1047_CASES,
+                                PR995_CLAIMED_INPUT_VALUE, PR995_REAL_INPUT_VALUE,
+                                PR995_TAMPER_DELTA)
 from common.psbt import FEE, IN_VALUE
 
 DEFAULT_NUM_INPUTS = 3
@@ -819,6 +820,23 @@ _PR1047_DEFS = [
 ]
 
 
+# PR #1041: a negative fee. Not a forgery: every key claim in this psbt is honest
+# and the change output is genuinely ours. Only the arithmetic is impossible, the
+# outputs move more than the inputs hold. The check is a single comparison on the
+# parsed fee, so it is script-type agnostic and one family is enough to exercise it.
+_PR1041_DEFS = [
+    {"kind": "negative_fee", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Outputs exceed inputs", "outcome": "refuse",
+     "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "blurb": ("An ordinary change transaction with its change output inflated "
+               f"{NEGATIVE_FEE_OVERRUN:,} sats past what the inputs hold, so the fee "
+               "comes out negative. Nothing about the keys is false; the transaction is "
+               "simply impossible and no network would relay it. Before the fix the "
+               "psbt parsed and the device reviewed it as normal, quoting a fee of "
+               f"-{NEGATIVE_FEE_OVERRUN:,} sats.")},
+]
+
+
 # Not tied to a PR. The unsupported-script-type abort sat under #1032 while having
 # nothing to do with change ownership, and #995 changes which screen it reaches, so
 # it belongs here rather than under either one.
@@ -850,36 +868,6 @@ def _make_pr_test(pr, d):
     )
 
 
-# --- negative fee ------------------------------------------------------------
-#
-# Not a forgery: every key claim in this psbt is honest and the change output is
-# genuinely ours. Only the arithmetic is impossible, the outputs move more than
-# the inputs hold. The check is a single comparison on the parsed fee, so it is
-# script-type agnostic and one family is enough to exercise it.
-
-_NEGATIVE_FEE_SCRIPT_TYPE = "P2WPKH"
-
-
-def _make_negative_fee() -> Scenario:
-    info = script_types.get(_NEGATIVE_FEE_SCRIPT_TYPE)
-    return Scenario(
-        id="test-1041-negative-fee",
-        wallet=WALLET_FOR_SCRIPT_TYPE[_NEGATIVE_FEE_SCRIPT_TYPE],
-        script_type=_NEGATIVE_FEE_SCRIPT_TYPE,
-        num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
-        title=f"\u26a0 Outputs exceed inputs ({info.label})",
-        blurb=("An ordinary change transaction with its change output inflated past "
-               "what the inputs hold, so the fee comes out negative. Nothing about "
-               "the keys is false; the transaction is simply impossible and no "
-               "network would relay it."),
-        is_default=False,
-        tags=["test", "Negative fee", info.label],
-        pr="1041", attack="negative_fee", load_seed=TEST_VICTIM_SEED,
-        expected="Device should reject it as a malformed transaction.",
-        expected_screen="Transaction Problem", outcome="refuse",
-    )
-
-
 def test_scenarios() -> list:
     """Adversarial / malformed transactions for exercising the hardening PRs on device."""
     out = []
@@ -907,8 +895,8 @@ def test_scenarios() -> list:
             family=script_types.get(script_type).label)))
     # PR #995: prove each input's amount before any of them is summed.
     out.extend(_make_pr_test("995", d) for d in _PR995_DEFS)
-    # Outputs that exceed the inputs: one case, the check does not vary by type.
-    out.append(_make_negative_fee())
+    # PR #1041: outputs may not exceed inputs. One case; the check does not vary by type.
+    out.extend(_make_pr_test("1041", d) for d in _PR1041_DEFS)
     # Not a PR: what the current dev build does.
     out.extend(_make_pr_test("dev", d) for d in _DEV_DEFS)
     return out
