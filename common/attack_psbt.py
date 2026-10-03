@@ -40,7 +40,7 @@ from functools import partial
 from embit import bip32, script
 from embit.networks import NETWORKS
 from embit.psbt import DerivationPath
-from embit.transaction import TransactionOutput
+from embit.transaction import TransactionOutput, Witness
 
 from common import script_types
 from common.psbt import (build_psbt, _path_ints, CHANGE_BRANCH, RECEIVE_BRANCH)
@@ -1084,7 +1084,8 @@ def _pr1046_other_wallet_legacy_multisig_output(signers, network, num_inputs):
 # Nothing here is a plausible coordinator product: these are malformed psbts, and
 # the PR identifies no honest emitter of any of them. What makes them worth
 # running on hardware is how differently a pre-#1047 build treats them. Measured
-# at #1046's head, the same three refusals land in three different places:
+# on dev (#1044 and #1046 have since merged into it), the same three refusals land
+# in three different places:
 #
 #   * "Mixed inputs in the transaction", because dropping a script changes the
 #     input's apparent type and it stops matching the untouched inputs;
@@ -1183,6 +1184,30 @@ def _pr1047_payjoin_omit(signers, network, num_inputs, threshold=None, *,
     return psbt
 
 
+def _pr1047_payjoin_finalized(signers, network, num_inputs, threshold=None, *,
+                              script_type="P2SH-P2WPKH", field=None):
+    """The other party's input already finalized, which the check cannot yet read.
+
+    Finalizing an input moves its script into final_scriptsig and
+    final_scriptwitness and clears the script fields, so an honest finalized p2sh
+    input looks exactly like one that omitted its redeem script. This is the gap
+    the PR records as a TODO: recover the script from the final fields and verify
+    it the same way. Until then the psbt is refused, and nothing here is forged.
+    """
+    psbt, _ = _pr1047_base(signers, script_type, num_inputs, threshold)
+    foreign = _pr1047_add_foreign_input(psbt, network)
+    redeem = foreign.redeem_script
+    foreign.redeem_script = None
+    foreign.witness_script = None
+    # A finalized nested single sig input: the redeem script pushed in the scriptSig,
+    # and the signature plus pubkey in the witness. The signature is a placeholder;
+    # nothing reads it before the script check refuses the psbt.
+    foreign.final_scriptsig = script.Script(bytes([len(redeem.data)]) + redeem.data)
+    foreign.final_scriptwitness = Witness([b"\x30" * 71,
+                                           _attacker_pubkey(network, RECEIVE_BRANCH, 50).sec()])
+    return psbt
+
+
 def _pr1047_payjoin_wrong(signers, network, num_inputs, threshold=None, *,
                           script_type="P2SH-P2WPKH", field=None):
     """The other party's input with a redeem script built from their next address
@@ -1217,6 +1242,7 @@ PR1047_CASES = {
     "payjoin_ok":                      ("P2SH-P2WPKH", _pr1047_payjoin_ok, None),
     "payjoin_missing_redeem":          ("P2SH-P2WPKH", _pr1047_payjoin_omit, None),
     "payjoin_wrong_redeem":            ("P2SH-P2WPKH", _pr1047_payjoin_wrong, None),
+    "payjoin_finalized":               ("P2SH-P2WPKH", _pr1047_payjoin_finalized, None),
 }
 
 

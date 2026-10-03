@@ -647,7 +647,8 @@ _PR1046_DEFS = [
 # The script type is not a free choice here, it is the variable under test, so each
 # case reads its type from PR1047_CASES in common/attack_psbt.py rather than
 # repeating it. `before` is what a pre-#1047 build did with the same psbt, measured
-# at #1046's head; it goes at the end of every blurb because that is what tells a
+# on dev, which #1044 and #1046 have since merged into; it goes at the end of every
+# blurb because that is what tells a
 # tester whether the build in front of them has the fix.
 _PR1047_MIXED = ("Before the fix the input's apparent type changed with the script "
                  "gone, so it aborted on \"Mixed inputs in the transaction\" instead.")
@@ -744,6 +745,17 @@ _PR1047_DEFS = [
                "out. Whose input it is rests on the psbt's own claims, so exempting "
                "another party's input would let a coordinator claim the exemption for "
                "any input by stripping its derivation paths. " + _PR1047_MIXED)},
+    {"kind": "payjoin_finalized", "label": "Their input is already finalized",
+     "outcome": "refuse", "screen": _PROBLEM_SCREEN,
+     "expected": "Device refuses it, which is a known gap rather than the right answer.",
+     "blurb": ("A collaborative spend where the other party has already finalized their "
+               "input. Nothing is forged and nothing is wrong with the transaction: "
+               "finalizing just moves the script into the final scriptSig and witness "
+               "and clears the field the check reads, so an honest input looks like one "
+               "that omitted its redeem script. The PR records this as a TODO, to "
+               "recover the script from the final fields and verify it the same way. "
+               "Until then it is refused. Earlier builds refuse it too, as \"Mixed "
+               "inputs in the transaction\".")},
     {"kind": "payjoin_wrong_redeem", "label": "Their input supplies the wrong script",
      "outcome": "refuse", "screen": _ATTACK_SCREEN, "expected": _REFUSE,
      "blurb": ("The other party's redeem script built from their next address rather "
