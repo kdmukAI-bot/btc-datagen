@@ -800,6 +800,35 @@ def _pr995_no_prev_tx_p2sh(signers, network, num_inputs, threshold):
     return _pr995_no_prev_tx(signers, "P2SH", num_inputs, threshold)
 
 
+def _pr995_outpoint_out_of_range(signers, network, num_inputs):
+    """The outpoint names an output index its previous transaction does not have.
+
+    The previous transaction is genuine and hashes to the txid the input claims,
+    but input 0 says it spends an output one past the end of it, so there is no
+    prevout to read an amount from. embit's verify() compares txids and never
+    checks the index, so before #995 the first code to dereference it was the code
+    summing the amounts, which raised a bare IndexError.
+    """
+    psbt = build_psbt(signers, "P2PKH", num_inputs, "change")
+    inp = psbt.inputs[0]
+    # One past the last real output: the lowest index that cannot resolve.
+    inp.vout = len(inp.non_witness_utxo.vout)
+    return psbt
+
+
+def _pr995_no_utxo_data(signers, network, num_inputs):
+    """Input 0 supplies neither a witness_utxo nor a previous transaction.
+
+    With both fields absent the psbt says nothing whatsoever about what the input
+    is worth, so there is not even a claim to check. Before #995 nothing looked
+    for that, and the parse died later on a field it never got to set.
+    """
+    psbt = build_psbt(signers, "P2PKH", num_inputs, "change")
+    psbt.inputs[0].non_witness_utxo = None
+    psbt.inputs[0].witness_utxo = None
+    return psbt
+
+
 def _pr995_prev_tx_tampered(signers, network, num_inputs):
     """The previous transaction's amount is edited, so it no longer hashes to
     the txid the outpoint claims to spend. Before #995 nothing hashed it at all
@@ -1294,6 +1323,8 @@ _TEST_BUILDERS = {
     "legacy_no_prev_tx": _pr995_no_prev_tx_p2pkh,
     "legacy_no_prev_tx_multisig": _pr995_no_prev_tx_p2sh,
     "legacy_prev_tx_tampered": _pr995_prev_tx_tampered,
+    "legacy_outpoint_out_of_range": _pr995_outpoint_out_of_range,
+    "legacy_no_utxo_data": _pr995_no_utxo_data,
 }
 
 # Kinds that need the wallet threshold passed through (multisig builders).

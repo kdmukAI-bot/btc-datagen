@@ -569,6 +569,26 @@ _PR995_DEFS = [
      "label": "Previous transaction doesn't match (single-sig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
      "blurb": _PR995_TAMPERED_BLURB},
+
+    # The two shapes that crash a build without the check rather than merely
+    # misreporting the fee. Nothing is forged in either: both are simply psbts
+    # that cannot say what an input is worth.
+    {"kind": "legacy_outpoint_out_of_range", "script_type": "P2PKH", "family": "Legacy",
+     "label": "Outpoint index does not exist", "outcome": "refuse",
+     "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
+     "blurb": ("The previous transaction is genuine, but input 0 claims to spend an "
+               "output one past the end of it, so no amount can be read for that input "
+               "at all. Checking the txid does not catch this, since the txid is "
+               "correct and only the index is impossible. Without the check the first "
+               "code to use that index is the code adding the amounts up, which fails "
+               "on an unhandled error rather than reporting anything.")},
+    {"kind": "legacy_no_utxo_data", "script_type": "P2PKH", "family": "Legacy",
+     "label": "No input amount data at all", "outcome": "refuse",
+     "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
+     "blurb": ("Input 0 ships neither a previous transaction nor a witness_utxo, so the "
+               "psbt says nothing at all about what it is worth: there is not even a "
+               "claim to disbelieve. Without the check this one also aborts on an "
+               "unhandled error, part way through reading the input.")},
 ]
 
 

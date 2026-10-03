@@ -272,9 +272,19 @@ def summarize(psbt: PSBT, network: str = "main") -> dict:
     from embit.networks import NETWORKS
     net = NETWORKS[network]
 
+    # An input's amount comes from whichever utxo field the psbt supplies. Two of
+    # the PR #995 scenarios supply nothing usable: one carries no utxo data at
+    # all, and one names an output index its previous transaction does not have.
+    # There is no amount to report for those, and putting a confident number on
+    # screen anyway is the exact mistake they exist to demonstrate, so the total
+    # and the fee both go unknown.
     input_amount = 0
     for inp in psbt.inputs:
-        input_amount += inp.witness_utxo.value if inp.witness_utxo else inp.utxo.value
+        try:
+            input_amount += inp.witness_utxo.value if inp.witness_utxo else inp.utxo.value
+        except (IndexError, AttributeError):
+            input_amount = None
+            break
 
     outputs, output_total = [], 0
     for i, out in enumerate(psbt.outputs):
@@ -297,7 +307,7 @@ def summarize(psbt: PSBT, network: str = "main") -> dict:
         "num_inputs": len(psbt.inputs),
         "input_amount": input_amount,
         "outputs": outputs,
-        "fee": input_amount - output_total,
+        "fee": None if input_amount is None else input_amount - output_total,
     }
 
 

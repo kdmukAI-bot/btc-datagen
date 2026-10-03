@@ -966,9 +966,11 @@ function renderTxSummary() {
   $('tx-summary').innerHTML = `
     <p class="qr-note" style="margin-top:0">${state.scenario.blurb}</p>
     <table class="kv">
-      <tr><th>Inputs</th><td class="num">${s.num_inputs} · ${sats(s.input_amount)}</td></tr>
+      <tr><th>Inputs</th><td class="num">${s.num_inputs} · ${
+        s.input_amount === null ? 'amount not stated' : sats(s.input_amount)}</td></tr>
       ${rows}
-      <tr><th>Network fee</th><td class="num">${sats(s.fee)}</td></tr>
+      <tr><th>Network fee</th><td class="num">${
+        s.fee === null ? 'not knowable' : sats(s.fee)}</td></tr>
       <tr><th>PSBT size</th><td class="num">${state.scenarioData.psbt_bytes.toLocaleString()} bytes</td></tr>
     </table>
     <p class="qr-note">Signable, but unbroadcastable, these UTXOs do not exist.</p>`;
