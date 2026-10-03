@@ -212,6 +212,13 @@ TEST_PR_GROUPS = [
                   "case: their signatures commit no amount, so the lie survives signing and "
                   "the difference burns as miner fee."),
     },
+    {
+        "pr": "dev",
+        "label": "dev: current behavior",
+        "url": "https://github.com/seedsigner/seedsigner/tree/dev",
+        "blurb": ("Not tied to a hardening PR. These record what the current dev build "
+                  "does with a psbt, so what they document can change as PRs land."),
+    },
 ]
 
 # script_type -> (short family name, wallet fixture base name), for PR #1013.
@@ -366,13 +373,6 @@ _PR1032_DEFS = [
      "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
      "blurb": ("It is a valid change output, but its scope lists derivation paths in "
                "both the ecdsa and taproot maps, which no script type can use.")},
-
-    # --- aborts to the generic error screen ----------------------------------
-    {"kind": "unsupported_script_type", "script_type": "P2WPKH", "family": "bare p2pk",
-     "label": "Unsupported script type", "outcome": "error",
-     "screen": _ERROR_SCREEN, "expected": _ERROR,
-     "blurb": ("The inputs and change use bare pay-to-pubkey, which the device does not "
-               "support. It aborts rather than guess. No dedicated screen for this yet.")},
 
     # --- accepted, output correctly shown as a spend -------------------------
     {"kind": "multisig_external_spend", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
@@ -764,6 +764,21 @@ _PR1047_DEFS = [
 ]
 
 
+# Not tied to a PR. The unsupported-script-type abort sat under #1032 while having
+# nothing to do with change ownership, and #995 changes which screen it reaches, so
+# it belongs here rather than under either one.
+_DEV_DEFS = [
+    {"kind": "unsupported_script_type", "script_type": "P2WPKH", "family": "bare p2pk",
+     "label": "Unsupported script type", "outcome": "error",
+     "screen": _ERROR_SCREEN, "expected": _ERROR,
+     "blurb": ("The inputs and change use bare pay-to-pubkey, which the device does not "
+               "support. It aborts rather than guess. No dedicated screen for this yet. "
+               "PR #995 changes the destination: bare p2pk types as None, which its "
+               "input-amount check reads as an amount it cannot prove, so the abort "
+               "becomes a refusal on the attack screen instead.")},
+]
+
+
 def _make_pr_test(pr, d):
     info = script_types.get(d["script_type"])
     base_wallet = WALLET_FOR_SCRIPT_TYPE[d["script_type"]]
@@ -807,4 +822,6 @@ def test_scenarios() -> list:
             family=script_types.get(script_type).label)))
     # PR #995: prove each input's amount before any of them is summed.
     out.extend(_make_pr_test("995", d) for d in _PR995_DEFS)
+    # Not a PR: what the current dev build does.
+    out.extend(_make_pr_test("dev", d) for d in _DEV_DEFS)
     return out
