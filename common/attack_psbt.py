@@ -760,11 +760,15 @@ def _pr995_fee_lie_p2pkh(signers, network, num_inputs):
     """A genuine previous transaction paired with a lying witness_utxo.
 
     The non_witness_utxo really is the transaction the outpoint spends, so
-    embit's verify() passes; but embit's PSBT.fee() prefers the witness_utxo,
-    so the device would display the claim. Here the previous transaction pays
-    5,000,000 sats while the witness_utxo claims 100,000: a device that trusts
-    the claim shows a 10,000-sat fee on a transaction that really pays 4,910,000
-    sats to the miner. The cross-check refuses the disagreement.
+    embit's verify() passes; but embit's PSBT.fee() prefers the witness_utxo, so
+    the device would display the claim. The previous transaction pays
+    PR995_REAL_INPUT_VALUE while the witness_utxo claims
+    PR995_CLAIMED_INPUT_VALUE, so a device that trusts the claim shows the fee
+    common/psbt.py set while the transaction really hands the gap between the two
+    to the miner. The cross-check refuses the disagreement.
+
+    common/scenarios.py derives both of those figures for the blurb, so the
+    numbers a tester reads come from these constants rather than from prose.
     """
     return _pr995_fee_lie(signers, "P2PKH", num_inputs)
 
@@ -776,8 +780,10 @@ def _pr995_fee_lie_p2sh(signers, network, num_inputs, threshold):
 
 def _pr995_no_prev_tx(signers, script_type: str, num_inputs: int, threshold=None):
     """Every input carries a witness_utxo and no non_witness_utxo at all: the
-    amounts rest on the coordinator's word alone, yet the legacy sighash still
-    yields a valid signature over them, so the difference burns as miner fee."""
+    amounts rest on the coordinator's word alone. These particular amounts are
+    copied from the real prevouts, so nothing is actually misstated here; what is
+    missing is any way to prove it. A legacy sighash commits to no amount, which
+    is why a coordinator that did lie would still collect a valid signature."""
     psbt = build_psbt(signers, script_type, num_inputs, "change", threshold=threshold)
     for inp in psbt.inputs:
         prevout = inp.non_witness_utxo.vout[0]

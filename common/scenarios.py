@@ -90,10 +90,6 @@ class Scenario:
     #   change  parses fine; the output is shown as change (correctly, or as a
     #           documented limit; expected_screen says which)
     outcome: str = None
-    # Free-text note rendered under the site's "What's in this transaction?"
-    # table. Only #995's amount lies need it: that table repeats the psbt's own
-    # claim, which for those is exactly the fee a vulnerable device displays.
-    summary_note: str = None
 
 
 def _make(script_type, shape, num_inputs, network, is_default=False):
@@ -515,62 +511,45 @@ _PR995_REAL_FEE = _PR995_REAL_INPUT_TOTAL - _PR995_OUTPUT_TOTAL
 _PR995_FEE_LIE_BLURB = (
     f"The previous transaction is genuine and really pays {PR995_REAL_INPUT_VALUE:,} "
     f"sats for input 0, but a witness_utxo slipped in alongside it claims only "
-    f"{PR995_CLAIMED_INPUT_VALUE:,}. A device that trusts the claim shows a "
-    f"{_PR995_SHOWN_FEE:,}-sat fee while the transaction actually pays "
-    f"{_PR995_REAL_FEE:,} sats to the miner. The cross-check refuses the disagreement.")
+    f"{PR995_CLAIMED_INPUT_VALUE:,}. The summary above repeats that claim, so the "
+    f"{_PR995_SHOWN_FEE:,}-sat fee it shows is itself the lie: the transaction really "
+    f"pays {_PR995_REAL_FEE:,} sats to the miner. The cross-check refuses the "
+    f"disagreement.")
 
 _PR995_NO_PREV_TX_BLURB = (
-    "Every input carries a witness_utxo and no previous transaction at all, so the "
-    "amounts are the coordinator's word and nothing more. A legacy sighash commits no "
-    f"amount, so the signature is still valid and the difference burns as miner fee. "
-    f"The device would show a plausible {FEE:,}-sat fee for it.")
+    "Every input carries a witness_utxo and no previous transaction at all, so not one "
+    "input amount here can be proven from the psbt. These particular amounts are "
+    f"honest, so the {FEE:,}-sat fee in the summary above happens to be correct, and "
+    "nothing in the file says so. A legacy sighash commits to no amount, which is why "
+    "a coordinator that did lie here would still collect a valid signature.")
 
 _PR995_TAMPERED_BLURB = (
     "Input 0's previous transaction has its amount edited, so it no longer hashes to "
-    "the txid the outpoint claims to spend. Before the check nothing hashed it at all, "
-    "and the edited value was summed straight into the fee.")
-
-# The site's "What's in this transaction?" table reads the psbt's own fields, so
-# for these vectors it shows the claim, not the proven value. Spell out where
-# the claim and the truth part ways.
-_PR995_FEE_LIE_NOTE = (
-    "This table repeats the psbt's own claim, exactly what a trusting device would "
-    f"display: input 0 counts as {PR995_CLAIMED_INPUT_VALUE:,} sats. The previous "
-    f"transaction it ships really pays {PR995_REAL_INPUT_VALUE:,}, so the transaction "
-    f"actually pays {_PR995_REAL_FEE:,} sats to the miner.")
-
-_PR995_NO_PREV_TX_NOTE = (
-    "This table repeats the psbt's own claim. There is no previous transaction in the "
-    "psbt to prove any input amount, so what the inputs are really worth is not knowable "
-    "from the file.")
-
-_PR995_TAMPERED_NOTE = (
-    "This table repeats the psbt's own claim: input 0 counts the edited previous "
-    "transaction's amount. The edit changed its txid, so the previous transaction no "
-    "longer matches the outpoint it claims to spend, and neither its amount nor the "
-    "displayed fee can be trusted.")
+    "the txid the outpoint claims to spend. The summary above counts that edited value: "
+    "before this check nothing hashed the previous transaction at all, so whatever it "
+    "claimed was summed straight into the fee.")
 
 _PR995_DEFS = [
     {"kind": "legacy_fee_lie", "script_type": "P2PKH", "family": "Legacy",
      "label": "Forged input amount (single-sig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": _PR995_FEE_LIE_BLURB, "summary_note": _PR995_FEE_LIE_NOTE},
+     "blurb": _PR995_FEE_LIE_BLURB},
     {"kind": "legacy_fee_lie_multisig", "script_type": "P2SH", "family": "Legacy multisig (2-of-3)",
      "label": "Forged input amount (multisig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": _PR995_FEE_LIE_BLURB, "summary_note": _PR995_FEE_LIE_NOTE},
+     "blurb": _PR995_FEE_LIE_BLURB},
     {"kind": "legacy_no_prev_tx", "script_type": "P2PKH", "family": "Legacy",
      "label": "No previous transaction (single-sig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": _PR995_NO_PREV_TX_BLURB, "summary_note": _PR995_NO_PREV_TX_NOTE},
+     "blurb": _PR995_NO_PREV_TX_BLURB},
     {"kind": "legacy_no_prev_tx_multisig", "script_type": "P2SH", "family": "Legacy multisig (2-of-3)",
      "label": "No previous transaction (multisig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": _PR995_NO_PREV_TX_BLURB, "summary_note": _PR995_NO_PREV_TX_NOTE},
+     "blurb": _PR995_NO_PREV_TX_BLURB},
     {"kind": "legacy_prev_tx_tampered", "script_type": "P2PKH", "family": "Legacy",
      "label": "Previous transaction doesn't match (single-sig)", "outcome": "refuse",
      "screen": _ATTACK_SCREEN, "expected": _UNVERIFIED,
-     "blurb": _PR995_TAMPERED_BLURB, "summary_note": _PR995_TAMPERED_NOTE},
+     "blurb": _PR995_TAMPERED_BLURB},
 ]
 
 
@@ -791,7 +770,6 @@ def _make_pr_test(pr, d):
         tags=["test", d["label"], info.label],
         pr=pr, attack=d["kind"], load_seed=TEST_VICTIM_SEED,
         expected=d["expected"], expected_screen=d["screen"], outcome=d["outcome"],
-        summary_note=d.get("summary_note"),
     )
 
 

@@ -380,9 +380,6 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
         "threshold": wallet["threshold"],
         "needs_descriptor": needs_descriptor,
         "summary": summary,
-        # Set only where the summary table's psbt-claim view needs annotating
-        # (PR #995's amount lies); null for every other scenario.
-        "summary_note": scenario.summary_note,
         "qr": variant_index,
         # Present (and truthy) only on adversarial / malformed test scenarios.
         "test": bool(scenario.attack),
