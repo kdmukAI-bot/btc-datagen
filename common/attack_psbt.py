@@ -1360,7 +1360,7 @@ def build_test_psbt(kind: str, signers: list, script_type: str,
     #1013's two forgeries and its honest wrong-seed psbt, then the per-output
     builders for #1032, #1044, #1040, #1046, and #1047, #995's legacy
     input-amount lies, #1041's negative-fee psbt, and the honest OP_RETURN
-    psbts for #1042, which common/op_return_psbt builds."""
+    psbts for #1042 and #1043, which common/op_return_psbt builds."""
     if kind in ("fake_change", "bad_input"):
         return build_attack_psbt(kind, signers, script_type, network, num_inputs, threshold)
     if kind == "wrong_seed":
