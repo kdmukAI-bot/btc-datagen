@@ -43,6 +43,7 @@ from embit.psbt import DerivationPath
 from embit.transaction import TransactionOutput, Witness
 
 from common import script_types
+from common.op_return_psbt import OP_RETURN_CASES, build_op_return_psbt
 from common.psbt import (build_psbt, _path_ints, CHANGE_BRANCH, RECEIVE_BRANCH)
 
 # A key nobody in the fixtures owns. Deterministic so builds are reproducible;
@@ -1358,13 +1359,16 @@ def build_test_psbt(kind: str, signers: list, script_type: str,
     """The PSBT for one test scenario, by its `attack` kind. Covers every PR:
     #1013's two forgeries and its honest wrong-seed psbt, then the per-output
     builders for #1032, #1044, #1040, #1046, and #1047, #995's legacy
-    input-amount lies, and #1041's negative-fee psbt."""
+    input-amount lies, #1041's negative-fee psbt, and the honest OP_RETURN
+    psbts for #1042 and #1043, which common/op_return_psbt builds."""
     if kind in ("fake_change", "bad_input"):
         return build_attack_psbt(kind, signers, script_type, network, num_inputs, threshold)
     if kind == "wrong_seed":
         return build_psbt(signers, script_type, num_inputs, "change", threshold=threshold)
     if kind == "negative_fee":
         return build_negative_fee_psbt(signers, script_type, network, num_inputs, threshold)
+    if kind in OP_RETURN_CASES:
+        return build_op_return_psbt(kind, signers, script_type, num_inputs, threshold)
     builder = _TEST_BUILDERS.get(kind)
     if builder is None:
         raise ValueError(f"unknown test kind: {kind!r}")
