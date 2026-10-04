@@ -1091,7 +1091,7 @@ function outcomePhrase(s) {
     case 'change':
       return `should parse with no warning, and show the output <b>${scr.toLowerCase()}</b>`;
     case 'display':
-      return `should parse with no warning, and reach the <b>${scr}</b> screen`;
+      return `should parse, and reach the <b>${scr}</b> screen`;
     default: return `should route to “<b>${scr}</b>”`;
   }
 }

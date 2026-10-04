@@ -1,10 +1,10 @@
 """OP_RETURN transactions that exercise SeedSigner's data-carrier handling.
 
 Unlike common/attack_psbt.py, nothing here is a forgery. What varies is how the
-OP_RETURN output is encoded and how much data it carries. The three malformed cases
-have an OP_RETURN script that is not made of complete pushes, which Bitcoin Core will
-not relay. Each case's user-facing description lives with its scenario in
-common/scenarios.py.
+OP_RETURN output is encoded, how much data it carries, and whether it destroys value.
+The three malformed cases have an OP_RETURN script that is not made of complete
+pushes, which Bitcoin Core will not relay. Each case's user-facing description lives
+with its scenario in common/scenarios.py.
 
     direct_push    40 bytes pushed with the minimal (direct) opcode
     binary         75 bytes that are not valid UTF-8, so the screen shows hex
@@ -16,6 +16,13 @@ common/scenarios.py.
     truncated_push    a push declaring 40 bytes with only 20 behind it
     truncated_length  OP_PUSHDATA2 followed by one length byte instead of two
     non_push_opcode   a valid push followed by OP_CHECKSIG, which pushes nothing
+
+    nonzero_value  10,000 sats on the output, which the transaction destroys
+    two_outputs    two OP_RETURN outputs
+    many_outputs   five, with the burn on the third
+    max_pages      800 bytes, exactly what the paged screen will show
+    large_burn     4 KB and 10,000 sats destroyed, on the same output
+    kitchen_sink   all of the above in one transaction
 
 Bitcoin Core v30 raised the default -datacarriersize to 100,000 bytes, and consensus
 never limited OP_RETURN data at all, so the larger payloads here are sizes a signer
@@ -38,6 +45,10 @@ OP_CHECKSIG = 0xac
 # The payload from the issue report, chosen because the damage is legible: the
 # leading "C" is what a device running 0.8.7 drops.
 CHANCELLOR = b"Chancellor on the brink of third bailout"
+
+# Sats burned by the nonzero_value case. Deliberately large enough to be obvious
+# against the 100,000 sat inputs rather than lost in rounding.
+BURNED_SATS = 10_000
 
 # A payload that is deliberately not valid UTF-8, so the screen takes its hex path.
 # Ascending from 0x80 means the first bytes are self-describing: the payload starts
@@ -83,6 +94,14 @@ OP_RETURN_CASES = {
     "binary":        lambda: [(op_return_script(BINARY_PAYLOAD), 0)],
     "pushdata1":     lambda: [(op_return_script(_filler(80)), 0)],
     "pushdata2":     lambda: [(op_return_script(_filler(300)), 0)],
+    "max_pages":     lambda: [(op_return_script(_filler(800)), 0)],
+    "large_burn":    lambda: [(op_return_script(_filler(4096)), BURNED_SATS)],
+    "nonzero_value": lambda: [(op_return_script(CHANCELLOR), BURNED_SATS)],
+    "two_outputs":   lambda: [(op_return_script(b"first OP_RETURN payload"), 0),
+                              (op_return_script(b"second OP_RETURN payload"), 0)],
+    "many_outputs":  lambda: [(op_return_script(b"OP_RETURN payload %d" % i),
+                               BURNED_SATS if i == 3 else 0)
+                              for i in range(1, 6)],
     "empty":         lambda: [(Script(bytes([OP_RETURN])), 0)],
     "multi_push":    lambda: [(op_return_script(b"first push, ", b"second push"), 0)],
 
@@ -90,6 +109,16 @@ OP_RETURN_CASES = {
     "truncated_push":   lambda: [(Script(bytes([OP_RETURN, len(CHANCELLOR)]) + CHANCELLOR[:20]), 0)],
     "truncated_length": lambda: [(Script(bytes([OP_RETURN, OP_PUSHDATA2, 0x2c])), 0)],
     "non_push_opcode":  lambda: [(Script(op_return_script(CHANCELLOR).data + bytes([OP_CHECKSIG])), 0)],
+
+    # In output order, which is the order the outputs are reviewed in.
+    "kitchen_sink":  lambda: [
+        (op_return_script(CHANCELLOR), 0),                          # readable, one page
+        (op_return_script(BINARY_PAYLOAD), 0),                      # not text, so hex
+        (op_return_script(_filler(300)), 0),                        # pages, not truncated
+        (op_return_script(_filler(4096)), 0),                       # too large to page
+        (op_return_script(b"first push, ", b"second push"), 0),     # two pushes
+        (Script(bytes([OP_RETURN])), BURNED_SATS),                  # bare, and destroys sats
+    ],
 }
 
 
@@ -98,7 +127,10 @@ def build_op_return_psbt(kind: str, signers: list, script_type: str,
     """An ordinary send-with-change psbt plus the OP_RETURN output(s) for `kind`.
 
     Any sats the OP_RETURN outputs carry come out of change, so the fee stays what
-    build_psbt set it to and the transaction still balances.
+    build_psbt set it to and the transaction still balances. That matters here:
+    the whole point of the nonzero_value case is that the device's own arithmetic
+    stops balancing, and it would prove nothing if the psbt were unbalanced to
+    begin with.
 
     Note the values are set on the OutputScope, never through psbt.tx.vout[i].
     PSBT.tx rebuilds the transaction from the scopes on every access, so writes

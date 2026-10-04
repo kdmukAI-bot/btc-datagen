@@ -21,6 +21,7 @@ from common import script_types
 from common.attack_psbt import (NEGATIVE_FEE_OVERRUN, PR1047_CASES,
                                 PR995_CLAIMED_INPUT_VALUE, PR995_REAL_INPUT_VALUE,
                                 PR995_TAMPER_DELTA)
+from common.op_return_psbt import BURNED_SATS
 from common.psbt import FEE, IN_VALUE
 
 DEFAULT_NUM_INPUTS = 3
@@ -80,8 +81,7 @@ class Scenario:
     # do so the sample is useful to run on hardware.
     pr: str = None                     # "1013" | "1032" | "1044" | "1040" | "1046"
                                        # | "1047" | "995" | "1041" | "1060" | "1073"
-                                       # | "1042"
-                                       # | "dev"
+                                       # | "1042" | "1043" | "dev"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -255,6 +255,16 @@ TEST_PR_GROUPS = [
                   "OP_PUSHDATA1 satisfies, so every other encoding lost or gained a "
                   "byte at the front. The last three carry a malformed OP_RETURN, which "
                   "the device now refuses instead of showing. Fixes issue #963."),
+    },
+    {
+        "pr": "1043",
+        "label": "PR #1043: OP_RETURN display and accounting",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1043",
+        "blurb": ("What the device does with an OP_RETURN once it has parsed it. "
+                  "Before the fix only the last of several survived the parse, sats "
+                  "attached to one were added to no total so the amounts on screen "
+                  "stopped adding up to the inputs, and the payload was drawn with no "
+                  "bound on its size."),
     },
     {
         "pr": "dev",
@@ -1167,7 +1177,8 @@ _PR1073_DEFS = [
 # Ordered the way a tester should work through them: the two that show the mis-slice
 # most plainly first, then the remaining encodings, then the control that must look
 # identical either way, then the empty edge case, then the malformed scripts the device
-# should refuse.
+# should refuse. The cases for #1043 fail on defects #1042 does not touch, so mixing
+# them in would read as failures against it.
 _PR1042_DEFS = [
     {"kind": "direct_push", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Text payload, pushed directly", "outcome": "display",
@@ -1242,6 +1253,68 @@ _PR1042_DEFS = [
 ]
 
 
+# PR #1043: what the device does with an OP_RETURN once it has parsed it. These parse
+# correctly even with the push-opcode fix in place. What they exercise is everything
+# after the parse: how many OP_RETURNs survive it, whether their value is counted,
+# and whether the screen can show a payload of any size.
+_PR1043_DEFS = [
+    {"kind": "two_outputs", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Two OP_RETURN outputs", "outcome": "display",
+     "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
+     "blurb": ("Two OP_RETURN outputs in one transaction. Several have always been "
+               "consensus-valid, and Bitcoin Core v30 dropped the one-per-transaction "
+               "relay limit. Before the fix the device showed only the second. With "
+               "the fix it shows both, numbered, in output order. The overview still "
+               "draws a single OP_RETURN row for the two.")},
+    {"kind": "many_outputs", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Five outputs, one of them burning sats", "outcome": "display",
+     "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
+     "blurb": (f"Five OP_RETURN outputs, the middle one burning {BURNED_SATS:,} sats. "
+               "Before the fix the device showed only the last of the five and the "
+               "burn nowhere. With the fix the overview's single OP_RETURN row is marked "
+               f"(!), a Caution screen showing {BURNED_SATS:,} sats comes right after the "
+               f"overview, the math screen shows {BURNED_SATS:,} burned, and each output "
+               "gets its own screen, the third saying how much it burns.")},
+    {"kind": "nonzero_value", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Sats burned on the OP_RETURN", "outcome": "display",
+     "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
+     "blurb": (f"The OP_RETURN output carries {BURNED_SATS:,} sats, which the "
+               "transaction destroys. Before the fix that amount appeared on no "
+               "screen, and inputs no longer equalled spend + change + fee. With the "
+               "fix the overview marks the OP_RETURN row (!), a Caution screen showing "
+               f"{BURNED_SATS:,} sats comes right after the overview, the math screen "
+               "gets a burned line, and the OP_RETURN screen also says how much it "
+               "burns.")},
+    {"kind": "max_pages", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Paged to the limit, nothing dropped", "outcome": "display",
+     "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
+     "blurb": ("800 bytes, exactly as much as the paged screen will show. Before the "
+               "fix the whole payload was drawn on one screen, running far past the "
+               "button. With the fix it is ten pages of 80 with no truncation notice; "
+               "one byte more and the device would have to say it could not show "
+               "everything.")},
+    {"kind": "large_burn", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Too large to show, and burning sats", "outcome": "display",
+     "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
+     "blurb": (f"4 KB of payload and {BURNED_SATS:,} sats burned, on the same output. "
+               "Before the fix the device drew the payload off the screen and never "
+               "mentioned the sats. With the fix a Caution screen comes right after the "
+               "overview, every page also says how much it burns, and the last page "
+               "says how many bytes could not be shown.")},
+    {"kind": "kitchen_sink", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Everything at once", "outcome": "display",
+     "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
+     "blurb": ("One transaction carrying six OP_RETURN outputs: a readable payload, a "
+               "binary one shown as hex, one long enough to page, one too large to "
+               "page through, two pushes in a single script, and a bare OP_RETURN "
+               "that also burns sats. Before the fix only the last survived the parse, "
+               "and being bare it got no screen, so the device showed none of the six "
+               "and none of the sats. With the fix a Caution screen for the burned sats "
+               "comes right after the overview, it walks through all six, and the "
+               "totals add up.")},
+]
+
+
 # Not tied to a PR. The unsupported-script-type abort sat under #1032 while having
 # nothing to do with change ownership, and #995 changes which screen it reaches, so
 # it belongs here rather than under either one.
@@ -1308,6 +1381,8 @@ def test_scenarios() -> list:
     out.extend(_make_pr_test("1073", d) for d in _PR1073_DEFS)
     # PR #1042: an OP_RETURN payload read correctly however it is pushed.
     out.extend(_make_pr_test("1042", d) for d in _PR1042_DEFS)
+    # PR #1043: what the device does with an OP_RETURN once it has parsed it.
+    out.extend(_make_pr_test("1043", d) for d in _PR1043_DEFS)
     # Not a PR: what the current dev build does.
     out.extend(_make_pr_test("dev", d) for d in _DEV_DEFS)
     return out
