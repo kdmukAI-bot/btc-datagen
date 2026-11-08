@@ -79,13 +79,16 @@ class Scenario:
     # point of the wrong-seed case); `expected*` describe what the device should
     # do so the sample is useful to run on hardware.
     pr: str = None                     # "1013" | "1032" | "1044" | "1040" | "1046"
-                                       # | "1047" | "995" | "1041" | "1060" | "dev"
+                                       # | "1047" | "995" | "1041" | "1060" | "1073"
+                                       # | "dev"
     attack: str = None
     load_seed: str = None
     expected: str = None
     expected_screen: str = None
     # What the device does with this psbt, so the banner can phrase it correctly:
     #   refuse  aborts to a warning screen (expected_screen names it)
+    #   warn    shows a warning screen (expected_screen names it), then lets the user
+    #           continue to sign
     #   error   aborts to the generic error screen (unsupported input)
     #   spend   parses fine; the output is shown as a payment out, not change
     #   change  parses fine; the output is shown as change (correctly, or as a
@@ -233,6 +236,15 @@ TEST_PR_GROUPS = [
                   "until the outputs are read, so an attack there is the one reported."),
     },
     {
+        "pr": "1073",
+        "label": "PR #1073: change paths",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1073",
+        "blurb": ("Proving a change output pays this seed does not prove your wallet will "
+                  "ever look for it. Change must now come back to the wallet the inputs "
+                  "spend from, on its receive or change branch, at an ordinary address "
+                  "index. Change far past the inputs' address indexes gets a warning."),
+    },
+    {
         "pr": "dev",
         "label": "dev: current behavior",
         "url": "https://github.com/seedsigner/seedsigner/tree/dev",
@@ -317,6 +329,8 @@ _PROBLEM_SCREEN = "Transaction Problem"
 _ERROR_SCREEN = "Generic error screen"
 _CANT_SIGN_SCREEN = "Seed Can't Sign"
 _NOT_YET_SCREEN = "Not Yet Implemented"
+_UNSAFE_PATH_SCREEN = "Suspicious Transaction / Unsafe Derivation Path"
+_DISTANT_SCREEN = "Distant Address"
 _SPEND_RESULT = "Shown as a payment, not change"
 _CHANGE_RESULT = "Shown as change (a limitation)"
 _CHANGE_OK_RESULT = "Shown as change (correct)"
@@ -331,6 +345,7 @@ _CHANGE_NO_XPUBS = "With no global xpubs there is nothing to compare, so the dev
 _UNVERIFIED = "Device should discard it: the input amounts cannot be confirmed."
 _CANT_SIGN = "Device should say this seed can't sign it."
 _UNSUPPORTED = "Device should refuse it as not yet supported."
+_MIXED_WALLETS = "Device should discard it: it cannot tell which of the inputs' wallets is real."
 
 # `expected` serves two readers: whoever maintains these definitions, and the
 # tester holding the device. Most of them only restate `outcome` and the screen
@@ -341,7 +356,7 @@ _UNSUPPORTED = "Device should refuse it as not yet supported."
 # what the device just missed.
 _OBVIOUS_EXPECTATIONS = frozenset({
     _REFUSE, _MALFORMED, _ERROR, _SPEND, _CHANGE_OK, _UNVERIFIED, _CANT_SIGN,
-    _UNSUPPORTED,
+    _UNSUPPORTED, _MIXED_WALLETS,
 })
 
 
@@ -351,9 +366,9 @@ def tester_note(scenario) -> str:
         return None
     return scenario.expected
 
-# Icon by outcome: a warning triangle where the device stops, an arrow where the
-# output leaves as a spend, an info mark where it is (mis)counted as change.
-_ICON = {"refuse": "⚠", "error": "⚠", "spend": "→", "change": "ℹ"}
+# Icon by outcome: a warning triangle where the device stops or warns, an arrow where
+# the output leaves as a spend, an info mark where it is (mis)counted as change.
+_ICON = {"refuse": "⚠", "warn": "⚠", "error": "⚠", "spend": "→", "change": "ℹ"}
 
 _PR1032_DEFS = [
     # --- refusals: ownership contradictions (attack warning) -----------------
@@ -856,11 +871,11 @@ _PR1041_DEFS = [
 
 
 # PR #1060: each claim of ours on an input is held to the script the input commits to.
-# #1060 is stacked on #1047, so "before the fix" is measured on #1047's head; current
-# dev does the same with every psbt here. A build without the fix parses all but the
-# held and wrong-seed cases, then signs. The taproot refusals forge every input, so that
-# build adds no signature at all and stops on "Signing Failed" after the review; the
-# one-input merkle root case shows what happens when it can sign the rest.
+# "Before the fix" is measured on dev, #1060's base now that #1047 has merged. A build
+# without the fix parses all but the held and wrong-seed cases, then signs. The taproot
+# refusals forge every input, so that build adds no signature at all and stops on
+# "Signing Failed" after the review; the one-input merkle root case shows what happens
+# when it can sign the rest.
 _PR1060_HELD = ("Before the fix the milder finding was checked first and the device "
                 "stopped on it, as \"Transaction Problem\" rather than an attack warning.")
 _PR1060_SIGNING_FAILED = ("Before the fix the transaction was reviewed as normal and then "
@@ -957,11 +972,12 @@ _PR1060_DEFS = [
     {"kind": "one_level_change", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Change at a one-level path", "outcome": "change",
      "screen": _CHANGE_RESULT,
-     "expected": "Device shows it as change, a known gap: the PR leaves change paths to a follow-up.",
+     "expected": "Device counts it as yours, a known gap that PR #1073 closes.",
      "blurb": ("The change output really pays your seed's key at m/5 and claims it at that "
                "path. The fix refuses that path on an input but not on an output, where "
-               "the rules for change paths are left to a follow-up PR, so this is still "
-               "shown as change. Builds without the fix do the same.")},
+               "the rules for change paths are left to PR #1073, so the device still "
+               "counts it as yours, on a screen titled Self-Transfer. Builds without the "
+               "fix do the same.")},
 
     # --- a milder finding held until the outputs are read (attack) -----------
     {"kind": "held_false_input_claim", "script_type": "P2WPKH", "family": "Native SegWit",
@@ -993,6 +1009,135 @@ _PR1060_DEFS = [
                "asking whether the seed can sign, so the forgery is reported. Before the "
                "fix the device said only that this seed can't sign it."),
      "summary_note": _PR995_FEE_LIE_NOTE},
+]
+
+
+# PR #1073: change has to come back where the wallet will look for it. #1073 is stacked
+# on #1060, so "before the fix" is measured on #1060's head; current dev does the same
+# with every psbt here. A build without the fix parses all of them with no warning and
+# signs.
+_PR1073_LOST = ("Your wallet never scans that path, so the change would vanish from your "
+                "balance. ")
+_PR1073_BEFORE_CHANGE = "Before the fix the device showed it as your change and signed."
+_PR1073_BEFORE_SELF = ("Before the fix the device showed it as a self-transfer back to your "
+                       "wallet and signed.")
+
+_PR1073_DEFS = [
+    # --- change at a path the wallet does not scan (attack) ------------------
+    {"kind": "change_extra_level", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Change at an extra path level", "outcome": "refuse",
+     "screen": _UNSAFE_PATH_SCREEN, "expected": _REFUSE,
+     "blurb": ("The change output really pays your key, at m/84'/0'/0'/7/1/0: a level no "
+               "wallet uses sits between the account and the change branch, and anyone "
+               "with your account xpub can derive keys there. " + _PR1073_LOST
+               + _PR1073_BEFORE_CHANGE)},
+    {"kind": "change_extra_level_taproot", "script_type": "P2TR", "family": "Taproot",
+     "label": "Change at an extra path level", "outcome": "refuse",
+     "screen": _UNSAFE_PATH_SCREEN, "expected": _REFUSE,
+     "blurb": ("The taproot change output really pays your key, at m/86'/0'/0'/7/1/0: a "
+               "level no wallet uses sits between the account and the change branch, and "
+               "anyone with your account xpub can derive keys there. " + _PR1073_LOST
+               + _PR1073_BEFORE_CHANGE)},
+    {"kind": "change_extra_level_multisig", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Change at an extra path level", "outcome": "refuse",
+     "screen": _UNSAFE_PATH_SCREEN, "expected": _REFUSE,
+     "blurb": ("The change output really pays your 2-of-3, with every cosigner's key at "
+               "m/48'/0'/0'/2'/7/1/0: a level no wallet uses sits between the account and "
+               "the change branch. " + _PR1073_LOST + "The psbt carries no global xpubs. "
+               "Before the fix the device showed it as your change, and only a loaded "
+               "wallet descriptor caught it, as \"Address Verification Failed\".")},
+    {"kind": "change_other_branch", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Change on branch 2", "outcome": "refuse",
+     "screen": _UNSAFE_PATH_SCREEN, "expected": _REFUSE,
+     "blurb": ("The change output really pays your key, at m/84'/0'/0'/2/0. Wallets scan "
+               "only branch 0 (receive) and branch 1 (change), so the change would vanish "
+               "from your balance. " + _PR1073_BEFORE_SELF)},
+    {"kind": "change_hardened_index", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Change at a hardened address index", "outcome": "refuse",
+     "screen": _UNSAFE_PATH_SCREEN, "expected": _REFUSE,
+     "blurb": ("The change output really pays your key, at m/84'/0'/0'/1/0', a hardened "
+               "address index. Wallets derive their addresses from the account xpub, "
+               "which cannot reach a hardened index, so the change would vanish from your "
+               "balance. " + _PR1073_BEFORE_CHANGE)},
+    {"kind": "one_level_change", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Change at a one-level path", "outcome": "refuse",
+     "screen": _UNSAFE_PATH_SCREEN, "expected": _REFUSE,
+     "blurb": ("The change output really pays your seed's key at m/5 and claims it at that "
+               "path. A path of one level cannot hold both a branch and an address index, "
+               "so no wallet would find the change. " + _PR1073_BEFORE_SELF)},
+    {"kind": "change_other_account", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Output to your second account", "outcome": "refuse",
+     "screen": _UNSAFE_PATH_SCREEN, "expected": _REFUSE,
+     "blurb": ("An output pays the first receive address of your seed's second account, "
+               "m/84'/0'/1'/0/0, and says so, while every input spends from the first "
+               "account. The fix refuses an output of yours that goes to a wallet the "
+               "inputs do not spend from, and that includes an honest transfer between "
+               "your own accounts annotated like this one. The PR notes Bitcoin Core "
+               "annotates such transfers; left unannotated, the output is shown as a "
+               "payment. " + _PR1073_BEFORE_SELF)},
+
+    # --- change far past the inputs' address indexes (warning) ---------------
+    {"kind": "distant_change", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Change at a distant address index", "outcome": "warn",
+     "screen": _DISTANT_SCREEN,
+     "expected": "The change screen then marks it \"Distant index #20000\", and signing is allowed.",
+     "blurb": ("The change output pays your key at m/84'/0'/0'/1/20000, while the inputs "
+               "spend from receive indexes 0 to 2. A wallet looks only a limited distance "
+               "past the addresses it has used, so it may never find change this far "
+               "along. The device cannot see how far the wallet has handed out addresses, "
+               "so change more than 10,000 indexes past the smallest input index gets a "
+               "warning and you decide. Before the fix there was no warning.")},
+    {"kind": "distant_change_far_input", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Distant change behind a far input", "outcome": "warn",
+     "screen": _DISTANT_SCREEN,
+     "expected": "The change screen then marks it \"Distant index #20000\", and signing is allowed.",
+     "blurb": ("The change output pays your key at m/84'/0'/0'/1/20000. Inputs 0 and 1 "
+               "spend from receive indexes 0 and 1, and input 2 from receive index 50,000. "
+               "A coordinator could add an input like that to make the change look close "
+               "to addresses in use, but the device measures from the smallest input "
+               "index, so the warning still shows. Before the fix there was no warning.")},
+
+    # --- inputs of yours from two wallets ------------------------------------
+    {"kind": "added_input", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Change under an added input's path", "outcome": "refuse",
+     "screen": _PROBLEM_SCREEN, "expected": _MIXED_WALLETS,
+     "blurb": ("A fourth input claims your key at m/84'/0'/0'/7/0/0 and carries only a "
+               "witness UTXO, and the change goes to m/84'/0'/0'/7/1/0, under that input's "
+               "path. A segwit v0 signature commits only to its own input, so this may be "
+               "the coordinator's own coin described as yours, and your signatures on the "
+               "other three stay valid either way. The device cannot tell which of the "
+               "inputs' wallets is real. " + _PR1073_BEFORE_CHANGE)},
+    {"kind": "two_accounts", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Honest spend from two accounts", "outcome": "refuse",
+     "screen": _PROBLEM_SCREEN,
+     "expected": ("A known cost of the fix: this psbt is honest. With each input's previous "
+                  "transaction attached, it would pass."),
+     "blurb": ("An honest spend from two of your accounts: input 0 from m/84'/0'/1'/0/0, "
+               "the other inputs and the change in the first account. Every input carries "
+               "only a witness UTXO, so the device cannot tell this from a coordinator "
+               "adding a coin it describes as yours, and refuses it. "
+               + _PR1073_BEFORE_CHANGE)},
+    {"kind": "two_accounts_previous_txs", "script_type": "P2WPKH", "family": "Native SegWit",
+     "label": "Two accounts, previous transactions attached", "outcome": "change",
+     "screen": _CHANGE_OK_RESULT, "expected": _CHANGE_OK,
+     "blurb": ("An honest spend from two of your accounts: input 0 from m/84'/0'/1'/0/0, "
+               "the other inputs and the change in the first account. Every input carries "
+               "a non-witness UTXO, its previous transaction, which the device checks "
+               "against the input's txid. With every input proven, inputs from two "
+               "wallets are allowed. Builds without the fix show the change too.")},
+
+    # --- a gap the PR documents ----------------------------------------------
+    {"kind": "added_input_taproot", "script_type": "P2TR", "family": "Taproot",
+     "label": "Change under a real coin's path", "outcome": "change",
+     "screen": _CHANGE_RESULT,
+     "expected": ("Device shows it as change, a known gap: a real coin of yours at a path "
+                  "the coordinator chose lets change go there. The overview shows 4 inputs."),
+     "blurb": ("A fourth input pays your key at m/86'/0'/0'/7/0/0, and the change goes to "
+               "m/86'/0'/0'/7/1/0, under that input's path. Every taproot signature commits "
+               "to every input's script and amount, so this coin has to be real: a "
+               "coordinator would first have to send it to you. The fix then takes the "
+               "input's path as a wallet you spend from and accepts the change there. "
+               "Builds without the fix do the same.")},
 ]
 
 
@@ -1058,6 +1203,8 @@ def test_scenarios() -> list:
     out.extend(_make_pr_test("1041", d) for d in _PR1041_DEFS)
     # PR #1060: each claim of ours on an input held to the input's script.
     out.extend(_make_pr_test("1060", d) for d in _PR1060_DEFS)
+    # PR #1073: change has to come back to a path the inputs' wallet scans.
+    out.extend(_make_pr_test("1073", d) for d in _PR1073_DEFS)
     # Not a PR: what the current dev build does.
     out.extend(_make_pr_test("dev", d) for d in _DEV_DEFS)
     return out

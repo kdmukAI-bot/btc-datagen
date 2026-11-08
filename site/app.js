@@ -1079,11 +1079,13 @@ function renderFlow() {
 /* The what-to-load / what-should-happen note for a PR test scenario. Empty and
    hidden for every ordinary demo transaction. */
 /* How the fixed device should react, phrased by outcome: most abort to a warning
-   screen, but some parse with no warning and only classify the output. */
+   screen, some warn and let the user go on, and some parse with no warning and
+   only classify the output. */
 function outcomePhrase(s) {
   const scr = s.expected_screen;
   switch (s.outcome) {
     case 'error': return `should abort to the <b>${scr}</b>`;
+    case 'warn': return `should warn “<b>${scr}</b>”, then let you continue`;
     case 'spend':
     case 'change':
       return `should parse with no warning, and show the output <b>${scr.toLowerCase()}</b>`;

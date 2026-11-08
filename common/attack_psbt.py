@@ -43,7 +43,9 @@ from embit.psbt import DerivationPath, InputScope, OutputScope
 from embit.transaction import TransactionOutput, Witness
 
 from common import script_types
-from common.psbt import (build_psbt, _path_ints, CHANGE_BRANCH, RECEIVE_BRANCH)
+from common.keys import make_cosigner
+from common.psbt import (build_psbt, _funding_tx, _path_ints, _ScriptContext,
+                         CHANGE_BRANCH, RECEIVE_BRANCH)
 
 # A key nobody in the fixtures owns. Deterministic so builds are reproducible;
 # domain-separated so it can never collide with a real fixture seed.
@@ -1063,7 +1065,6 @@ def _pr1046_repoint_at_wallet(out, wallet_name: str):
     the three condition controls, each of which pays somewhere the seed really owns
     so the only thing keeping it a spend is the condition under test."""
     from common.fixtures import load_seeds, load_wallets, wallet_cosigners
-    from common.psbt import _ScriptContext
 
     wallet = load_wallets()[wallet_name]
     ctx = _ScriptContext(wallet_cosigners(wallet, load_seeds()), wallet["threshold"],
@@ -1536,6 +1537,214 @@ def _pr1060_held_surplus_output(signers, network, num_inputs):
     return psbt
 
 
+# --- PR #1073: change has to come back where the wallet will look for it -----
+#
+# The output checks from #1032 on prove that a change output pays this seed. They do not
+# prove the user's wallet will ever find it. Anyone holding the account xpub can derive
+# our keys at any non-hardened path under it, and change sent to a path the wallet never
+# scans is lost to the user until whoever chose the path says where it is. #1073 adds
+# two refusals and a warning:
+#
+#   PSBTChangeDerivationPathError  change not at the base path (every level before the
+#       branch and address index) of one of our inputs, on the receive or change branch,
+#       at a non-hardened address index -> "Unsafe Derivation Path"
+#   PSBTUnverifiableMixedInputBasePathsError  single sig segwit v0 inputs of ours at more
+#       than one base path, unless each carries a non-witness UTXO
+#       -> "Transaction Problem"
+#   "Distant Address"  change more than 10,000 address indexes past the smallest index
+#       our inputs spend from at its base path; the user may continue
+#
+# The second refusal exists because the first trusts our inputs' paths. A segwit v0
+# signature commits only to its own input, so a coordinator can add a coin of its own
+# whose witness UTXO claims our key at a base path it chose, and the change rules would
+# then accept change there. A non-witness UTXO is checked against the input's txid, so
+# with one on every input the inputs may be at several base paths. Taproot signatures
+# commit to every input's script and amount, so taproot is exempt, which leaves the gap
+# the last builder records: a real coin of ours at a path the coordinator chose still
+# lets change go there.
+#
+# #1073 is stacked on #1060, so "before" is measured on #1060's head.
+
+# A level no wallet uses, put between the account and the branch.
+_PR1073_EXTRA_LEVEL = 7
+
+# Far enough past the inputs' address indexes (0 to 2) for the distant address warning.
+_PR1073_DISTANT_INDEX = 20_000
+
+# An input of ours far along the receive branch, which must not widen the window.
+_PR1073_FAR_INPUT_INDEX = 50_000
+
+# The input a coordinator adds gets its own outpoint, so no coin is spent twice.
+_PR1073_ADDED_TXID = hashlib.sha256(b"btc-datagen-pr1073-added-input").digest()
+
+# Seeds the previous transactions built for the two-account spend, so their txids
+# differ from the fixture's own.
+_PR1073_FUNDING_NONCE = 1073
+
+
+def _other_account(signer, account: int):
+    """The same seed at another account: the last level of its account path replaced."""
+    levels = signer.derivation.split("/")
+    levels[-1] = f"{account}h"
+    return make_cosigner(signer.name, signer.mnemonic, "/".join(levels), signer.network)
+
+
+def _pr1073_move_change(psbt, signers, script_type, threshold, *path):
+    """Rebuild the change output at `path` under each signer's account, keeping its
+    value. It still pays this seed and claims it truthfully, at a path of the
+    builder's choosing."""
+    out = psbt.outputs[_change_output_index(psbt)]
+    ctx = _ScriptContext(signers, threshold, script_type, *path)
+    out.script_pubkey = ctx.script_pubkey
+    out.redeem_script = None
+    out.witness_script = None
+    out.bip32_derivations.clear()
+    out.taproot_bip32_derivations.clear()
+    ctx.apply_to_output(out)
+
+
+def _pr1073_move_input(inp, signers, script_type, *path):
+    """Point a segwit input at our key at `path` under the account, keeping its value.
+    Its txid still names the fixture's previous transaction, which a witness-only
+    input never shows."""
+    inp.bip32_derivations.clear()
+    inp.taproot_bip32_derivations.clear()
+    _ScriptContext(signers, None, script_type, *path).apply_to_input(
+        inp, inp.witness_utxo.value, None)
+
+
+def _pr1073_add_input(psbt, signers, script_type, *path):
+    """Append an input paying our key at `path` under the account. Its value is added
+    to the payment, so the fee is unchanged."""
+    added = deepcopy(psbt.inputs[0])
+    added.txid = _PR1073_ADDED_TXID
+    added.vout = 0
+    _pr1073_move_input(added, signers, script_type, *path)
+    psbt.inputs.append(added)
+    psbt.outputs[0].value += added.witness_utxo.value
+
+
+def _pr1073_attach_previous_tx(inp, signers, nonce: int, *path):
+    """Give a p2wpkh input a non-witness UTXO: a previous transaction paying our key at
+    `path`, which the input then spends by its txid."""
+    tx = _funding_tx(_ScriptContext(signers, None, "P2WPKH", *path),
+                     inp.witness_utxo.value, nonce)
+    inp.non_witness_utxo = tx
+    inp.txid = tx.txid()
+    inp.vout = 0
+
+
+def _pr1073_change_extra_level(signers, network, num_inputs):
+    """Change at an extra level under the inputs' base path: m/84h/0h/0h/7/1/0."""
+    psbt = build_psbt(signers, "P2WPKH", num_inputs, "change")
+    _pr1073_move_change(psbt, signers, "P2WPKH", None,
+                        _PR1073_EXTRA_LEVEL, CHANGE_BRANCH, 0)
+    return psbt
+
+
+def _pr1073_change_extra_level_taproot(signers, network, num_inputs):
+    """Taproot change at an extra level under the inputs' base path."""
+    psbt = build_psbt(signers, "P2TR", num_inputs, "change")
+    _pr1073_move_change(psbt, signers, "P2TR", None, _PR1073_EXTRA_LEVEL, CHANGE_BRANCH, 0)
+    return psbt
+
+
+def _pr1073_change_extra_level_multisig(signers, network, num_inputs, threshold):
+    """Multisig change at an extra level under the inputs' base path, every cosigner's
+    key moved together. The fixture's multisig psbts carry no global xpubs, so without
+    the fix only a loaded descriptor catches it."""
+    psbt = build_psbt(signers, "P2WSH", num_inputs, "change", threshold=threshold)
+    _pr1073_move_change(psbt, signers, "P2WSH", threshold,
+                        _PR1073_EXTRA_LEVEL, CHANGE_BRANCH, 0)
+    return psbt
+
+
+def _pr1073_change_other_branch(signers, network, num_inputs):
+    """Change on branch 2, which wallets do not scan."""
+    psbt = build_psbt(signers, "P2WPKH", num_inputs, "change")
+    _pr1073_move_change(psbt, signers, "P2WPKH", None, 2, 0)
+    return psbt
+
+
+def _pr1073_change_hardened_index(signers, network, num_inputs):
+    """Change at a hardened address index, m/84h/0h/0h/1/0h. The account xpub cannot
+    derive it, so the key comes from the seed itself."""
+    psbt = build_psbt(signers, "P2WPKH", num_inputs, "change")
+    victim = signers[0]
+    path = _path_ints(victim.derivation) + [CHANGE_BRANCH, bip32.HARDENED_INDEX]
+    _pay_and_claim(psbt.outputs[_change_output_index(psbt)], *_root_claim(victim, path))
+    return psbt
+
+
+def _pr1073_change_other_account(signers, network, num_inputs):
+    """An output to the first receive address of this seed's second account,
+    m/84h/0h/1h/0/0, with its derivation entry. The PR notes Bitcoin Core annotates a
+    transfer between its wallets this way."""
+    psbt = build_psbt(signers, "P2WPKH", num_inputs, "change")
+    _pr1073_move_change(psbt, [_other_account(signers[0], 1)], "P2WPKH", None,
+                        RECEIVE_BRANCH, 0)
+    return psbt
+
+
+def _pr1073_distant_change(signers, network, num_inputs):
+    """Change at m/84h/0h/0h/1/20000, while the inputs spend from indexes 0 to 2."""
+    psbt = build_psbt(signers, "P2WPKH", num_inputs, "change")
+    _pr1073_move_change(psbt, signers, "P2WPKH", None, CHANGE_BRANCH, _PR1073_DISTANT_INDEX)
+    return psbt
+
+
+def _pr1073_distant_change_far_input(signers, network, num_inputs):
+    """The distant change, with the last input moved to receive index 50,000. The
+    window is measured from the smallest input index, so the far input cannot widen
+    it."""
+    psbt = _pr1073_distant_change(signers, network, num_inputs)
+    _pr1073_move_input(psbt.inputs[-1], signers, "P2WPKH",
+                       RECEIVE_BRANCH, _PR1073_FAR_INPUT_INDEX)
+    return psbt
+
+
+def _pr1073_added_input(signers, network, num_inputs):
+    """A fourth, witness-only input paying our key at m/84h/0h/0h/7/0/0, and change at
+    m/84h/0h/0h/7/1/0, under the base path that input names. Whether the coin is ours
+    or the coordinator's, falsely described, the psbt looks the same."""
+    psbt = build_psbt(signers, "P2WPKH", num_inputs, "change")
+    _pr1073_add_input(psbt, signers, "P2WPKH", _PR1073_EXTRA_LEVEL, RECEIVE_BRANCH, 0)
+    _pr1073_move_change(psbt, signers, "P2WPKH", None,
+                        _PR1073_EXTRA_LEVEL, CHANGE_BRANCH, 0)
+    return psbt
+
+
+def _pr1073_added_input_taproot(signers, network, num_inputs):
+    """The added input and its change, on taproot. Every taproot signature commits to
+    every input, so the added coin has to be real, and the mixed base path rule does
+    not apply."""
+    psbt = build_psbt(signers, "P2TR", num_inputs, "change")
+    _pr1073_add_input(psbt, signers, "P2TR", _PR1073_EXTRA_LEVEL, RECEIVE_BRANCH, 0)
+    _pr1073_move_change(psbt, signers, "P2TR", None, _PR1073_EXTRA_LEVEL, CHANGE_BRANCH, 0)
+    return psbt
+
+
+def _pr1073_two_accounts(signers, network, num_inputs):
+    """An honest spend from two of this seed's accounts: input 0 from the second
+    account's m/84h/0h/1h/0/0, the rest and the change from the first. Every input
+    is witness-only."""
+    psbt = build_psbt(signers, "P2WPKH", num_inputs, "change")
+    _pr1073_move_input(psbt.inputs[0], [_other_account(signers[0], 1)], "P2WPKH",
+                       RECEIVE_BRANCH, 0)
+    return psbt
+
+
+def _pr1073_two_accounts_previous_txs(signers, network, num_inputs):
+    """The two-account spend with a non-witness UTXO on every input."""
+    psbt = _pr1073_two_accounts(signers, network, num_inputs)
+    _pr1073_attach_previous_tx(psbt.inputs[0], [_other_account(signers[0], 1)],
+                               _PR1073_FUNDING_NONCE, RECEIVE_BRANCH, 0)
+    for i in range(1, len(psbt.inputs)):
+        _pr1073_attach_previous_tx(psbt.inputs[i], signers, _PR1073_FUNDING_NONCE + i,
+                                   RECEIVE_BRANCH, i)
+    return psbt
+
+
 _TEST_BUILDERS = {
     "contradiction_singlesig": _d5_contradiction_singlesig,
     "contradiction_pays_us_claims_other": _d5_contradiction_pays_us_claims_other,
@@ -1596,6 +1805,18 @@ _TEST_BUILDERS = {
     "held_surplus_output": _pr1060_held_surplus_output,
     # #995's forged legacy amount, loaded with a seed that is not in the wallet
     "wrong_seed_fee_lie": _pr995_fee_lie_p2pkh,
+    "change_extra_level": _pr1073_change_extra_level,
+    "change_extra_level_taproot": _pr1073_change_extra_level_taproot,
+    "change_extra_level_multisig": _pr1073_change_extra_level_multisig,
+    "change_other_branch": _pr1073_change_other_branch,
+    "change_hardened_index": _pr1073_change_hardened_index,
+    "change_other_account": _pr1073_change_other_account,
+    "distant_change": _pr1073_distant_change,
+    "distant_change_far_input": _pr1073_distant_change_far_input,
+    "added_input": _pr1073_added_input,
+    "added_input_taproot": _pr1073_added_input_taproot,
+    "two_accounts": _pr1073_two_accounts,
+    "two_accounts_previous_txs": _pr1073_two_accounts_previous_txs,
 }
 
 # Kinds that need the wallet threshold passed through (multisig builders).
@@ -1609,7 +1830,7 @@ _MULTISIG_KINDS = {"contradiction_multisig", "contradiction_multisig_unclaimed",
                    "cosigner_mismatch", "cosigner_mismatch_input", "cosigner_missing",
                    "cosigner_mismatch_no_xpubs", "mismatch_beneath_contradiction",
                    "legacy_fee_lie_multisig", "legacy_no_prev_tx_multisig",
-                   "decoy_input_multisig"}
+                   "decoy_input_multisig", "change_extra_level_multisig"}
 
 # PR #1047's kinds are registered from PR1047_CASES rather than listed by hand, so
 # the builder, the script type and the threshold requirement all come from the one
@@ -1628,7 +1849,8 @@ def build_test_psbt(kind: str, signers: list, script_type: str,
     """The PSBT for one test scenario, by its `attack` kind. Covers every PR:
     #1013's two forgeries and its honest wrong-seed psbt, then the per-output
     builders for #1032, #1044, #1040, #1046, and #1047, #995's legacy
-    input-amount lies, #1041's negative-fee psbt, and #1060's input claims."""
+    input-amount lies, #1041's negative-fee psbt, #1060's input claims, and #1073's
+    change paths."""
     if kind in ("fake_change", "bad_input"):
         return build_attack_psbt(kind, signers, script_type, network, num_inputs, threshold)
     if kind == "wrong_seed":

@@ -55,27 +55,31 @@ def _path_ints(path: str) -> list:
     return out
 
 
-def _derivations(signers: list, branch: int, index: int) -> dict:
-    """{pubkey: DerivationPath} for every signer at branch/index."""
+def _derivations(signers: list, path: list) -> dict:
+    """{pubkey: DerivationPath} for every signer at `path` under its account."""
     out = {}
     for s in signers:
-        pk = s.account.derive([branch, index]).key
+        pk = s.account.derive(path).key
         out[pk] = DerivationPath(bytes.fromhex(s.fingerprint),
-                                 _path_ints(s.derivation) + [branch, index])
+                                 _path_ints(s.derivation) + path)
     return out
 
 
 class _ScriptContext:
     """Everything needed to spend from (or pay to) one address of a wallet.
 
+    `path` is the non-hardened levels under each signer's account: a wallet's own
+    addresses are at branch/index, and the PR #1073 test scenarios put one at a
+    deeper path.
+
     Attributes: script_pubkey, witness_script, redeem_script, derivations,
     and for taproot the internal key.
     """
 
-    def __init__(self, signers, threshold, script_type, branch, index):
+    def __init__(self, signers, threshold, script_type, *path):
         info = script_types.get(script_type)
         self.info = info
-        self.derivations = _derivations(signers, branch, index)
+        self.derivations = _derivations(signers, list(path))
         self.witness_script = None
         self.redeem_script = None
         self.internal_key = None
