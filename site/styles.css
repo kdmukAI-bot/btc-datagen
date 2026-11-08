@@ -439,7 +439,6 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
   cursor: pointer;
   color: var(--text);
 }
-.scenario-item[aria-current="true"] { border-color: var(--accent); }
 .scenario-item strong { display: block; font-weight: 600; font-size: 1.02rem; }
 .scenario-item span { display: block; color: var(--muted); font-size: .92rem; margin-top: 4px; }
 .empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: .9rem; }
@@ -487,6 +486,27 @@ input[type="range"] { width: 100%; height: 40px; accent-color: var(--accent); }
 }
 .scenario-item.is-test strong { color: var(--warn-text); }
 .scenario-item.is-test span { color: var(--warn-text); opacity: .85; }
+
+/* The transaction now on screen. This comes after the test-row rules, and the
+   outline is a shadow rather than the border, because a test row's warning border
+   used to paint over the old border-color marker and hide it. An inset shadow also
+   keeps the row the same size as its neighbors. */
+.scenario-item[aria-current="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.current-tag {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
 
 /* The in-flow note for a selected test scenario. */
 .test-banner {

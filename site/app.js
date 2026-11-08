@@ -1885,18 +1885,22 @@ function scenarioItem(s) {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'scenario-item' + (s.test ? ' is-test' : '');
-  b.setAttribute('aria-current', String(state.scenario && s.id === state.scenario.id));
+  // Tagged in words, not just a border color: working through a PR's list on
+  // device, the tester comes back here to find the one just run and take the next.
+  const current = Boolean(state.scenario && s.id === state.scenario.id);
+  b.setAttribute('aria-current', String(current));
+  const tag = current ? '<b class="current-tag">Current</b>' : '';
   if (s.test) {
     // A test row leads with what to load and the screen it should trigger, the
     // only two things you need to run it on device.
-    b.innerHTML = `<strong>${s.title}</strong>
+    b.innerHTML = `${tag}<strong>${s.title}</strong>
       <span>Load ${s.signing_seeds[0]} · expects “${s.expected_screen}”</span>`;
   } else {
     // Just the input count, spelled out. Frame count and PSBT size were noise at
     // this size; the size now lives in "What's in this transaction?", where
     // there is room to read it.
     const stress = s.tags.includes('stress test') ? ' · stress test' : '';
-    b.innerHTML = `<strong>${s.title}</strong>
+    b.innerHTML = `${tag}<strong>${s.title}</strong>
       <span>${s.num_inputs} input${s.num_inputs === 1 ? '' : 's'}${stress}</span>`;
   }
   b.addEventListener('click', () => { closePicker(); selectScenario(s.id); });
@@ -1975,9 +1979,13 @@ function openPicker() {
   renderFilters();
   renderScenarioList();
   $('picker').hidden = false;
-  // It scrolls as a full page now, so start it at the top rather than wherever a
-  // previous visit left it.
+  // It scrolls as a full page, so never resume wherever a previous visit left it.
+  // Open on the current transaction instead, with the next one in the list just
+  // below it; the top, toggles and filters included, is where to start when the
+  // current one is filtered out of the list.
   $('picker').scrollTop = 0;
+  const current = $('scenario-list').querySelector('[aria-current="true"]');
+  if (current) current.scrollIntoView({ block: 'center' });
 }
 function closePicker() { $('picker').hidden = true; }
 
