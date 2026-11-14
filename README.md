@@ -354,6 +354,13 @@ tpub version bytes in the descriptor and its UR, and different addresses — and
 SeedSigner's own network setting has to match. Mainnet is the site default so a
 demo attendee never has to change device settings.
 
+Silent payments (`test_sp_wallets.json`): every seed's BIP352 scan and spend keys
+at `m/352h/{coin}h/0h`, its `sp1q`/`tsp1q` address, labels m=0..3 (m=0 is the
+change label and is never shown on the site) and its BIP392 `spscan` key. The
+math lives in `common/silent_payments.py` and is held to the official BIP352 and
+BIP374 vectors in `fixtures/vectors/` by `python -m pytest tests`. The PR #949
+test group's psbts come from `common/sp_psbt.py`.
+
 ## Sparrow fidelity (measured)
 
 **Static descriptor QR** — single-part `ur:crypto-output`, uppercased (→
