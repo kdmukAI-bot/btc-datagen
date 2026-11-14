@@ -296,11 +296,24 @@ def summarize(psbt: PSBT, network: str = "main") -> dict:
             input_amount = None
             break
 
+    from common import sp_psbt
+    from common.silent_payments import PSBT_OUT_SP_V0_INFO
+
     outputs, output_total = [], 0
+    # A v2 psbt keeps value and script on each output scope, and a silent payment
+    # output may have no script until a signer computes it, so psbt.tx cannot be
+    # built for it.
+    vout = None if psbt.version == 2 else psbt.tx.vout
     for i, out in enumerate(psbt.outputs):
-        value = psbt.tx.vout[i].value
+        value = out.value if vout is None else vout[i].value
+        spk = out.script_pubkey if vout is None else vout[i].script_pubkey
         output_total += value
-        spk = psbt.tx.vout[i].script_pubkey
+        if sp_psbt.get_field(out, PSBT_OUT_SP_V0_INFO) is not None:
+            # The kind is what the psbt claims through its label field; whether
+            # the claim holds is the device's job (see the #949 fake change case).
+            outputs.append({"address": sp_psbt.output_address(out, network),
+                            "value": value, "kind": sp_psbt.output_kind(out)})
+            continue
         try:
             address = spk.address(net)
         except Exception:

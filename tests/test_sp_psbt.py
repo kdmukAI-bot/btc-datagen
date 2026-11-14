@@ -61,3 +61,14 @@ def test_same_twice_gets_two_different_outputs_once_filled():
 def test_nums_input_is_skipped():
     psbt = sp_psbt.BUILDERS["sp_nums_input"](_signers("P2TR"), "main", 3)
     assert [sp.psbt_input_pubkey(i) is None for i in psbt.inputs] == [False, False, True]
+
+
+from common.psbt import summarize
+
+
+def test_summarize_shows_sp_address_and_change_claim():
+    psbt = sp_psbt.BUILDERS["sp_change"](_signers(), "test", 3)
+    rows = summarize(psbt, "test")["outputs"]
+    assert rows[0]["address"].startswith("tsp1q") and rows[0]["kind"] == "external"
+    assert rows[1]["kind"] == "change"
+    assert summarize(psbt, "test")["fee"] == 10_000
