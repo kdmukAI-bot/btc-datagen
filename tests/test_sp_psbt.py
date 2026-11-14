@@ -34,3 +34,30 @@ def test_fill_global_matches_bip352_sender():
     want = sp.create_outputs(privs, sp_psbt.outpoints(psbt), [(B_scan, B_m)])
     assert psbt.outputs[0].script_pubkey.data == b"\x51\x20" + want[0]
     assert sp_psbt.audit(PSBT.parse(psbt.serialize()), ROOT, "main") == []
+
+
+import pytest
+
+
+@pytest.mark.parametrize("kind", sorted(sp_psbt.BUILDERS))
+@pytest.mark.parametrize("network", ["main", "test"])
+def test_builder_roundtrips_and_audits(kind, network):
+    signers = _signers(sp_psbt.CASES[kind], network)
+    psbt = sp_psbt.BUILDERS[kind](signers, network, 3)
+    raw = psbt.serialize()
+    again = PSBT.parse(raw)
+    assert again.serialize() == raw
+    assert sp_psbt.BUILDERS[kind](signers, network, 3).serialize() == raw   # deterministic
+    want = sorted(sp_psbt.EXPECTED_FINDINGS.get(kind, []))
+    assert sp_psbt.audit(again, sp_psbt.sender_root(network), network) == want
+
+
+def test_same_twice_gets_two_different_outputs_once_filled():
+    psbt = sp_psbt.BUILDERS["sp_same_twice"](_signers(), "main", 3)
+    sp_psbt.fill_global(psbt, ROOT, b"\x00" * 32)
+    assert psbt.outputs[0].script_pubkey != psbt.outputs[1].script_pubkey
+
+
+def test_nums_input_is_skipped():
+    psbt = sp_psbt.BUILDERS["sp_nums_input"](_signers("P2TR"), "main", 3)
+    assert [sp.psbt_input_pubkey(i) is None for i in psbt.inputs] == [False, False, True]

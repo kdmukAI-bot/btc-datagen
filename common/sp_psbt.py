@@ -314,3 +314,285 @@ def audit(psbt, root, network: str) -> list:
                               B_m != sp.labeled_spend_key(keys["B_spend"], keys["b_scan"], m)):
             found.append(f"label-not-ours:{i}")
     return sorted(found)
+
+
+# --- scenario builders (one per kind; signature (signers, network, num_inputs)) ---
+
+from embit.transaction import Transaction, TransactionInput, TransactionOutput  # noqa: E402
+
+from common import script_types  # noqa: E402
+from common.keys import make_signer  # noqa: E402
+from common.psbt import IN_VALUE, RECEIVE_BRANCH, _funding_tx  # noqa: E402
+
+
+def _bob(network):
+    return recipient("bob", network)
+
+
+def _sp_pay(s, net, n):
+    return pay(s, net, n)
+
+
+def _sp_pay_plus_normal(s, net, n):
+    return pay(s, net, n, [_bob(net), EXT, CHG])
+
+
+def _sp_same_twice(s, net, n):
+    return pay(s, net, n, [_bob(net), _bob(net), CHG])
+
+
+def _sp_two_recipients(s, net, n):
+    return pay(s, net, n, [_bob(net), recipient("carol", net), CHG])
+
+
+def _sp_labeled_recipient(s, net, n):
+    # Bob's m=1 address. Its spend key is B_1; there is no PSBT_OUT_SP_V0_LABEL,
+    # because a sender cannot know a stranger's m (BIP375 Updater role).
+    return pay(s, net, n, [recipient("bob", net, m=1), CHG])
+
+
+def _sp_change(s, net, n):
+    return pay(s, net, n, [_bob(net), recipient(SENDER, net, m=0, label=True)])
+
+
+def _sp_nums_input(s, net, n):
+    """Input 2 is a taproot script-path coin with internal key H, which BIP352
+    skips; its leaf key belongs to someone else."""
+    from common.attack_psbt import (_NUMS_INTERNAL_KEY, _attacker_pubkey,
+                                    _p2tr_with_script_tree, _tapleaf_hash)
+    psbt = to_v2(build_psbt(s, "P2TR", n, "full_spend"))
+    inp = psbt.inputs[2]
+    inp.witness_utxo = TransactionOutput(IN_VALUE, _p2tr_with_script_tree(
+        _NUMS_INTERNAL_KEY, _tapleaf_hash(_attacker_pubkey(net, 0, 0))))
+    inp.taproot_bip32_derivations.clear()
+    inp.taproot_internal_key = _NUMS_INTERNAL_KEY
+    set_outputs(psbt, s, "P2TR", net, [_bob(net), CHG])
+    return psbt
+
+
+def _sp_mixed_types(s, net, n):
+    """One input each from the sender's taproot, native segwit and legacy
+    wallets. Every one is eligible; SeedSigner refuses them as mixed first."""
+    mnemonic = load_seeds()[SENDER]["mnemonic"]
+    ctxs, funding = [], []
+    for i, st in enumerate(("P2TR", "P2WPKH", "P2PKH")):
+        signer = make_signer(SENDER, mnemonic, script_types.derivation_for(st, net), net)
+        ctx = _ScriptContext([signer], None, st, RECEIVE_BRANCH, i)
+        ctxs.append(ctx)
+        funding.append(_funding_tx(ctx, IN_VALUE, 9000 + i))
+    from embit.psbt import PSBT
+    psbt = to_v2(PSBT(Transaction(vin=[TransactionInput(bytes.fromhex(tx.txid().hex()), 0)
+                                       for tx in funding], vout=[])))
+    for inp, ctx, tx in zip(psbt.inputs, ctxs, funding):
+        ctx.apply_to_input(inp, IN_VALUE, tx)
+    set_outputs(psbt, s, "P2WPKH", net, [_bob(net), CHG])
+    return psbt
+
+
+def _sp_ready(s, net, n):
+    psbt = pay(s, net, n)
+    fill_global(psbt, sender_root(net), aux_for("sp_ready"))
+    return psbt
+
+
+def _sp_per_input_shares(s, net, n):
+    psbt = pay(s, net, n)
+    fill_per_input(psbt, sender_root(net), aux_for("sp_per_input_shares"))
+    return psbt
+
+
+def _received(net, m=None, tweak_delta=0):
+    """A coin a third party sent to the sender's sp address (label m), and the
+    BIP376 spend psbt for it, paying everything out to an external address."""
+    root = sender_root(net)
+    keys = sp.wallet_keys(root, net)
+    # The third party's own synthetic coin and key: what produced this payment.
+    payer = int.from_bytes(hashlib.sha256(b"btc-datagen/sp-payer/" + net.encode()).digest(), "big") % sp.N
+    payer_prev = hashlib.sha256(b"btc-datagen/sp-payer-prevout" + net.encode()).digest()
+    ih = sp.input_hash([sp.outpoint_bytes(payer_prev, 0)], sp.base_mul(payer))
+    tweak = sp.t_k(sp.point_mul(keys["B_scan"], ih * payer % sp.N), 0)
+    if m is not None:
+        tweak = (tweak + sp.label_tweak(keys["b_scan"], m)) % sp.N
+    P = sp.point_add(keys["B_spend"], sp.base_mul(tweak))
+    spk = Script(b"\x51\x20" + P[1:])
+    funding = Transaction(vin=[TransactionInput(payer_prev, 0)], vout=[TransactionOutput(IN_VALUE, spk)])
+
+    from embit.psbt import DerivationPath, PSBT
+    from common.psbt import _path_ints
+    coin = script_types.COIN_TYPE[net]
+    signer = make_signer(SENDER, load_seeds()[SENDER]["mnemonic"],
+                         script_types.derivation_for("P2TR", net), net)
+    psbt = to_v2(PSBT(Transaction(
+        vin=[TransactionInput(bytes.fromhex(funding.txid().hex()), 0)],
+        vout=[TransactionOutput(IN_VALUE - FEE, _external_spk([signer], 0))])))
+    inp = psbt.inputs[0]
+    inp.witness_utxo = TransactionOutput(IN_VALUE, spk)
+    set_field(inp, bytes([sp.PSBT_IN_SP_TWEAK]), ((tweak + tweak_delta) % sp.N).to_bytes(32, "big"))
+    der = DerivationPath(root.my_fingerprint, _path_ints(sp.spend_path(coin)))
+    set_field(inp, bytes([sp.PSBT_IN_SP_SPEND_BIP32_DERIVATION]) + keys["B_spend"], der.serialize())
+    return psbt
+
+
+def _sp_spend(s, net, n):
+    return _received(net)
+
+
+def _sp_spend_labeled(s, net, n):
+    return _received(net, m=1)
+
+
+def _sp_wrong_tweak(s, net, n):
+    return _received(net, tweak_delta=1)
+
+
+def _ready(net, n, s, kind):
+    psbt = pay(s, net, n)
+    a = fill_global(psbt, sender_root(net), aux_for(kind))
+    return psbt, a
+
+
+def _sp_script_mismatch(s, net, n):
+    from common.attack_psbt import _attacker_pubkey
+    psbt, _ = _ready(net, n, s, "sp_script_mismatch")
+    psbt.outputs[0].script_pubkey = Script(b"\x51\x20" + _attacker_pubkey(net, 0, 1).xonly())
+    return psbt
+
+
+def _sp_bad_dleq(s, net, n):
+    psbt, _ = _ready(net, n, s, "sp_bad_dleq")
+    (B, proof), = fields(psbt, sp.PSBT_GLOBAL_SP_DLEQ).items()
+    set_field(psbt, bytes([sp.PSBT_GLOBAL_SP_DLEQ]) + B, proof[:-1] + bytes([proof[-1] ^ 1]))
+    return psbt
+
+
+def _sp_missing_dleq(s, net, n):
+    psbt, _ = _ready(net, n, s, "sp_missing_dleq")
+    (B,) = fields(psbt, sp.PSBT_GLOBAL_SP_DLEQ)
+    del_field(psbt, bytes([sp.PSBT_GLOBAL_SP_DLEQ]) + B)
+    return psbt
+
+
+def _sp_share_wrong_value(s, net, n):
+    """A share and proof for (a+1): internally consistent, but not this psbt's inputs."""
+    psbt, a = _ready(net, n, s, "sp_share_wrong_value")
+    (B,) = fields(psbt, sp.PSBT_GLOBAL_SP_ECDH_SHARE)
+    set_field(psbt, bytes([sp.PSBT_GLOBAL_SP_ECDH_SHARE]) + B, sp.point_mul(B, a + 1))
+    set_field(psbt, bytes([sp.PSBT_GLOBAL_SP_DLEQ]) + B,
+              sp.dleq_prove(a + 1, B, aux_for("sp_share_wrong_value")))
+    return psbt
+
+
+def _sp_share_wrong_scan_key(s, net, n):
+    """A valid share and proof for carol's scan key, which no output pays."""
+    psbt = pay(s, net, n)
+    a = sp.a_sum(input_privkeys(psbt, sender_root(net)))
+    _, B, _, _ = recipient("carol", net)
+    set_field(psbt, bytes([sp.PSBT_GLOBAL_SP_ECDH_SHARE]) + B, sp.point_mul(B, a))
+    set_field(psbt, bytes([sp.PSBT_GLOBAL_SP_DLEQ]) + B,
+              sp.dleq_prove(a, B, aux_for("sp_share_wrong_scan_key")))
+    return psbt
+
+
+def _sp_missing_input_share(s, net, n):
+    psbt = pay(s, net, n)
+    root = sender_root(net)
+    fill_per_input(psbt, root, aux_for("sp_missing_input_share"), skip={2})
+    a = sp.a_sum(input_privkeys(psbt, root))
+    set_scripts(psbt, {B: sp.point_mul(B, a) for _, B, _, _ in sp_outputs(psbt)})
+    return psbt
+
+
+def _sp_input_left_out(s, net, n):
+    """The output script a coordinator gets by leaving input 2 out of the sum."""
+    psbt = pay(s, net, n)
+    privs = input_privkeys(psbt, sender_root(net))
+    a = sp.a_sum(privs[:2])
+    pubs = [sp.psbt_input_pubkey(i) for i in psbt.inputs[:2]]
+    set_scripts(psbt, {B: sp.point_mul(B, a) for _, B, _, _ in sp_outputs(psbt)},
+                A=sp.point_add(*pubs))
+    return psbt
+
+
+def _sp_in_v0(s, net, n):
+    psbt = build_psbt(s, "P2WPKH", n, "change")
+    _, B_scan, B_m, _ = _bob(net)
+    set_field(psbt.outputs[0], bytes([sp.PSBT_OUT_SP_V0_INFO]), B_scan + B_m)
+    return psbt
+
+
+def _sp_info_wrong_length(s, net, n):
+    psbt = pay(s, net, n)
+    info = get_field(psbt.outputs[0], sp.PSBT_OUT_SP_V0_INFO)
+    set_field(psbt.outputs[0], bytes([sp.PSBT_OUT_SP_V0_INFO]), info[:65])
+    return psbt
+
+
+def _not_a_point() -> bytes:
+    i = 0
+    while True:
+        cand = b"\x02" + hashlib.sha256(b"btc-datagen/not-a-point" + bytes([i])).digest()
+        if not sp.is_point(cand):
+            return cand
+        i += 1
+
+
+def _sp_info_invalid_point(s, net, n):
+    psbt = pay(s, net, n)
+    info = get_field(psbt.outputs[0], sp.PSBT_OUT_SP_V0_INFO)
+    set_field(psbt.outputs[0], bytes([sp.PSBT_OUT_SP_V0_INFO]), _not_a_point() + info[33:])
+    return psbt
+
+
+def _sp_fake_change(s, net, n):
+    """Change labeled m=0 under the sender's real scan key, with an attacker's spend key."""
+    from common.attack_psbt import _attacker_pubkey
+    _, alice_scan, _, _ = recipient(SENDER, net)
+    return pay(s, net, n, [_bob(net), ("sp", alice_scan, _attacker_pubkey(net, 1, 0).sec(), 0)])
+
+
+def _sp_tx_modifiable_open(s, net, n):
+    psbt, _ = _ready(net, n, s, "sp_tx_modifiable_open")
+    set_field(psbt, bytes([sp.PSBT_GLOBAL_TX_MODIFIABLE]), b"\x03")   # inputs + outputs
+    return psbt
+
+
+BUILDERS = {
+    "sp_pay": _sp_pay, "sp_pay_plus_normal": _sp_pay_plus_normal,
+    "sp_same_twice": _sp_same_twice, "sp_two_recipients": _sp_two_recipients,
+    "sp_labeled_recipient": _sp_labeled_recipient, "sp_change": _sp_change,
+    "sp_nums_input": _sp_nums_input, "sp_mixed_types": _sp_mixed_types,
+    "sp_ready": _sp_ready, "sp_per_input_shares": _sp_per_input_shares,
+    "sp_spend": _sp_spend, "sp_spend_labeled": _sp_spend_labeled,
+    "sp_script_mismatch": _sp_script_mismatch, "sp_bad_dleq": _sp_bad_dleq,
+    "sp_missing_dleq": _sp_missing_dleq, "sp_share_wrong_value": _sp_share_wrong_value,
+    "sp_share_wrong_scan_key": _sp_share_wrong_scan_key,
+    "sp_missing_input_share": _sp_missing_input_share,
+    "sp_input_left_out": _sp_input_left_out, "sp_in_v0": _sp_in_v0,
+    "sp_info_wrong_length": _sp_info_wrong_length,
+    "sp_info_invalid_point": _sp_info_invalid_point, "sp_fake_change": _sp_fake_change,
+    "sp_tx_modifiable_open": _sp_tx_modifiable_open, "sp_wrong_tweak": _sp_wrong_tweak,
+}
+
+# The wallet (by script type) each scenario runs on. Taproot where the inputs
+# are taproot; the mixed case lists its change wallet.
+CASES = {k: "P2WPKH" for k in BUILDERS}
+CASES.update({k: "P2TR" for k in ("sp_nums_input", "sp_spend", "sp_spend_labeled",
+                                  "sp_wrong_tweak")})
+
+# What audit() must find in each scenario: exactly this, nothing more. Honest
+# kinds find nothing.
+EXPECTED_FINDINGS = {
+    "sp_script_mismatch": ["script-wrong:0"],
+    "sp_bad_dleq": ["dleq-invalid"],
+    "sp_missing_dleq": ["dleq-missing"],
+    "sp_share_wrong_value": ["dleq-invalid", "share-wrong"],
+    "sp_share_wrong_scan_key": ["share-extra"],
+    "sp_missing_input_share": ["in-share-missing:2"],
+    "sp_input_left_out": ["script-wrong:0"],
+    "sp_in_v0": ["v0-with-sp:0"],
+    "sp_info_wrong_length": ["info-length:0"],
+    "sp_info_invalid_point": ["info-point:0"],
+    "sp_fake_change": ["label-not-ours:1"],
+    "sp_tx_modifiable_open": ["tx-modifiable-open"],
+    "sp_wrong_tweak": ["tweak-mismatch:0"],
+}
