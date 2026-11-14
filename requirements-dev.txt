@@ -6,3 +6,6 @@
 # correctness gate.
 pyzbar
 numpy
+
+# Test runner for tests/ (the BIP352/374 vector gate).
+pytest

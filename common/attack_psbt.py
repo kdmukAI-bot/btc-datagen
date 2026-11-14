@@ -1851,6 +1851,10 @@ def build_test_psbt(kind: str, signers: list, script_type: str,
     builders for #1032, #1044, #1040, #1046, and #1047, #995's legacy
     input-amount lies, #1041's negative-fee psbt, #1060's input claims, and #1073's
     change paths."""
+    if kind.startswith("sp_"):
+        # PR #949 silent payment psbts. Imported here: sp_psbt imports this module.
+        from common.sp_psbt import BUILDERS
+        return BUILDERS[kind](signers, network, num_inputs)
     if kind in ("fake_change", "bad_input"):
         return build_attack_psbt(kind, signers, script_type, network, num_inputs, threshold)
     if kind == "wrong_seed":

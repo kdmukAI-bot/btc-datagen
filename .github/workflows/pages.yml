@@ -56,6 +56,9 @@ jobs:
       - name: Install zbar
         run: sudo apt-get update && sudo apt-get install -y libzbar0
 
+      - name: Silent payment vectors and builders
+        run: python -m pytest -q tests
+
       - name: Rebuild fixtures and confirm they are reproducible
         run: |
           python -m tools.build_fixtures

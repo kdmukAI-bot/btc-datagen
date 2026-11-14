@@ -49,7 +49,7 @@ from embit.psbt import PSBT
 from urtypes.crypto import PSBT as URPSBT
 
 from common import bbqr
-from common.fixtures import load_seeds
+from common.fixtures import load_seeds, load_sp_wallets
 from common.qr import qr_matrix
 from common.seedqr import standard_seedqr_digits, compact_seedqr_bytes
 from common.ur2.ur import UR
@@ -215,6 +215,23 @@ def verify_scenario(entry, seeds, full: bool, parser_cls, seed_cls, ss_network):
         except AssertionError as e:
             problems.append(f"{fmt}/{density}: {e}")
 
+    # --- PR #949 silent payments ----------------------------------------------
+    #
+    # embit 0.8.0 cannot sign these (an sp output has no script until a signer
+    # derives it) and the dev PSBTParser cannot read them, so they get their own
+    # check instead: rederive every share, proof, script, label and tweak from the
+    # shipped psbt's own fields and the sender's seed, and require exactly the
+    # defect the scenario is built to carry.
+    if entry.get("pr") == "949":
+        from common import sp_psbt
+        network = "main" if entry["network"] == "main" else "test"
+        root = root_key(seeds[entry["signing_seeds"][0]]["mnemonic"], network)
+        got = sp_psbt.audit(PSBT.parse(raw), root, network)
+        want = sorted(sp_psbt.EXPECTED_FINDINGS.get(entry["attack"], []))
+        if got != want:
+            problems.append(f"sp audit found {got}, expected {want}")
+        return problems
+
     # --- the sighash digests shipped for the scan-back step ------------------
     #
     # These are what the browser checks a returned signature against, so a wrong
@@ -259,6 +276,17 @@ def verify_seed(entry, seeds):
         problems.append("compact SeedQR payload mismatch")
     if data["mnemonic"] != seeds[entry["name"]]["mnemonic"]:
         problems.append("mnemonic does not match the fixture")
+    for network, items in data.get("sp", {}).items():
+        for item in items:
+            decoded = decode_frame(item["qr"]["frames"][0])
+            if decoded != item["text"]:
+                problems.append(f"sp {network} {item['label']} QR decodes to {decoded!r}")
+    sp_w = load_sp_wallets()
+    for network, suffix in (("main", ""), ("test", "_testnet")):
+        texts = [it["text"] for it in data["sp"][network]]
+        w = sp_w[entry["name"] + suffix]
+        if texts[0] != w["address"] or texts[-1] != w["spscan"]:
+            problems.append(f"sp {network} items do not match the fixture")
     return problems
 
 
@@ -322,7 +350,7 @@ def main():
         seen, sampled = set(), []
         for s in scenarios:
             key = (s["script_type"], s["output_shape"], s["network"])
-            if key not in seen or s["num_inputs"] >= 20:
+            if key not in seen or s["num_inputs"] >= 20 or s.get("pr") == "949":
                 seen.add(key)
                 sampled.append(s)
         scenarios = sampled

@@ -323,6 +323,8 @@ const state = {
   verifyAddress: { branch: 'receive', index: 0 },
   onlySeedName: null,
   onlySeedVariant: 'compact',
+  onlySpNetwork: 'main',
+  onlySpItem: 0,
   messageName: null,
   // Native SegWit by default: the common case, and the one the landing
   // scenario uses. Outputs are deliberately NOT a filter, the shape is in
@@ -804,12 +806,13 @@ const descriptorPlayer = new QrPlayer();
 const verifyDescriptorPlayer = new QrPlayer();
 const verifyAddressPlayer = new QrPlayer();
 const onlySeedPlayer = new QrPlayer();
+const onlySpPlayer = new QrPlayer();
 const messagePlayer = new QrPlayer();
 const messageSeedPlayer = new QrPlayer();
 const verifySeedPlayer = new QrPlayer();
 const allPlayers = [player, seedPlayer, descriptorPlayer,
                     verifyDescriptorPlayer, verifyAddressPlayer,
-                    onlySeedPlayer, messagePlayer, messageSeedPlayer,
+                    onlySeedPlayer, onlySpPlayer, messagePlayer, messageSeedPlayer,
                     verifySeedPlayer];
 
 /* ---------- small UI builders --------------------------------------------- */
@@ -1517,6 +1520,22 @@ async function renderOnlySeedView() {
     <table class="kv" style="margin-top:10px">
       <tr><th>Master fingerprint</th><td class="mono">${data.master_fingerprint}</td></tr>
     </table>`;
+
+  // Silent payments (#949): the seed's sp address, labels 1-3 and spscan key,
+  // to compare against what the device exports. m=0 is the change label and
+  // is never handed out, so it is not offered here.
+  buildSegmented($('only-seed-sp-net'), [
+    { value: 'main', label: 'Mainnet' },
+    { value: 'test', label: 'Testnet' },
+  ], state.onlySpNetwork, (v) => { state.onlySpNetwork = v; renderOnlySeedView(); });
+  const spItems = data.sp[state.onlySpNetwork];
+  if (state.onlySpItem >= spItems.length) state.onlySpItem = 0;
+  buildSegmented($('only-seed-sp-seg'),
+    spItems.map((it, i) => ({ value: i, label: it.label })),
+    state.onlySpItem, (v) => { state.onlySpItem = v; renderOnlySeedView(); });
+  const spItem = spItems[state.onlySpItem];
+  onlySpPlayer.setPayload(prepare(spItem.qr));
+  $('only-seed-sp-text').textContent = spItem.text;
 }
 
 /* ---------- "sign a message" view ---------------------------------------- */
@@ -2082,6 +2101,7 @@ async function main() {
   onlySeedPlayer.renderStyle = 'handmade';
   onlySeedPlayer.onRendered = (c) => refreshFold($('only-seed-fold'), c, onlySeedPlayer);
   onlySeedPlayer.setCanvas($('only-seed-canvas'));
+  onlySpPlayer.setCanvas($('only-seed-sp-canvas'));
   messagePlayer.setCanvas($('message-canvas'));
   messageSeedPlayer.renderStyle = 'handmade';
   messageSeedPlayer.onRendered = (c) =>
