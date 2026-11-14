@@ -291,6 +291,21 @@
       <div id="only-seed-words"></div>
     </details>
 
+    <details class="details">
+      <summary>Silent payments address</summary>
+      <div>
+        <p class="qr-note">On the device: <em>Seeds &rsaquo; your seed &rsaquo; BIP-352 silent
+          payments &rsaquo; Export SP address</em> (or Export SP descriptor). It should show
+          the same text. Needs SeedSigner PR #949 with the setting turned on.</p>
+        <div class="control"><div class="segmented" id="only-seed-sp-net"></div></div>
+        <div class="control"><div class="segmented" id="only-seed-sp-seg"></div></div>
+        <div class="qr-stage"><div class="qr-card">
+          <canvas id="only-seed-sp-canvas" aria-label="Silent payments QR code"></canvas>
+        </div></div>
+        <p class="mono" id="only-seed-sp-text" style="word-break: break-all"></p>
+      </div>
+    </details>
+
     <div class="seed-facts">
       <h3>What is a SeedQR?</h3>
       <ul>

@@ -47,7 +47,7 @@ from urtypes.crypto import PSBT as URPSBT
 
 from common import bbqr, scenarios as scenario_defs, script_types
 from common.attack_psbt import build_test_psbt
-from common.fixtures import load_seeds, load_wallets, wallet_cosigners
+from common.fixtures import load_seeds, load_sp_wallets, load_wallets, wallet_cosigners
 from common.psbt import build_psbt, summarize
 from common.qr import qr_matrix, qr_matrix_bytes
 from common.seedqr import standard_seedqr_digits, compact_seedqr_bytes
@@ -397,7 +397,19 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
     return entry, written
 
 
-def build_seed_files(seeds) -> tuple:
+def sp_items(w: dict) -> list:
+    """What Seed > BIP-352 silent payments exports, for comparing on screen. The
+    change label (m=0) is never handed out (BIP352), so it is not shown."""
+    items = ([{"label": "Address", "text": w["address"]}]
+             + [{"label": f"Label {l['m']}", "text": l["address"]}
+                for l in w["labels"] if l["m"] != 0]
+             + [{"label": "spscan key", "text": w["spscan"]}])
+    for it in items:
+        it["qr"] = address_qr(it["text"])
+    return items
+
+
+def build_seed_files(seeds, sp_wallets) -> tuple:
     entries, written = [], 0
     for name, seed in seeds.items():
         words = seed["mnemonic"].split()
@@ -411,6 +423,8 @@ def build_seed_files(seeds) -> tuple:
             "master_fingerprint": seed["master_fingerprint"],
             "standard": {"payload": digits, "qr": text_qr(digits)},
             "compact": {"payload_hex": entropy.hex(), "qr": bytes_qr(entropy)},
+            "sp": {"main": sp_items(sp_wallets[name]),
+                   "test": sp_items(sp_wallets[f"{name}_testnet"])},
         })
         entries.append({"name": name, "words": seed["words"],
                         "master_fingerprint": seed["master_fingerprint"],
@@ -562,7 +576,7 @@ def main():
         print(f"  [{i:>3}/{len(all_scenarios)}] {scenario.id:<44s} "
               f"{entry['psbt_bytes']:>7,}B  up to {biggest:>3} parts")
 
-    seed_entries, w = build_seed_files(seeds)
+    seed_entries, w = build_seed_files(seeds, load_sp_wallets())
     total_bytes += w
     wallet_entries, w = build_wallet_files(wallets)
     total_bytes += w
