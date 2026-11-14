@@ -1210,12 +1210,13 @@ _PR949_HONEST_DEFS = [
                "silent payment address under the change label, m = 0, and marked with "
                "that label. The device rebuilds the labeled spend key from this seed and "
                "shows it as Your Change.")},
-    {"kind": "sp_nums_input", "label": "Input that does not count", "outcome": "spend",
-     "screen": _SPEND_RESULT, "expected": _SP_SIGNS, "family": "Taproot",
+    {"kind": "sp_nums_input", "label": "Input that does not count", "outcome": "refuse",
+     "screen": _SP_ERROR_SCREEN, "expected": _SP_AT_SIGN, "family": "Taproot",
      "blurb": ("Three taproot inputs. Two are your key path coins. The third is someone "
                "else's script path coin whose internal key is the provably unspendable "
-               "point H, and BIP352 leaves such an input out of the shared secret. The "
-               "device derives the output from your two inputs only.")},
+               "point H, which BIP352 leaves out of the shared secret. #949 never gets "
+               "to that rule: it signs alone, and refuses any input that is not this "
+               "seed's own as a multi-party send.")},
     {"kind": "sp_mixed_types", "label": "Inputs of three script types", "outcome": "error",
      "screen": _ERROR_SCREEN, "family": "Mixed input types",
      "expected": ("Device aborts with \"Mixed inputs in the transaction\" while reading "
