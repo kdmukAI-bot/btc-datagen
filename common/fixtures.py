@@ -12,6 +12,7 @@ from common.keys import make_cosigner
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures")
 SEEDS_PATH = os.path.join(FIXTURES_DIR, "test_seeds.json")
 WALLETS_PATH = os.path.join(FIXTURES_DIR, "test_wallets.json")
+SP_WALLETS_PATH = os.path.join(FIXTURES_DIR, "test_sp_wallets.json")
 
 
 def load_seeds() -> dict:
@@ -21,6 +22,12 @@ def load_seeds() -> dict:
 
 def load_wallets() -> dict:
     with open(WALLETS_PATH) as f:
+        return {w["name"]: w for w in json.load(f)["wallets"]}
+
+
+def load_sp_wallets() -> dict:
+    """BIP352 keys and addresses per seed and network, keyed `alice`, `alice_testnet`."""
+    with open(SP_WALLETS_PATH) as f:
         return {w["name"]: w for w in json.load(f)["wallets"]}
 
 

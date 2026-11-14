@@ -145,3 +145,21 @@ def test_bip374_verify(row):
     ok = sp.dleq_verify(_pt(row["point_A"]), _pt(row["point_B"]), _pt(row["point_C"]),
                         bytes.fromhex(row["proof"]), _pt(row["point_G"]), _msg(row["message"]))
     assert ok == (row["result_success"] == "TRUE")
+
+
+def test_sp_fixture_matches_the_seeds():
+    from embit import bip32, bip39
+    from embit.networks import NETWORKS
+    from common.fixtures import load_seeds, load_sp_wallets
+    seeds, wallets = load_seeds(), load_sp_wallets()
+    assert len(wallets) == 2 * len(seeds)
+    for w in wallets.values():
+        root = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(seeds[w["seed"]]["mnemonic"]),
+                                     version=NETWORKS[w["network"]]["xprv"])
+        keys = sp.wallet_keys(root, w["network"])
+        assert w["scan_pub"] == keys["B_scan"].hex() and w["spend_pub"] == keys["B_spend"].hex()
+        assert sp.decode_address(w["address"]) == (w["network"], keys["B_scan"], keys["B_spend"])
+        assert [l["m"] for l in w["labels"]] == [0, 1, 2, 3]
+        for l in w["labels"]:
+            B_m = sp.labeled_spend_key(keys["B_spend"], keys["b_scan"], l["m"])
+            assert sp.decode_address(l["address"]) == (w["network"], keys["B_scan"], B_m)

@@ -22,7 +22,8 @@ from embit.networks import NETWORKS
 from common import script_types
 from common.keys import make_signer, mnemonic_from_entropy
 from common.descriptor import descriptor_text, crypto_output_ur, crypto_account_ur
-from common.fixtures import FIXTURES_DIR, SEEDS_PATH, WALLETS_PATH
+from common import silent_payments as sp
+from common.fixtures import FIXTURES_DIR, SEEDS_PATH, WALLETS_PATH, SP_WALLETS_PATH
 from common.psbt import address_at, RECEIVE_BRANCH, CHANGE_BRANCH
 
 WARNING = ("INSECURE TEST KEYS — deterministic, public, and stored in plain text. "
@@ -70,6 +71,41 @@ WALLET_DEFS = [
     {"name": "2of3_p2sh", "script_type": "P2SH", "threshold": 2,
      "signers": ["alice", "bob", "carol"]},
 ]
+
+
+# BIP352 labels written for every seed. m=0 is the change label ("Overview"):
+# the wallet must never hand it out, so the site shows only m=1..3.
+SP_LABELS = [0, 1, 2, 3]
+
+
+def build_sp_wallet(seed: dict, network: str) -> dict:
+    root = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(seed["mnemonic"]),
+                                 version=NETWORKS[network]["xprv"])
+    keys = sp.wallet_keys(root, network)
+    coin = script_types.COIN_TYPE[network]
+    return {
+        "name": seed["name"] if network == "main" else f"{seed['name']}_testnet",
+        "seed": seed["name"],
+        "network": network,
+        "master_fingerprint": seed["master_fingerprint"],
+        "derivation": f"m/352h/{coin}h/0h",
+        "scan_path": sp.scan_path(coin),
+        "spend_path": sp.spend_path(coin),
+        "scan_priv": keys["b_scan"].to_bytes(32, "big").hex(),
+        "scan_pub": keys["B_scan"].hex(),
+        "spend_pub": keys["B_spend"].hex(),
+        "address": sp.encode_address(keys["B_scan"], keys["B_spend"], network),
+        # What SeedSigner #949 exports under "Export SP descriptor": the key
+        # expression with its origin, without the sp(...) wrapper (BIP392).
+        "spscan": (f"[{seed['master_fingerprint']}/352h/{coin}h/0h]"
+                   + sp.encode_spscan(keys["b_scan"], keys["B_spend"], network)),
+        "labels": [
+            {"m": m, "use": "change" if m == 0 else "receive",
+             "spend_pub": (B_m := sp.labeled_spend_key(keys["B_spend"], keys["b_scan"], m)).hex(),
+             "address": sp.encode_address(keys["B_scan"], B_m, network)}
+            for m in SP_LABELS
+        ],
+    }
 
 
 def build_seeds() -> list:
@@ -145,6 +181,12 @@ def main():
     with open(WALLETS_PATH, "w") as f:
         json.dump({"_warning": WARNING, "wallets": wallets}, f, indent=2)
         f.write("\n")
+
+    sp_wallets = [build_sp_wallet(s, n) for s in seeds for n in NETWORKS_BUILT]
+    with open(SP_WALLETS_PATH, "w") as f:
+        json.dump({"_warning": WARNING, "wallets": sp_wallets}, f, indent=2)
+        f.write("\n")
+    print(f"Wrote {len(sp_wallets)} silent payment wallets -> {SP_WALLETS_PATH}")
 
     print(f"Wrote {len(seeds)} seeds -> {SEEDS_PATH}")
     print(f"Wrote {len(wallets)} wallets -> {WALLETS_PATH}")
