@@ -72,3 +72,15 @@ def test_summarize_shows_sp_address_and_change_claim():
     assert rows[0]["address"].startswith("tsp1q") and rows[0]["kind"] == "external"
     assert rows[1]["kind"] == "change"
     assert summarize(psbt, "test")["fee"] == 10_000
+
+
+def test_949_group_has_37_scenarios_with_real_builders():
+    from common.scenarios import test_scenarios
+    group = [s for s in test_scenarios() if s.pr == "949"]
+    assert len(group) == 37
+    assert len({s.id for s in group}) == 37
+    assert {s.attack for s in group} == set(sp_psbt.BUILDERS)
+    assert sum(s.network == "test" for s in group) == 12
+    for s in group:
+        assert s.wallet.endswith("_testnet") == (s.network == "test")
+        assert s.outcome in ("refuse", "error", "spend", "change")

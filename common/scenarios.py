@@ -80,7 +80,7 @@ class Scenario:
     # do so the sample is useful to run on hardware.
     pr: str = None                     # "1013" | "1032" | "1044" | "1040" | "1046"
                                        # | "1047" | "995" | "1041" | "1060" | "1073"
-                                       # | "dev"
+                                       # | "949" | "dev"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -243,6 +243,16 @@ TEST_PR_GROUPS = [
                   "ever look for it. Change must now come back to the wallet the inputs "
                   "spend from, on its receive or change branch, at an ordinary address "
                   "index. Change far past the inputs' address indexes gets a warning."),
+    },
+    {
+        "pr": "949",
+        "label": "PR #949: silent payments",
+        "url": "https://github.com/SeedSigner/seedsigner/pull/949",
+        "blurb": ("Sending to and spending from silent payment addresses (BIP352, BIP375, "
+                  "BIP376). The device works out every silent payment output itself from "
+                  "this seed's input keys, and holds anything the psbt already claims to "
+                  "that. Turn on Settings > BIP-352 silent payments first, or each of these "
+                  "stops at Option Disabled."),
     },
     {
         "pr": "dev",
@@ -1156,13 +1166,172 @@ _DEV_DEFS = [
 ]
 
 
+# PR #949: silent payments. Outcomes are what #949 (head 3ac91816, on embit
+# 371b9f2) does, checked by running every psbt through it; where that differs from
+# BIP375 the blurb says so. #949 recomputes every share, proof and script itself
+# at the sign step, after the review screens, so refusals land there.
+_SP_ERROR_SCREEN = "SP Signing Error"
+_UNKNOWN_QR_SCREEN = "Error / Unknown QR Type"
+_SP_SIGNS = ("Device should show the silent payment address, sign, and hand back the "
+             "psbt with its ECDH share, DLEQ proof and output script filled in.")
+_SP_AT_SIGN = ("The review screens come first. SP Signing Error shows when you choose to "
+               "sign.")
+_UNKNOWN_QR = "Device should reject the scan as an unknown QR type."
+_OBVIOUS_EXPECTATIONS = _OBVIOUS_EXPECTATIONS | {_UNKNOWN_QR}
+
+_PR949_HONEST_DEFS = [
+    {"kind": "sp_pay", "label": "Pay a silent payment address", "outcome": "spend",
+     "screen": _SPEND_RESULT, "expected": _SP_SIGNS,
+     "blurb": ("Pays bob's silent payment address, with change back to your wallet. The "
+               "output carries only bob's scan and spend keys, no script and no ECDH "
+               "share: the device has to work out the real taproot output itself.")},
+    {"kind": "sp_pay_plus_normal", "label": "Silent payment plus an ordinary payment",
+     "outcome": "spend", "screen": _SPEND_RESULT, "expected": _SP_SIGNS,
+     "blurb": ("Pays bob's silent payment address and an ordinary bc1q address, with "
+               "change. Only the silent payment output needs the device to compute its "
+               "script.")},
+    {"kind": "sp_same_twice", "label": "Two payments to one silent payment address",
+     "outcome": "spend", "screen": _SPEND_RESULT, "expected": _SP_SIGNS,
+     "blurb": ("Pays bob's silent payment address twice. The two outputs share one ECDH "
+               "secret and differ only by k = 0 and k = 1, so they land at two different "
+               "taproot keys. Both should show as bob's sp1q address.")},
+    {"kind": "sp_two_recipients", "label": "Two silent payment recipients",
+     "outcome": "spend", "screen": _SPEND_RESULT, "expected": _SP_SIGNS,
+     "blurb": ("Pays bob's and carol's silent payment addresses. Each scan key gets its "
+               "own ECDH share and DLEQ proof when the device signs.")},
+    {"kind": "sp_labeled_recipient", "label": "Pay a labeled silent payment address",
+     "outcome": "spend", "screen": _SPEND_RESULT, "expected": _SP_SIGNS,
+     "blurb": ("Pays bob's label 1 address. To a sender a labeled address is just another "
+               "spend key, so the output carries no label field; that field is only for "
+               "marking your own change.")},
+    {"kind": "sp_change", "label": "Silent payment change", "outcome": "change",
+     "screen": _CHANGE_OK_RESULT, "expected": _SP_SIGNS,
+     "blurb": ("Pays bob's silent payment address, with the change sent to your own "
+               "silent payment address under the change label, m = 0, and marked with "
+               "that label. The device rebuilds the labeled spend key from this seed and "
+               "shows it as Your Change.")},
+    {"kind": "sp_nums_input", "label": "Input that does not count", "outcome": "spend",
+     "screen": _SPEND_RESULT, "expected": _SP_SIGNS, "family": "Taproot",
+     "blurb": ("Three taproot inputs. Two are your key path coins. The third is someone "
+               "else's script path coin whose internal key is the provably unspendable "
+               "point H, and BIP352 leaves such an input out of the shared secret. The "
+               "device derives the output from your two inputs only.")},
+    {"kind": "sp_mixed_types", "label": "Inputs of three script types", "outcome": "error",
+     "screen": _ERROR_SCREEN, "family": "Mixed input types",
+     "expected": ("Device aborts with \"Mixed inputs in the transaction\" while reading "
+                  "the inputs, before any silent payment code runs."),
+     "blurb": ("One taproot, one native segwit and one legacy input, all yours and all "
+               "valid for a silent payment. SeedSigner allows only one input type per "
+               "transaction, so #949 never gets as far as the silent payment.")},
+    {"kind": "sp_ready", "label": "Shares, proof and script already filled",
+     "outcome": "spend", "screen": _SPEND_RESULT,
+     "expected": ("Device should check the share, proof and script against its own, then "
+                  "sign."),
+     "blurb": ("Pays bob's silent payment address. The ECDH share, its DLEQ proof and the "
+               "output script are already in the psbt, all correct, and the transaction "
+               "is closed to changes. The device derives them again and they agree.")},
+    {"kind": "sp_per_input_shares", "label": "Per-input shares", "outcome": "spend",
+     "screen": _SPEND_RESULT, "expected": _SP_SIGNS,
+     "blurb": ("Every input carries its own ECDH share and DLEQ proof, the form BIP375 uses "
+               "when several signers share a transaction. #949 signs alone: it deletes "
+               "the per-input shares without checking them and writes one global share "
+               "of its own.")},
+    {"kind": "sp_spend", "label": "Spend a received silent payment",
+     "outcome": "spend", "screen": _SPEND_RESULT, "num_inputs": 1, "family": "Taproot",
+     "expected": "Device should sign the input with your spend key plus the tweak.",
+     "blurb": ("Spends a coin someone sent to your silent payment address. The input "
+               "carries the tweak and your spend key's path, m/352'/0'/0'/0'/0 (BIP376), "
+               "and pays everything out to an ordinary address.")},
+    {"kind": "sp_spend_labeled", "label": "Spend a received labeled payment",
+     "outcome": "spend", "screen": _SPEND_RESULT, "num_inputs": 1, "family": "Taproot",
+     "expected": "Device should sign the input with your spend key plus the tweak.",
+     "blurb": ("Spends a coin someone sent to your label 1 address. The tweak includes "
+               "the label's own tweak, so it still opens the coin from your one spend "
+               "key.")},
+]
+
+_PR949_ATTACK_DEFS = [
+    {"kind": "sp_script_mismatch", "label": "Output script redirected", "outcome": "refuse",
+     "screen": _SP_ERROR_SCREEN, "expected": _SP_AT_SIGN,
+     "blurb": ("The share and proof are right, but the output script pays an attacker's "
+               "key instead of the one they derive. A device that trusted the script would "
+               "send bob's payment elsewhere. #949 derives the script itself and refuses.")},
+    {"kind": "sp_bad_dleq", "label": "Invalid DLEQ proof", "outcome": "refuse",
+     "screen": _SP_ERROR_SCREEN, "expected": _SP_AT_SIGN,
+     "blurb": ("The ECDH share is right but its DLEQ proof has one bit flipped, so it "
+               "proves nothing. #949 checks a declared proof against the inputs' keys.")},
+    {"kind": "sp_missing_dleq", "label": "Share with no proof", "outcome": "refuse",
+     "screen": _SP_ERROR_SCREEN, "expected": _SP_AT_SIGN,
+     "blurb": ("A global ECDH share with no DLEQ proof next to it. BIP375 requires the "
+               "pair, and #949 refuses either one alone.")},
+    {"kind": "sp_share_wrong_value", "label": "Share for different keys",
+     "outcome": "refuse", "screen": _SP_ERROR_SCREEN, "expected": _SP_AT_SIGN,
+     "blurb": ("The share and its proof agree with each other, but for a key sum these "
+               "inputs do not have. #949 compares the share with the one it derives and "
+               "refuses.")},
+    {"kind": "sp_share_wrong_scan_key", "label": "Share for a scan key nobody is paid",
+     "outcome": "spend", "screen": _SPEND_RESULT,
+     "expected": "Device signs: #949 drops the extra share without a warning.",
+     "blurb": ("Next to the payment to bob sits a valid share and proof for carol's scan "
+               "key, which no output pays. It cannot move funds, and #949 silently drops "
+               "it when it writes its own shares.")},
+    {"kind": "sp_missing_input_share", "label": "One input's share missing",
+     "outcome": "spend", "screen": _SPEND_RESULT,
+     "expected": ("Device signs: BIP375 calls this psbt invalid, but #949 ignores per-input "
+                  "shares and computes its own."),
+     "blurb": ("Inputs 0 and 1 carry per-input shares and proofs, input 2 has none, yet "
+               "the output script is already set. BIP375 says a script needs every "
+               "eligible input's share. The script happens to be correct.")},
+    {"kind": "sp_input_left_out", "label": "Input left out of the key sum",
+     "outcome": "refuse", "screen": _SP_ERROR_SCREEN, "expected": _SP_AT_SIGN,
+     "blurb": ("The output script was derived from inputs 0 and 1 only. Bob would scan "
+               "with all three inputs and never find the payment, so the coins are lost "
+               "to him. #949 derives the script from every eligible input and refuses.")},
+    {"kind": "sp_in_v0", "label": "Silent payment in a version 0 psbt", "outcome": "error",
+     "screen": _UNKNOWN_QR_SCREEN, "expected": _UNKNOWN_QR,
+     "blurb": ("A version 0 psbt with a silent payment output field. BIP375 fields exist "
+               "only in version 2, and #949 refuses to read this psbt at all.")},
+    {"kind": "sp_info_wrong_length", "label": "Silent payment keys cut short",
+     "outcome": "error", "screen": _UNKNOWN_QR_SCREEN, "expected": _UNKNOWN_QR,
+     "blurb": ("The output's scan and spend key field is 65 bytes instead of 66. #949 "
+               "rejects the psbt as it reads it.")},
+    {"kind": "sp_info_invalid_point", "label": "Scan key not on the curve",
+     "outcome": "error", "screen": _UNKNOWN_QR_SCREEN, "expected": _UNKNOWN_QR,
+     "blurb": ("The output's scan key is 33 bytes that are not a point on secp256k1. #949 "
+               "rejects the psbt as it reads it.")},
+    {"kind": "sp_fake_change", "label": "Change label on someone else's key",
+     "outcome": "spend", "screen": _SPEND_RESULT, "expected": _SPEND,
+     "summary_note": ("The table reads the psbt's own change label. The device checks the "
+                      "keys and shows this output as a payment."),
+     "blurb": ("The second output carries the change label m = 0 and your real scan key, "
+               "but an attacker's spend key. A device that trusted the label would hide a "
+               "payment to the attacker as change. #949 rebuilds the labeled spend key "
+               "from this seed and shows the output as a payment.")},
+    {"kind": "sp_tx_modifiable_open", "label": "Scripts set, transaction left open",
+     "outcome": "refuse", "screen": _SP_ERROR_SCREEN, "expected": _SP_AT_SIGN,
+     "blurb": ("The share, proof and script are all correct, but the inputs and outputs "
+               "are still marked modifiable. Adding an input later would change the "
+               "derived output, so BIP375 requires them closed once a script is set.")},
+    {"kind": "sp_wrong_tweak", "label": "Wrong spend tweak", "outcome": "refuse",
+     "screen": _SP_ERROR_SCREEN, "num_inputs": 1, "family": "Taproot",
+     "expected": _SP_AT_SIGN,
+     "blurb": ("Spends a silent payment you received, but the tweak is off by one, so "
+               "your spend key plus the tweak is not the coin's key. #949 checks that "
+               "before signing.")},
+]
+
+
 def _make_pr_test(pr, d):
     info = script_types.get(d["script_type"])
+    network = d.get("network", "main")
     base_wallet = WALLET_FOR_SCRIPT_TYPE[d["script_type"]]
+    wallet = base_wallet if network == "main" else f"{base_wallet}_testnet"
+    suffix = "" if network == "main" else "-testnet"
     slug = d["kind"].replace("_", "-")
     return Scenario(
-        id=f"test-{pr}-{slug}", wallet=base_wallet, script_type=d["script_type"],
-        num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
+        id=f"test-{pr}-{slug}{suffix}", wallet=wallet, script_type=d["script_type"],
+        num_inputs=d.get("num_inputs", DEFAULT_NUM_INPUTS), output_shape="change",
+        network=network,
         title=f"{_ICON[d['outcome']]} {d['label']} ({d['family']})",
         blurb=d["blurb"], is_default=False,
         tags=["test", d["label"], info.label],
@@ -1205,6 +1374,17 @@ def test_scenarios() -> list:
     out.extend(_make_pr_test("1060", d) for d in _PR1060_DEFS)
     # PR #1073: change has to come back to a path the inputs' wallet scans.
     out.extend(_make_pr_test("1073", d) for d in _PR1073_DEFS)
+    # PR #949: silent payments. Honest ones on both networks, attacks mainnet only.
+    from common.sp_psbt import CASES
+
+    def _949(d, network="main"):
+        st = CASES[d["kind"]]
+        blurb = d["blurb"] if network == "main" else d["blurb"].replace("m/352'/0'", "m/352'/1'")
+        return _make_pr_test("949", dict(d, script_type=st, network=network, blurb=blurb,
+                                         family=d.get("family", script_types.get(st).label)))
+    for d in _PR949_HONEST_DEFS:
+        out.extend([_949(d), _949(d, "test")])
+    out.extend(_949(d) for d in _PR949_ATTACK_DEFS)
     # Not a PR: what the current dev build does.
     out.extend(_make_pr_test("dev", d) for d in _DEV_DEFS)
     return out
