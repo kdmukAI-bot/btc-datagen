@@ -1211,7 +1211,7 @@ _PR1042_DEFS = [
                "the device read past only one of them, leaving the other stuck on the "
                "front of the payload. With the fix the payload starts where it "
                "should; it still runs off the bottom of the screen until PR #1043 "
-               "pages it.")},
+               "cuts it to one screen.")},
     {"kind": "pushdata1", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "80 bytes, the old relay ceiling", "outcome": "display",
      "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
@@ -1258,7 +1258,7 @@ _PR1042_DEFS = [
 # PR #1043: what the device does with an OP_RETURN once it has parsed it. These parse
 # correctly even with the push-opcode fix in place. What they exercise is everything
 # after the parse: how many OP_RETURNs survive it, whether their value is counted,
-# and whether the screen can show a payload of any size.
+# and what the screen does with a payload too large to show.
 _PR1043_DEFS = [
     {"kind": "two_outputs", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Two OP_RETURN outputs", "outcome": "display",
@@ -1287,33 +1287,24 @@ _PR1043_DEFS = [
                f"{BURNED_SATS:,} sats comes right after the overview, the math screen "
                "gets a burned line, and the OP_RETURN screen also says how much it "
                "burns.")},
-    {"kind": "max_pages", "script_type": "P2WPKH", "family": "Native SegWit",
-     "label": "Paged to the limit, nothing dropped", "outcome": "display",
-     "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
-     "blurb": ("800 bytes, exactly as much as the paged screen will show. Before the "
-               "fix the whole payload was drawn on one screen, running far past the "
-               "button. With the fix it is ten pages of 80 with no truncation notice; "
-               "one byte more and the device would have to say it could not show "
-               "everything.")},
     {"kind": "large_burn", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Too large to show, and burning sats", "outcome": "display",
      "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
      "blurb": (f"4 KB of payload and {BURNED_SATS:,} sats burned, on the same output. "
                "Before the fix the device drew the payload off the screen and never "
                "mentioned the sats. With the fix a Caution screen comes right after the "
-               "overview, every page also says how much it burns, and the last page "
-               "says how many bytes could not be shown.")},
+               "overview, and the OP_RETURN screen shows as much of the payload as fits, "
+               "says how many bytes could not be shown, and says how much it burns.")},
     {"kind": "kitchen_sink", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Everything at once", "outcome": "display",
      "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
-     "blurb": ("One transaction carrying six OP_RETURN outputs: a readable payload, a "
-               "binary one shown as hex, one long enough to page, one too large to "
-               "page through, two pushes in a single script, and a bare OP_RETURN "
-               "that also burns sats. Before the fix only the last survived the parse, "
-               "and being bare it got no screen, so the device showed none of the six "
-               "and none of the sats. With the fix a Caution screen for the burned sats "
-               "comes right after the overview, it walks through all six, and the "
-               "totals add up.")},
+     "blurb": ("One transaction carrying five OP_RETURN outputs: a readable payload, a "
+               "binary one shown as hex, one too large for one screen, two pushes in a "
+               "single script, and a bare OP_RETURN that also burns sats. Before the "
+               "fix only the last survived the parse, and being bare it got no screen, "
+               "so the device showed none of the five and none of the sats. With the "
+               "fix a Caution screen for the burned sats comes right after the "
+               "overview, it walks through all five, and the totals add up.")},
 ]
 
 
