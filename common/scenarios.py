@@ -1293,8 +1293,9 @@ _PR1043_DEFS = [
      "blurb": (f"4 KB of payload and {BURNED_SATS:,} sats burned, on the same output. "
                "Before the fix the device drew the payload off the screen and never "
                "mentioned the sats. With the fix a Caution screen comes right after the "
-               "overview, and the OP_RETURN screen shows as much of the payload as fits, "
-               "says how many bytes could not be shown, and says how much it burns.")},
+               "overview, and the OP_RETURN screen shows the first 80 bytes (0000 through "
+               "0015), says how many bytes could not be shown, and says how much it "
+               "burns.")},
     {"kind": "kitchen_sink", "script_type": "P2WPKH", "family": "Native SegWit",
      "label": "Everything at once", "outcome": "display",
      "screen": _OP_RETURN_SCREEN, "expected": _DISPLAY,
