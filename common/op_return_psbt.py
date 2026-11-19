@@ -20,7 +20,6 @@ with its scenario in common/scenarios.py.
     nonzero_value  10,000 sats on the output, which the transaction destroys
     two_outputs    two OP_RETURN outputs
     many_outputs   five, with the burn on the third
-    max_pages      800 bytes, exactly what the paged screen will show
     large_burn     4 KB and 10,000 sats destroyed, on the same output
     kitchen_sink   all of the above in one transaction
 
@@ -90,7 +89,6 @@ OP_RETURN_CASES = {
     "binary":        lambda: [(op_return_script(BINARY_PAYLOAD), 0)],
     "pushdata1":     lambda: [(op_return_script(_filler(80)), 0)],
     "pushdata2":     lambda: [(op_return_script(_filler(300)), 0)],
-    "max_pages":     lambda: [(op_return_script(_filler(800)), 0)],
     "large_burn":    lambda: [(op_return_script(_filler(4096)), BURNED_SATS)],
     "nonzero_value": lambda: [(op_return_script(CHANCELLOR), BURNED_SATS)],
     "two_outputs":   lambda: [(op_return_script(b"first OP_RETURN payload"), 0),
@@ -108,10 +106,9 @@ OP_RETURN_CASES = {
 
     # In output order, which is the order the outputs are reviewed in.
     "kitchen_sink":  lambda: [
-        (op_return_script(CHANCELLOR), 0),                          # readable, one page
+        (op_return_script(CHANCELLOR), 0),                          # readable
         (op_return_script(BINARY_PAYLOAD), 0),                      # not text, so hex
-        (op_return_script(_filler(300)), 0),                        # pages, not truncated
-        (op_return_script(_filler(4096)), 0),                       # too large to page
+        (op_return_script(_filler(4096)), 0),                       # cut to one screen
         (op_return_script(b"first push, ", b"second push"), 0),     # two pushes
         (Script(bytes([OP_RETURN])), BURNED_SATS),                  # bare, and destroys sats
     ],
