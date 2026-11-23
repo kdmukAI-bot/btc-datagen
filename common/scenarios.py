@@ -81,7 +81,7 @@ class Scenario:
     # do so the sample is useful to run on hardware.
     pr: str = None                     # "1013" | "1032" | "1044" | "1040" | "1046"
                                        # | "1047" | "995" | "1041" | "1060" | "1073"
-                                       # | "1042" | "1043" | "dev"
+                                       # | "1042" | "1043" | "1087" | "dev"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -95,7 +95,15 @@ class Scenario:
     #   change  parses fine; the output is shown as change (correctly, or as a
     #           documented limit; expected_screen says which)
     #   display parses fine; the point is what the device puts on screen
+    #   descriptor parses fine; the device objects to the descriptor the scenario
+    #           presents, once it is scanned (expected_screen names the screen)
     outcome: str = None
+    # The descriptor the descriptor step presents, where a scenario needs a particular
+    # one rather than its own wallet's (PR #1087): "wallet" for the wallet's own,
+    # "wallet:<name>" for another fixture wallet's, or a build_test_descriptor kind
+    # for a forgery. `descriptor_note` is the step's hint, saying which one it is.
+    descriptor: str = None
+    descriptor_note: str = None
     # Rendered under the site's "What's in this transaction?" table, only where that
     # table gets a number wrong. It reads the psbt's own fields, so for PR #995's
     # amount lies it makes the same mistake a device without the fix makes. The
@@ -267,6 +275,18 @@ TEST_PR_GROUPS = [
                   "bound on its size."),
     },
     {
+        "pr": "1087",
+        "label": "PR #1087: descriptor checked against the inputs",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1087",
+        "blurb": ("Without global xpubs the device can confirm only your own key in a "
+                  "multisig change output, and leaves the other keys to the descriptor "
+                  "you scan, which a coordinator can forge. A scanned descriptor must "
+                  "now be sortedmulti() with every key ranged on /<0;1>/*, and must "
+                  "derive the inputs before it can verify change. Change whose keys "
+                  "are not BIP-67 sorted is refused, and with global xpubs, change must "
+                  "hold its keys at one branch and address index."),
+    },
+    {
         "pr": "dev",
         "label": "dev: current behavior",
         "url": "https://github.com/seedsigner/seedsigner/tree/dev",
@@ -359,6 +379,9 @@ _SPEND_RESULT = "Shown as a payment, not change"
 _CHANGE_RESULT = "Shown as change (a limitation)"
 _CHANGE_OK_RESULT = "Shown as change (correct)"
 _OP_RETURN_SCREEN = "OP_RETURN"
+_WRONG_DESCRIPTOR_SCREEN = "Wrong Descriptor / Descriptor Mismatch"
+_UNSUPPORTED_DESCRIPTOR_SCREEN = "Caution / Unsupported Descriptor"
+_VERIFICATION_FAILED_SCREEN = "Suspicious Transaction / Address Verification Failed"
 
 _REFUSE = "Device should refuse it as likely an attack."
 _MALFORMED = "Device should reject it as a malformed transaction."
@@ -372,6 +395,7 @@ _CANT_SIGN = "Device should say this seed can't sign it."
 _UNSUPPORTED = "Device should refuse it as not yet supported."
 _MIXED_WALLETS = "Device should discard it: it cannot tell which of the inputs' wallets is real."
 _DISPLAY = "Device should parse it and show the OP_RETURN screen."
+_DESCRIPTOR_REFUSED = "Device should object to the descriptor once it is scanned."
 
 # `expected` serves two readers: whoever maintains these definitions, and the
 # tester holding the device. Most of them only restate `outcome` and the screen
@@ -382,7 +406,7 @@ _DISPLAY = "Device should parse it and show the OP_RETURN screen."
 # what the device just missed.
 _OBVIOUS_EXPECTATIONS = frozenset({
     _REFUSE, _MALFORMED, _ERROR, _SPEND, _CHANGE_OK, _UNVERIFIED, _CANT_SIGN,
-    _UNSUPPORTED, _MIXED_WALLETS, _DISPLAY,
+    _UNSUPPORTED, _MIXED_WALLETS, _DISPLAY, _DESCRIPTOR_REFUSED,
 })
 
 
@@ -396,7 +420,7 @@ def tester_note(scenario) -> str:
 # the output leaves as a spend, an info mark where it is (mis)counted as change or
 # where what matters is what a screen shows.
 _ICON = {"refuse": "⚠", "warn": "⚠", "error": "⚠", "spend": "→", "change": "ℹ",
-         "display": "ℹ"}
+         "display": "ℹ", "descriptor": "⚠"}
 
 _PR1032_DEFS = [
     # --- refusals: ownership contradictions (attack warning) -----------------
@@ -1309,6 +1333,151 @@ _PR1043_DEFS = [
 ]
 
 
+# PR #1087: multisig change checked against the descriptor the user scans, and the
+# descriptor checked against the inputs. Most of these hand the device a descriptor of
+# the coordinator's making (common/attack_psbt.build_test_descriptor); where the point
+# is the parse, the descriptor is the wallet's own, for walking a build without the fix
+# through its change verification. Every case is a 2-of-3 native segwit wallet: the
+# PR's own measurements gave the same result on all three multisig script types.
+_PR1087_REAL_NOTE = "Your wallet's real descriptor."
+_PR1087_BEFORE_ONLY = ("Your wallet's real descriptor, for a build without the fix. A "
+                       "fixed build {} and never asks for it.")
+_PR1087_MULTI_NOTE = ("A forged multi() descriptor of your wallet's real xpubs, in the "
+                      "order that derives this transaction's one input.")
+_PR1087_RANSOM = ("Nobody else can spend it, but your wallet never derives that "
+                  "address, so your coordinator would not show the funds. ")
+_PR1087_SKIP = ("Skip verification still lets you sign it: with no global xpubs, only "
+                "your known-good descriptor protects you here.")
+
+_PR1087_DEFS = [
+    # --- the descriptor scanned against the transaction ---------------------
+    {"kind": "lookalike", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Look-alike descriptor steals the change", "outcome": "descriptor",
+     "screen": _WRONG_DESCRIPTOR_SCREEN, "expected": _PR1087_SKIP,
+     "descriptor": "lookalike",
+     "descriptor_note": ("Forged: your real xpub, with the attacker's xpubs under the "
+                         "other two cosigners' fingerprints."),
+     "blurb": ("The change output pays your key plus two attacker keys, each listed "
+               "under a real cosigner's fingerprint and path, and the psbt has no global "
+               "xpubs, so the device can confirm only your key. The attacker's two keys "
+               "can spend that output. The descriptor below is forged to match: your "
+               "real xpub, with the attacker's xpubs under the other two cosigners' "
+               "fingerprints and paths, so its fingerprints and 2-of-3 match your real "
+               "descriptor's. With the fix the device finds it does not derive the "
+               "inputs. Before the fix the device checked it against the change alone "
+               "and showed \"Address verified!\".")},
+    {"kind": "lookalike_real_descriptor", "script_type": "P2WSH",
+     "family": "Multisig (2-of-3)",
+     "label": "Your real descriptor catches the theft", "outcome": "descriptor",
+     "screen": _VERIFICATION_FAILED_SCREEN, "expected": _DESCRIPTOR_REFUSED,
+     "descriptor": "wallet", "descriptor_note": _PR1087_REAL_NOTE,
+     "blurb": ("The change output pays your key plus two attacker keys, each listed "
+               "under a real cosigner's fingerprint and path, and the psbt has no global "
+               "xpubs. You scan your wallet's real descriptor, as you should. It derives "
+               "the inputs but not the change, so the device discards the transaction. A "
+               "build without the fix reaches the same screen; with the fix its text "
+               "says the descriptor matches the inputs, which rules out a wrong "
+               "descriptor as the cause.")},
+    {"kind": "other_wallet_descriptor", "script_type": "P2WSH",
+     "family": "Multisig (2-of-3)",
+     "label": "Another wallet's descriptor", "outcome": "descriptor",
+     "screen": _WRONG_DESCRIPTOR_SCREEN, "expected": _DESCRIPTOR_REFUSED,
+     "descriptor": "wallet:2of3_p2sh_p2wsh",
+     "descriptor_note": ("The nested segwit 2-of-3 of the same three cosigners, not the "
+                         "wallet this transaction spends from."),
+     "blurb": ("An honest transaction from your native segwit 2-of-3, but the "
+               "descriptor below is your nested segwit 2-of-3, with the same three "
+               "cosigners at another account path. With the fix the device finds it "
+               "does not derive the inputs, and the back button returns to the prompt "
+               "to scan another. Before the fix the device checked it against the "
+               "change alone and discarded the transaction as \"Address Verification "
+               "Failed\", as if the transaction were the problem.")},
+    {"kind": "receive_branch_slot", "script_type": "P2WSH",
+     "family": "Multisig (2-of-3)",
+     "label": "Cosigner key moved to the receive branch", "outcome": "descriptor",
+     "screen": _UNSUPPORTED_DESCRIPTOR_SCREEN, "expected": _DESCRIPTOR_REFUSED,
+     "descriptor": "receive_branch_slot",
+     "descriptor_note": ("Forged: one cosigner's slot holds that cosigner's "
+                         "receive-branch xpub, ranged with /*."),
+     "blurb": ("The change output holds your wallet's real keys at address index 0, "
+               "but one cosigner's key is on the receive branch, m/48'/0'/0'/2'/0/0, "
+               "while yours and the third are on the change branch. " + _PR1087_RANSOM
+               + "The psbt has no global xpubs. The descriptor below is forged to "
+               "match: that cosigner's slot holds the cosigner's receive-branch xpub "
+               "written as a ranged key, /*. With the fix the device refuses any key "
+               "not ranged on /<0;1>/*. Before the fix it showed \"Address "
+               "verified!\".")},
+    {"kind": "branch_pair_0_2", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Cosigner key moved to branch 2", "outcome": "descriptor",
+     "screen": _UNSUPPORTED_DESCRIPTOR_SCREEN, "expected": _DESCRIPTOR_REFUSED,
+     "descriptor": "branch_pair_0_2",
+     "descriptor_note": "Forged: one cosigner's key ranges over branches 0 and 2.",
+     "blurb": ("The change output holds your wallet's real keys at address index 0, "
+               "but one cosigner's key is on branch 2, m/48'/0'/0'/2'/2/0, while yours "
+               "and the third are on the change branch. " + _PR1087_RANSOM + "The psbt "
+               "has no global xpubs. The descriptor below is forged to match: that "
+               "cosigner's key ranges over branches 0 and 2, /<0;2>/*, so it still "
+               "derives your receive addresses. With the fix the device refuses any key "
+               "not ranged on /<0;1>/*. Before the fix it showed \"Address "
+               "verified!\".")},
+    {"kind": "multi_descriptor", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "multi() descriptor of your real keys", "outcome": "descriptor",
+     "screen": _UNSUPPORTED_DESCRIPTOR_SCREEN, "expected": _DESCRIPTOR_REFUSED,
+     "num_inputs": 1, "descriptor": "multi", "descriptor_note": _PR1087_MULTI_NOTE,
+     "blurb": ("An honest one-input transaction from your sortedmulti() wallet. The "
+               "descriptor below lists your wallet's real xpubs in multi(), in the "
+               "fixed order that derives the input, so its fingerprints and 2-of-3 "
+               "match your real descriptor's. At most other addresses that order is not "
+               "the sorted order, and change built in it is change your wallet never "
+               "finds. With the fix the device accepts only sortedmulti(). Before the "
+               "fix it checked the change, which this order derives differently, and "
+               "discarded the transaction as \"Address Verification Failed\".")},
+
+    # --- refused or reclassified before any descriptor ----------------------
+    {"kind": "multi_forgery", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Change in a multi() forgery's key order", "outcome": "refuse",
+     "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "num_inputs": 1, "descriptor": "multi",
+     "descriptor_note": (_PR1087_MULTI_NOTE + " For a build without the fix: a fixed "
+                         "build refuses the transaction and never asks for it."),
+     "blurb": ("The change output holds your wallet's real keys at m/48'/0'/0'/2'/1/0, "
+               "listed in a fixed order that is not BIP-67 sorted, so your wallet never "
+               "derives that address. " + _PR1087_RANSOM + "With the fix the device "
+               "refuses any multisig output to your key whose keys are not sorted. The "
+               "descriptor below is for a build without the fix: a multi() forgery "
+               "listing your real xpubs in the order that derives this transaction's "
+               "one input, which derives this change too, so that build showed "
+               "\"Address verified!\".")},
+    {"kind": "unsorted_change", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Change keys in reverse order", "outcome": "refuse",
+     "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
+     "descriptor": "wallet",
+     "descriptor_note": _PR1087_BEFORE_ONLY.format("refuses the transaction"),
+     "blurb": ("The change output holds your wallet's real keys at its own change "
+               "path, m/48'/0'/0'/2'/1/0, but in reverse BIP-67 order, so your wallet "
+               "never derives that address. The psbt carries global xpubs, so every key "
+               "traces to your wallet's. With the fix the device refuses any multisig "
+               "output to your key whose keys are not sorted. Before the fix it showed "
+               "the output as your change, and only your loaded descriptor caught it, "
+               "as \"Address Verification Failed\".")},
+    {"kind": "mixed_path_change_xpubs", "script_type": "P2WSH",
+     "family": "Multisig (2-of-3)",
+     "label": "Cosigner key moved, global xpubs present", "outcome": "spend",
+     "screen": _SPEND_RESULT, "expected": _SPEND,
+     "descriptor": "wallet",
+     "descriptor_note": _PR1087_BEFORE_ONLY.format("shows the output as a payment"),
+     "blurb": ("The change output holds your wallet's real keys at address index 0, "
+               "but one cosigner's key is on the receive branch, m/48'/0'/0'/2'/0/0. "
+               "The psbt carries global xpubs, so every key traces to your wallet's. "
+               "With the fix the device counts an output as change only when all its "
+               "keys share one branch and address index, so it warns \"Full Spend!\" "
+               "and shows this one as a payment out. Before the fix it showed it as "
+               "your change, though your wallet never derives that address, and only "
+               "your loaded descriptor caught it, as \"Address Verification "
+               "Failed\".")},
+]
+
+
 # Not tied to a PR. The unsupported-script-type abort sat under #1032 while having
 # nothing to do with change ownership, so it belongs here. Its inputs carry their
 # previous transactions so that #995's input-amount check passes and the psbt reaches
@@ -1331,13 +1500,15 @@ def _make_pr_test(pr, d):
     slug = d["kind"].replace("_", "-")
     return Scenario(
         id=f"test-{pr}-{slug}", wallet=base_wallet, script_type=d["script_type"],
-        num_inputs=DEFAULT_NUM_INPUTS, output_shape="change", network="main",
+        num_inputs=d.get("num_inputs", DEFAULT_NUM_INPUTS), output_shape="change",
+        network="main",
         title=f"{_ICON[d['outcome']]} {d['label']} ({d['family']})",
         blurb=d["blurb"], is_default=False,
         tags=["test", d["label"], info.label],
         pr=pr, attack=d["kind"], load_seed=d.get("load_seed", TEST_VICTIM_SEED),
         expected=d["expected"], expected_screen=d["screen"], outcome=d["outcome"],
         summary_note=d.get("summary_note"),
+        descriptor=d.get("descriptor"), descriptor_note=d.get("descriptor_note"),
     )
 
 
@@ -1378,6 +1549,9 @@ def test_scenarios() -> list:
     out.extend(_make_pr_test("1042", d) for d in _PR1042_DEFS)
     # PR #1043: what the device does with an OP_RETURN once it has parsed it.
     out.extend(_make_pr_test("1043", d) for d in _PR1043_DEFS)
+    # PR #1087: a scanned descriptor checked against the inputs, and multisig change
+    # whose keys are not BIP-67 sorted.
+    out.extend(_make_pr_test("1087", d) for d in _PR1087_DEFS)
     # Not a PR: what the current dev build does.
     out.extend(_make_pr_test("dev", d) for d in _DEV_DEFS)
     return out

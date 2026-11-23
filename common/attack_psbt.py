@@ -35,6 +35,7 @@ Throwaway keys only; none of this is signable into a broadcastable transaction.
 """
 import hashlib
 from copy import deepcopy
+from dataclasses import dataclass
 from functools import partial
 
 from embit import bip32, bip39, script
@@ -1758,6 +1759,271 @@ def _pr1073_two_accounts_previous_txs(signers, network, num_inputs):
     return psbt
 
 
+# --- PR #1087: the descriptor checked against the inputs ----------------------
+#
+# A multisig change output is the wallet's own only if every key in it is the wallet's.
+# Without global xpubs the device can check just one of them, this seed's, and leaves
+# the rest to the descriptor the user scans. It cannot tell the user's known-good
+# descriptor from one the coordinator forged. #1087 checks a scanned descriptor as soon
+# as it arrives and stops at the first failure:
+#
+#   not sortedmulti(), or a key not ranged on /<0;1>/*  -> "Unsupported Descriptor"
+#       (descriptor dropped; the user can scan another or skip verification)
+#   doesn't derive every input this seed owns           -> "Wrong Descriptor"
+#   doesn't derive every change output                  -> "Address Verification Failed"
+#
+# At parse it also refuses a multisig output to this seed, with the inputs' script type
+# and m-of-n, whose keys are not in BIP-67 order ("Transaction Problem"), and with
+# global xpubs it counts such an output as change only when its cosigners resolve to
+# the inputs' and share one branch and address index. A mixed-path output is a spend.
+#
+# Most of these scenarios pair the psbt with a descriptor of the coordinator's making,
+# built by build_test_descriptor below. A forged descriptor and its forged change derive
+# their keys from the same helpers, so the pair cannot drift apart. The forgeries follow
+# the before-and-after table in #1087's description. Every one is a 2-of-3 native
+# segwit wallet without global xpubs unless its docstring says otherwise; bob is the
+# cosigner a mixed-path forgery moves, and the attacker takes over bob's and carol's
+# slots in the look-alike.
+
+# One seed per cosigner slot the look-alike descriptor takes over (bob's, then carol's)
+_PR1087_ATTACKER_SEEDS = [hashlib.sha256(b"btc-datagen-pr1087-attacker-%d" % i).digest()
+                          for i in (1, 2)]
+
+# The wallet position of the cosigner whose key a mixed-path forgery moves (bob)
+_PR1087_MOVED_COSIGNER = 1
+
+
+def _pr1087_attacker_account(network: str, slot: int, derivation: str):
+    """The attacker's account xpub for one taken-over slot, at the real cosigner's
+    account path so the forged descriptor's key origin reads like the real one."""
+    root = bip32.HDKey.from_seed(_PR1087_ATTACKER_SEEDS[slot],
+                                 version=NETWORKS[network]["xprv"])
+    return root.derive(derivation).to_public()
+
+
+def _pr1087_entry(cosigner, branch: int, index: int, account=None):
+    """(key, fingerprint, derivation path) for one key of a multisig output: the
+    cosigner's own key at branch/index, or `account`'s key there claimed under the
+    cosigner's fingerprint and path."""
+    account = account or cosigner.account
+    return (account.derive([branch, index]).key, bytes.fromhex(cosigner.fingerprint),
+            _path_ints(cosigner.derivation) + [branch, index])
+
+
+def _pr1087_rebuild_change(psbt, script_type: str, threshold: int, entries: list,
+                           key_order: list = None):
+    """Rewrite the change output as a multisig of `entries` (see _pr1087_entry),
+    keeping its value. The script lists the keys in BIP-67 order unless `key_order`
+    gives another. Pass this seed's entry first: the site's summary reads the first
+    entry's branch to tell change from a self-transfer."""
+    out = psbt.outputs[_change_output_index(psbt)]
+    if key_order is None:
+        key_order = sorted((entry[0] for entry in entries), key=lambda key: key.sec())
+    multisig_script = script.multisig(threshold, list(key_order))
+    out.witness_script = None
+    out.redeem_script = None
+    if script_type == "P2WSH":
+        out.witness_script = multisig_script
+        out.script_pubkey = script.p2wsh(multisig_script)
+    elif script_type == "P2SH-P2WSH":
+        out.witness_script = multisig_script
+        out.redeem_script = script.p2wsh(multisig_script)
+        out.script_pubkey = script.p2sh(out.redeem_script)
+    elif script_type == "P2SH":
+        out.redeem_script = multisig_script
+        out.script_pubkey = script.p2sh(multisig_script)
+    else:
+        raise ValueError(f"not a multisig script type: {script_type}")
+    out.bip32_derivations.clear()
+    for key, fingerprint, path in entries:
+        out.bip32_derivations[key] = DerivationPath(fingerprint, path)
+
+
+def _pr1087_lookalike(signers, network, num_inputs, threshold):
+    """Theft: the change pays this seed's key plus two attacker keys at the wallet's
+    change path, each attacker key claimed under the fingerprint and path of the real
+    cosigner it displaces. The attacker's two keys can spend it without this seed."""
+    psbt = build_psbt(signers, "P2WSH", num_inputs, "change", threshold=threshold)
+    victim, *others = signers
+    entries = [_pr1087_entry(victim, CHANGE_BRANCH, 0)]
+    for slot, cosigner in enumerate(others):
+        attacker = _pr1087_attacker_account(network, slot, cosigner.derivation)
+        entries.append(_pr1087_entry(cosigner, CHANGE_BRANCH, 0, attacker))
+    _pr1087_rebuild_change(psbt, "P2WSH", threshold, entries)
+    return psbt
+
+
+def _pr1087_mixed_path_change(signers, threshold, num_inputs, moved_branch: int):
+    """The wallet's own keys at change index 0, sorted, but bob's on `moved_branch`
+    instead of the change branch. Nobody else can spend it, but the wallet never
+    derives that address, so its coordinator would not show the funds."""
+    psbt = build_psbt(signers, "P2WSH", num_inputs, "change", threshold=threshold)
+    entries = []
+    for i, cosigner in enumerate(signers):
+        branch = moved_branch if i == _PR1087_MOVED_COSIGNER else CHANGE_BRANCH
+        entries.append(_pr1087_entry(cosigner, branch, 0))
+    _pr1087_rebuild_change(psbt, "P2WSH", threshold, entries)
+    return psbt
+
+
+def _pr1087_receive_branch_slot(signers, network, num_inputs, threshold):
+    """Mixed-path change with bob's key on the receive branch. Paired with a descriptor
+    whose bob slot holds bob's receive-branch xpub written as a ranged key (`/*`)."""
+    return _pr1087_mixed_path_change(signers, threshold, num_inputs, RECEIVE_BRANCH)
+
+
+def _pr1087_branch_pair_0_2(signers, network, num_inputs, threshold):
+    """Mixed-path change with bob's key on branch 2. Paired with a descriptor whose bob
+    slot ranges over branches 0 and 2 (`/<0;2>/*`)."""
+    return _pr1087_mixed_path_change(signers, threshold, num_inputs, 2)
+
+
+def _pr1087_mixed_path_change_xpubs(signers, network, num_inputs, threshold):
+    """Mixed-path change with bob's key on the receive branch, and global xpubs, so the
+    inputs' cosigners resolve and the output's must match them."""
+    psbt = _pr1087_mixed_path_change(signers, threshold, num_inputs, RECEIVE_BRANCH)
+    _add_wallet_xpubs(psbt, signers)
+    return psbt
+
+
+def _pr1087_multi_order(signers) -> list:
+    """The cosigners in the fixed order a multi() forgery lists them: the BIP-67
+    order at the first input's address, /0/0, so the forgery derives that input."""
+    return sorted(signers, key=lambda c: c.account.derive([RECEIVE_BRANCH, 0]).key.sec())
+
+
+def _pr1087_one_input(num_inputs: int):
+    """The multi() scenarios spend one input, so the forgery derives every input this
+    seed owns. A fixed key order matches the sorted order at one address, rarely at
+    several."""
+    if num_inputs != 1:
+        raise ValueError("the multi() forgery scenarios spend exactly one input")
+
+
+def _pr1087_multi_forgery(signers, network, num_inputs, threshold):
+    """The wallet's own keys at its change address /1/0, listed in the multi()
+    forgery's fixed order rather than sorted: change the forgery derives and the
+    wallet does not."""
+    _pr1087_one_input(num_inputs)
+    psbt = build_psbt(signers, "P2WSH", num_inputs, "change", threshold=threshold)
+    entries = [_pr1087_entry(cosigner, CHANGE_BRANCH, 0) for cosigner in signers]
+    key_order = [c.account.derive([CHANGE_BRANCH, 0]).key
+                 for c in _pr1087_multi_order(signers)]
+    # The scenario's blurb puts this change at /1/0, which only works while the fixed
+    # order differs from the sorted order there
+    if [key.sec() for key in key_order] == sorted(key.sec() for key in key_order):
+        raise ValueError("the multi() forgery's order is the sorted order at /1/0")
+    _pr1087_rebuild_change(psbt, "P2WSH", threshold, entries, key_order)
+    return psbt
+
+
+def _pr1087_multi_descriptor(signers, network, num_inputs, threshold):
+    """An honest one-input spend, for scanning the multi() forgery against."""
+    _pr1087_one_input(num_inputs)
+    return build_psbt(signers, "P2WSH", num_inputs, "change", threshold=threshold)
+
+
+def _pr1087_unsorted_change(signers, network, num_inputs, threshold):
+    """The wallet's own keys at its own change path, in reverse BIP-67 order, with
+    global xpubs, so the output's cosigners resolve to the inputs'."""
+    psbt = build_psbt(signers, "P2WSH", num_inputs, "change", threshold=threshold)
+    entries = [_pr1087_entry(cosigner, CHANGE_BRANCH, 0) for cosigner in signers]
+    reverse_sorted = sorted((entry[0] for entry in entries), key=lambda key: key.sec(),
+                            reverse=True)
+    _pr1087_rebuild_change(psbt, "P2WSH", threshold, entries, reverse_sorted)
+    _add_wallet_xpubs(psbt, signers)
+    return psbt
+
+
+def _pr1087_honest(signers, network, num_inputs, threshold):
+    """An honest spend, for scanning another wallet's descriptor against."""
+    return build_psbt(signers, "P2WSH", num_inputs, "change", threshold=threshold)
+
+
+@dataclass
+class TestDescriptor:
+    """A descriptor a test scenario presents, as the device should read it.
+
+    text       -- the descriptor, no checksum
+    hdkeys     -- urtypes HDKeys in script order for a crypto-output UR, or None where
+                  a UR can't express it (urtypes keypaths have no `<a;b>` component)
+    is_sorted  -- sortedmulti() rather than multi(). SeedSigner reads plain text as a
+                  descriptor only when it contains "sortedmulti", so a multi() one ships
+                  in a Specter wallet export instead.
+    """
+    text: str
+    hdkeys: list
+    is_sorted: bool = True
+
+
+def _pr1087_key_text(fingerprint: str, derivation: str, xpub: str, suffix: str) -> str:
+    origin = derivation.replace("m/", "").replace("'", "h")
+    return f"[{fingerprint}/{origin}]{xpub}{suffix}"
+
+
+def build_test_descriptor(kind: str, signers: list, script_type: str,
+                          network: str = "main", threshold: int = None) -> TestDescriptor:
+    """The forged descriptor a PR #1087 scenario presents, by its `descriptor` kind.
+
+    lookalike            this seed's real key, with the attacker's xpubs listed under
+                         bob's and carol's fingerprints and paths
+    receive_branch_slot  the wallet's real keys, but bob's slot holds bob's
+                         receive-branch xpub written as a ranged key, so at every
+                         address, receive or change, it takes bob's receive key
+    branch_pair_0_2      the wallet's real keys, bob's ranged over branches 0 and 2
+    multi                the wallet's real xpubs in multi(), in the order that
+                         derives the first input
+    """
+    from common.descriptor import KEY_SUFFIX, ur_hdkey
+
+    if script_type != "P2WSH":
+        raise ValueError("the PR #1087 descriptor forgeries are native segwit only")
+    xpub_version = NETWORKS[network]["xpub"]
+
+    def real(cosigner):
+        return (_pr1087_key_text(cosigner.fingerprint, cosigner.derivation, cosigner.xpub,
+                                 KEY_SUFFIX), cosigner.hdkey)
+
+    keys, is_sorted, has_ur = [], True, True
+    if kind == "lookalike":
+        victim, *others = signers
+        keys.append(real(victim))
+        for slot, cosigner in enumerate(others):
+            attacker = _pr1087_attacker_account(network, slot, cosigner.derivation)
+            keys.append((
+                _pr1087_key_text(cosigner.fingerprint, cosigner.derivation,
+                                 attacker.to_base58(version=xpub_version), KEY_SUFFIX),
+                ur_hdkey(attacker, bytes.fromhex(cosigner.fingerprint),
+                         cosigner.derivation)))
+    elif kind in ("receive_branch_slot", "branch_pair_0_2"):
+        for i, cosigner in enumerate(signers):
+            if i != _PR1087_MOVED_COSIGNER:
+                keys.append(real(cosigner))
+            elif kind == "receive_branch_slot":
+                branch_key = cosigner.account.derive([RECEIVE_BRANCH])
+                derivation = f"{cosigner.derivation}/{RECEIVE_BRANCH}"
+                keys.append((
+                    _pr1087_key_text(cosigner.fingerprint, derivation,
+                                     branch_key.to_base58(version=xpub_version), "/*"),
+                    ur_hdkey(branch_key, bytes.fromhex(cosigner.fingerprint), derivation,
+                             wildcard_child=True)))
+            else:
+                keys.append((
+                    _pr1087_key_text(cosigner.fingerprint, cosigner.derivation,
+                                     cosigner.xpub, "/<0;2>/*"), None))
+                has_ur = False
+    elif kind == "multi":
+        keys = [real(cosigner) for cosigner in _pr1087_multi_order(signers)]
+        is_sorted = False
+    else:
+        raise ValueError(f"unknown test descriptor: {kind!r}")
+
+    function = "sortedmulti" if is_sorted else "multi"
+    text = f"wsh({function}({threshold},{','.join(key for key, _ in keys)}))"
+    hdkeys = [hdkey for _, hdkey in keys] if has_ur else None
+    return TestDescriptor(text=text, hdkeys=hdkeys, is_sorted=is_sorted)
+
+
 _TEST_BUILDERS = {
     "contradiction_singlesig": _d5_contradiction_singlesig,
     "contradiction_pays_us_claims_other": _d5_contradiction_pays_us_claims_other,
@@ -1830,6 +2096,15 @@ _TEST_BUILDERS = {
     "added_input_taproot": _pr1073_added_input_taproot,
     "two_accounts": _pr1073_two_accounts,
     "two_accounts_previous_txs": _pr1073_two_accounts_previous_txs,
+    "lookalike": _pr1087_lookalike,
+    "lookalike_real_descriptor": _pr1087_lookalike,
+    "other_wallet_descriptor": _pr1087_honest,
+    "receive_branch_slot": _pr1087_receive_branch_slot,
+    "branch_pair_0_2": _pr1087_branch_pair_0_2,
+    "multi_forgery": _pr1087_multi_forgery,
+    "multi_descriptor": _pr1087_multi_descriptor,
+    "mixed_path_change_xpubs": _pr1087_mixed_path_change_xpubs,
+    "unsorted_change": _pr1087_unsorted_change,
 }
 
 # Kinds that need the wallet threshold passed through (multisig builders).
@@ -1843,7 +2118,10 @@ _MULTISIG_KINDS = {"contradiction_multisig", "contradiction_multisig_unclaimed",
                    "cosigner_mismatch", "cosigner_mismatch_input", "cosigner_missing",
                    "cosigner_mismatch_no_xpubs", "mismatch_beneath_contradiction",
                    "legacy_fee_lie_multisig", "legacy_no_prev_tx_multisig",
-                   "decoy_input_multisig", "change_extra_level_multisig"}
+                   "decoy_input_multisig", "change_extra_level_multisig",
+                   "lookalike", "lookalike_real_descriptor", "other_wallet_descriptor",
+                   "receive_branch_slot", "branch_pair_0_2", "multi_forgery",
+                   "multi_descriptor", "mixed_path_change_xpubs", "unsorted_change"}
 
 # PR #1047's kinds are registered from PR1047_CASES rather than listed by hand, so
 # the builder, the script type and the threshold requirement all come from the one
@@ -1863,8 +2141,9 @@ def build_test_psbt(kind: str, signers: list, script_type: str,
     #1013's two forgeries and its honest wrong-seed psbt, then the per-output
     builders for #1032, #1044, #1040, #1046, and #1047, #995's legacy
     input-amount lies, #1041's negative-fee psbt, #1060's input claims, #1073's
-    change paths, and the honest OP_RETURN psbts for #1042 and #1043, which
-    common/op_return_psbt builds."""
+    change paths, #1087's multisig change forgeries (their descriptors come from
+    build_test_descriptor), and the honest OP_RETURN psbts for #1042 and #1043,
+    which common/op_return_psbt builds."""
     if kind in ("fake_change", "bad_input"):
         return build_attack_psbt(kind, signers, script_type, network, num_inputs, threshold)
     if kind == "wrong_seed":

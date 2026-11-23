@@ -618,6 +618,29 @@ for (const [name, viewport, dpr] of VIEWPORTS) {
     console.log('  multisig scenario shows the descriptor step');
   }
 
+  // A PR #1087 test scenario presents its own forged descriptor rather than the
+  // wallet's: this one ships as plain text only, with a /<0;2>/* key that has to
+  // reach the page as text, not as markup.
+  await page.goto(`${BASE}?tx=test-1087-branch-pair-0-2`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await openAll();
+  if (await page.isHidden('#step-descriptor')) {
+    fail(name, 'forged-descriptor scenario has no descriptor step');
+  } else {
+    const shown = (await page.textContent('#descriptor-text')) || '';
+    if (!shown.includes('/<0;2>/*')) {
+      fail(name, `forged descriptor not shown verbatim: "${shown.slice(0, 80)}"`);
+    }
+    const hint = (await page.textContent('#descriptor-hint')) || '';
+    if (!hint.startsWith('Forged')) fail(name, `forged descriptor hint reads "${hint}"`);
+    const banner = (await page.textContent('#test-banner')) || '';
+    if (!banner.includes('once you scan the descriptor')) {
+      fail(name, 'descriptor outcome missing from the test banner');
+    }
+    await checkCanvas(page, name, 'descriptor-canvas', 'forged descriptor');
+    console.log('  PR #1087 scenario shows its forged descriptor');
+  }
+
   // --- the other activities, each reached from the landing page ------------
   for (const [goto, view, canvases] of [
     ['seed', '#view-seed', [['only-seed-canvas', 'standalone seed']]],

@@ -1099,28 +1099,45 @@ async function renderSeedStep() {
 async function renderDescriptorStep() {
   if (!state.scenario.needs_descriptor) return;
 
-  const entry = state.index.wallets.find((w) => w.name === state.scenario.wallet);
-  const data = await getJSON(entry.file);
-
-  // A fixed build never reaches this step (it rejects the psbt during parse), so
-  // for a test scenario the descriptor is here to reproduce the OLD flow: load it
-  // on a pre-fix build to reach change verification and watch how it behaves.
-  $('descriptor-hint').textContent = state.scenario.test
-    ? `This wallet's descriptor, so a build from before the fix reaches its change `
-      + `verification. A fixed build rejects the transaction first and never asks for it.`
-    : `So the device can verify this ${entry.policy} wallet's own change output.`;
-
-  const urs = data.descriptor_urs;
-  if (!Object.keys(urs).includes(state.descriptorUr)) {
-    state.descriptorUr = Object.keys(urs)[0];
+  // Some test scenarios (PR #1087) present a descriptor of their own: a forged one,
+  // another wallet's, or their wallet's with a note on what it is for. The hint is
+  // that note.
+  const own = state.scenarioData.descriptor;
+  let hint, meta, text, formats;
+  if (own) {
+    ({ note: hint, meta, text, formats } = own);
+  } else {
+    const entry = state.index.wallets.find((w) => w.name === state.scenario.wallet);
+    const data = await getJSON(entry.file);
+    // A fixed build never reaches this step (it rejects the psbt during parse), so
+    // for a test scenario the descriptor is here to reproduce the OLD flow: load it
+    // on a pre-fix build to reach change verification and watch how it behaves.
+    hint = state.scenario.test
+      ? `This wallet's descriptor, so a build from before the fix reaches its change `
+        + `verification. A fixed build rejects the transaction first and never asks for it.`
+      : `So the device can verify this ${entry.policy} wallet's own change output.`;
+    meta = `${entry.policy} ${entry.script_label}`;
+    text = data.descriptor;
+    formats = data.descriptor_urs;
   }
-  buildDescriptorSeg('descriptor-seg', urs, state.descriptorUr,
+  $('descriptor-hint').textContent = hint;
+
+  if (!Object.keys(formats).includes(state.descriptorUr)) {
+    state.descriptorUr = Object.keys(formats)[0];
+  }
+  buildDescriptorSeg('descriptor-seg', formats, state.descriptorUr,
     (v) => { state.descriptorUr = v; renderDescriptorStep(); });
 
-  descriptorPlayer.setPayload(prepare(urs[state.descriptorUr].qr));
-  $('descriptor-meta').textContent =
-    `${entry.policy} ${entry.script_label} · single-frame ur:${state.descriptorUr}`;
-  $('descriptor-text').innerHTML = `<div class="addr">${data.descriptor}</div>`;
+  descriptorPlayer.setPayload(prepare(formats[state.descriptorUr].qr));
+  // A forged descriptor may ship as text, which is not a UR
+  const kind = state.descriptorUr.startsWith('crypto-')
+    ? `ur:${state.descriptorUr}` : formats[state.descriptorUr].label;
+  $('descriptor-meta').textContent = `${meta} · single-frame ${kind}`;
+  // textContent, not markup: a descriptor's <0;1> would otherwise be read as HTML
+  const shown = document.createElement('div');
+  shown.className = 'addr';
+  shown.textContent = text;
+  $('descriptor-text').replaceChildren(shown);
 }
 
 /* ---------- signing path: which steps apply ------------------------------- */
@@ -1145,17 +1162,22 @@ function renderFlow() {
    hidden for every ordinary demo transaction. */
 /* How the fixed device should react, phrased by outcome: most abort to a warning
    screen, some warn and let the user go on, some parse with no warning and only
-   classify the output, and some parse and are only about what reaches the screen. */
+   classify the output, some parse and are only about what reaches the screen, and
+   some parse and then object to the descriptor the scenario presents. */
 function outcomePhrase(s) {
   const scr = s.expected_screen;
   switch (s.outcome) {
     case 'error': return `should abort to “<b>${scr}</b>”`;
     case 'warn': return `should warn “<b>${scr}</b>”, then let you continue`;
+    // A spend can still warn "Full Spend!" when the output was the only change
     case 'spend':
+      return `should parse and show the output <b>${scr.toLowerCase()}</b>`;
     case 'change':
       return `should parse with no warning and show the output <b>${scr.toLowerCase()}</b>`;
     case 'display':
       return `should parse and reach the <b>${scr}</b> screen`;
+    case 'descriptor':
+      return `should show “<b>${scr}</b>” once you scan the descriptor below`;
     default: return `should route to “<b>${scr}</b>”`;
   }
 }

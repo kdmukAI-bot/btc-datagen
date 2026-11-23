@@ -48,7 +48,8 @@ from embit.psbt import PSBT, SIGHASH
 from urtypes.crypto import PSBT as URPSBT
 
 from common import bbqr, scenarios as scenario_defs, script_types
-from common.attack_psbt import build_test_psbt
+from common.attack_psbt import build_test_descriptor, build_test_psbt
+from common.descriptor import multisig_crypto_output_ur
 from common.fixtures import load_seeds, load_wallets, wallet_cosigners
 from common.keys import root_key
 from common.psbt import build_psbt, summarize
@@ -332,6 +333,69 @@ def verification_data(psbt, signers: list, threshold: int) -> dict:
 
 # --- writers -----------------------------------------------------------------
 
+def wallet_descriptor_formats(wallet: dict) -> dict:
+    """A fixture wallet's descriptor QRs, in both UR types; it isn't settled which one
+    Sparrow emits. SeedSigner may not load the crypto-account one: see
+    common/descriptor.crypto_account_ur."""
+    return {
+        "crypto-output": {
+            "label": "crypto-output",
+            "payload": wallet["ur_crypto_output"],
+            "qr": text_qr(wallet["ur_crypto_output"]),
+        },
+        "crypto-account": {
+            "label": "crypto-account",
+            "payload": wallet["ur_crypto_account"],
+            "qr": text_qr(wallet["ur_crypto_account"]),
+        },
+    }
+
+
+def scenario_descriptor(scenario, wallets, signers) -> dict:
+    """The descriptor a test scenario presents in place of its wallet's (PR #1087):
+    another fixture wallet's, or a forgery from common/attack_psbt. Each format is
+    one a device reads as a descriptor.
+
+    A forgery ships as a crypto-output UR where urtypes can express it, plus as text:
+    plain for sortedmulti(), and in a Specter wallet export for multi(), since
+    SeedSigner reads plain text as a descriptor only when it contains "sortedmulti".
+    Plain text keeps its case; upper-casing it would corrupt the xpubs.
+    """
+    spec = scenario.descriptor
+    if spec == "wallet" or spec.startswith("wallet:"):
+        wallet = wallets[scenario.wallet if spec == "wallet" else spec.split(":", 1)[1]]
+        # crypto-output only. SeedSigner's DecodeQR can read a descriptor out of a
+        # crypto-account, but its is_wallet_descriptor leaves that type out, so
+        # ScanView sends one to "Not Yet Implemented".
+        text = wallet["descriptor"]
+        formats = {"crypto-output": wallet_descriptor_formats(wallet)["crypto-output"]}
+    else:
+        wallet = wallets[scenario.wallet]
+        forged = build_test_descriptor(spec, signers, scenario.script_type,
+                                       wallet["network"], wallet["threshold"])
+        text, formats = forged.text, {}
+        if forged.hdkeys is not None:
+            ur = multisig_crypto_output_ur(wallet["threshold"], forged.hdkeys,
+                                           scenario.script_type, forged.is_sorted)
+            formats["crypto-output"] = {"label": "crypto-output", "payload": ur,
+                                        "qr": text_qr(ur)}
+        if forged.is_sorted:
+            formats["text"] = {"label": "text", "payload": text,
+                               "qr": text_qr(text, uppercase=False)}
+        else:
+            export = json.dumps({"label": "Test wallet", "descriptor": text},
+                                separators=(",", ":"))
+            formats["specter"] = {"label": "Specter JSON", "payload": export,
+                                  "qr": text_qr(export, uppercase=False)}
+    info = script_types.get(wallet["script_type"])
+    return {
+        "note": scenario.descriptor_note,
+        "meta": f"{wallet['policy']} {info.label}",
+        "text": text,
+        "formats": formats,
+    }
+
+
 def write_json(path: str, obj) -> int:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
@@ -405,6 +469,9 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
         "psbt_bytes": len(raw),
         "summary": summary,
         "verify": verify,
+        # A test scenario's own descriptor (PR #1087), or null to present the wallet's
+        "descriptor": (scenario_descriptor(scenario, wallets, signers)
+                       if scenario.descriptor else None),
     })
 
     entry = {
@@ -475,20 +542,7 @@ def build_wallet_files(wallets) -> tuple:
         written += write_json(os.path.join(DIST, f"data/wallet/{name}.json"), {
             "name": name,
             "descriptor": wallet["descriptor"],
-            # SeedSigner imports a descriptor from either UR type, and it isn't
-            # settled which one Sparrow emits, so ship both and let the UI pick.
-            "descriptor_urs": {
-                "crypto-output": {
-                    "label": "crypto-output",
-                    "payload": wallet["ur_crypto_output"],
-                    "qr": text_qr(wallet["ur_crypto_output"]),
-                },
-                "crypto-account": {
-                    "label": "crypto-account",
-                    "payload": wallet["ur_crypto_account"],
-                    "qr": text_qr(wallet["ur_crypto_account"]),
-                },
-            },
+            "descriptor_urs": wallet_descriptor_formats(wallet),
             "addresses": addresses,
             "cosigner_keys": wallet["cosigner_keys"],
         })

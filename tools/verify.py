@@ -294,6 +294,26 @@ def verify_wallet(entry):
     return problems
 
 
+def verify_scenario_descriptor(entry):
+    """A test scenario's own descriptor (PR #1087): each format's QR must decode to its
+    payload. A UR ships upper-cased, so it compares without case; text must survive
+    verbatim, since upper-casing it would corrupt the xpubs. What the device then does
+    with the descriptor is checked against SeedSigner itself, outside CI."""
+    descriptor = load(f"data/scenario/{entry['id']}.json").get("descriptor")
+    if descriptor is None:
+        return []
+    problems = []
+    for fmt, spec in descriptor["formats"].items():
+        decoded = decode_frame(spec["qr"]["frames"][0])
+        if fmt.startswith("crypto-"):
+            matches = decoded.lower() == spec["payload"].lower()
+        else:
+            matches = decoded == spec["payload"]
+        if not matches:
+            problems.append(f"descriptor QR does not decode to its {fmt} payload")
+    return problems
+
+
 def load_seedsigner():
     """SeedSigner's PSBTParser, if a checkout is available."""
     if not os.path.isdir(SEEDSIGNER_SRC):
@@ -346,6 +366,19 @@ def main():
         for p in problems:
             failures += 1
             print(f"        - {p}")
+
+    # Cheap (one single-frame QR or two each), so every test scenario, sampled or not
+    print()
+    for entry in index["scenarios"]:
+        if not entry.get("test"):
+            continue
+        problems = verify_scenario_descriptor(entry)
+        if problems:
+            print(f"  descriptor {entry['id']:<40s} FAIL")
+        for p in problems:
+            failures += 1
+            print(f"        - {p}")
+    print("  test scenario descriptors checked")
 
     print()
     for entry in index["seeds"]:

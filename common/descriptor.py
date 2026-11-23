@@ -7,12 +7,15 @@ A note on the multisig tag, because getting it wrong is silent and expensive:
 `crypto-output` tag **406 is `multi`** (keys in the given order) and **407 is
 `sortedmulti`** (keys sorted lexicographically). The two derive DIFFERENT
 addresses from the same key set, so a descriptor QR tagged `multi` will import a
-wallet whose addresses don't match a PSBT built with sorted keys. Sparrow —
-and `common/psbt.py`, which sorts — mean `sortedmulti`, i.e. 407.
+wallet whose addresses don't match a PSBT built with sorted keys. Sparrow (and
+`common/psbt.py`, which sorts) mean `sortedmulti`, i.e. 407. The one place 406 is
+used on purpose is a forged `multi()` descriptor for SeedSigner PR #1087's tests.
 """
-from urtypes.crypto import Account, Output, MultiKey, SCRIPT_EXPRESSION_TAG_MAP
+from urtypes.crypto import (Account, HDKey, Keypath, MultiKey, Output, PathComponent,
+                            SCRIPT_EXPRESSION_TAG_MAP)
 
 from common import script_types
+from common.keys import _path_components
 from common.ur2.ur import UR
 from common.ur2.ur_encoder import UREncoder
 
@@ -70,13 +73,17 @@ def crypto_output_ur(threshold, signers: list, script_type: str) -> str:
 def crypto_account_ur(threshold, signers: list, script_type: str) -> str:
     """Single-part ur:crypto-account/... carrying the same output descriptor.
 
-    SeedSigner imports a wallet descriptor from EITHER `crypto-output` or
-    `crypto-account` — see `get_wallet_descriptor()` in its `models/decode_qr.py`,
-    which for the account type takes `output_descriptors[0]`. The two types have
-    different intents (`crypto-account` is really a signer exporting its own
-    accounts to a coordinator, which is also what SeedSigner's own xpub export
-    emits), but since a demo just needs the descriptor to land on the device, we
-    publish both and let the site choose.
+    The two types have different intents (`crypto-account` is really a signer
+    exporting its own accounts to a coordinator, which is also what SeedSigner's own
+    xpub export emits), but a demo just needs the descriptor to land on the device,
+    so both are published and the site lets the user choose.
+
+    SeedSigner's `get_wallet_descriptor()` (`models/decode_qr.py`) can read a
+    descriptor out of either, taking `output_descriptors[0]` for the account type.
+    But its `is_wallet_descriptor` leaves `crypto-account` out, so `ScanView` sends a
+    scanned one to "Not Yet Implemented" instead of loading it (read from the code
+    at dev 5f321768; not yet tried on a device). TODO: decide whether the site keeps
+    offering it.
 
     The account's master fingerprint is the first signer's, which is the only
     sensible choice for a multisig wallet that has no single master key.
@@ -87,6 +94,47 @@ def crypto_account_ur(threshold, signers: list, script_type: str) -> str:
     encoder = UREncoder(ur, SPARROW_DESCRIPTOR_MAX_FRAGMENT, 0, 10)
     if not encoder.is_single_part():
         raise ValueError("account descriptor did not fit in a single UR part")
+    return encoder.next_part()
+
+
+def ur_hdkey(public_key, fingerprint: bytes, derivation: str,
+             wildcard_child: bool = False) -> HDKey:
+    """A urtypes HDKey for any public key and the key origin a descriptor claims for
+    it, true or not. A forged descriptor uses it to list an attacker's xpub under a
+    real cosigner's fingerprint and path.
+
+    public_key      -- embit public HDKey, at the depth `derivation` names
+    wildcard_child  -- write the key as ranged over its direct children (`/*`)
+                       rather than leaving the receive and change branches implied
+
+    Mainnet only, like the PR test scenarios that use it.
+    """
+    components = _path_components(derivation)
+    props = {
+        "key": public_key.key.serialize(),
+        "chain_code": public_key.chain_code,
+        "origin": Keypath(components, fingerprint, len(components)),
+        "parent_fingerprint": public_key.fingerprint,
+    }
+    if wildcard_child:
+        props["children"] = Keypath([PathComponent(None, False)], None, None)
+    return HDKey(props)
+
+
+def multisig_crypto_output_ur(threshold: int, hdkeys: list, script_type: str,
+                              is_sorted: bool = True) -> str:
+    """Single-part ur:crypto-output/... for a multisig of arbitrary keys, in the
+    given order. is_sorted=False tags it `multi` (406) instead of `sortedmulti`."""
+    info = script_types.get(script_type)
+    tags = list(info.ur_tags)
+    if not is_sorted:
+        tags[-1] = 406
+    output = Output([SCRIPT_EXPRESSION_TAG_MAP[t] for t in tags],
+                    MultiKey(threshold, ec_keys=[], hd_keys=hdkeys))
+    encoder = UREncoder(UR("crypto-output", output.to_cbor()),
+                        SPARROW_DESCRIPTOR_MAX_FRAGMENT, 0, 10)
+    if not encoder.is_single_part():
+        raise ValueError("descriptor did not fit in a single UR part")
     return encoder.next_part()
 
 
