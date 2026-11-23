@@ -1783,9 +1783,9 @@ def _pr1073_two_accounts_previous_txs(signers, network, num_inputs):
 # the before-and-after table in #1087's description. Every one is a 2-of-3 native
 # segwit wallet without global xpubs unless its docstring says otherwise; bob is the
 # cosigner a mixed-path forgery moves, and the attacker takes over bob's and carol's
-# slots in the look-alike.
+# slots in the theft's forged descriptor.
 
-# One seed per cosigner slot the look-alike descriptor takes over (bob's, then carol's)
+# One seed for each slot the theft's forged descriptor takes over (bob's, then carol's)
 _PR1087_ATTACKER_SEEDS = [hashlib.sha256(b"btc-datagen-pr1087-attacker-%d" % i).digest()
                           for i in (1, 2)]
 
@@ -1839,7 +1839,7 @@ def _pr1087_rebuild_change(psbt, script_type: str, threshold: int, entries: list
         out.bip32_derivations[key] = DerivationPath(fingerprint, path)
 
 
-def _pr1087_lookalike(signers, network, num_inputs, threshold):
+def _pr1087_theft(signers, network, num_inputs, threshold):
     """Theft: the change pays this seed's key plus two attacker keys at the wallet's
     change path, each attacker key claimed under the fingerprint and path of the real
     cosigner it displaces. The attacker's two keys can spend it without this seed."""
@@ -1965,7 +1965,7 @@ def build_test_descriptor(kind: str, signers: list, script_type: str,
                           network: str = "main", threshold: int = None) -> TestDescriptor:
     """The forged descriptor a PR #1087 scenario presents, by its `descriptor` kind.
 
-    lookalike            this seed's real key, with the attacker's xpubs listed under
+    theft                this seed's real key, with the attacker's xpubs listed under
                          bob's and carol's fingerprints and paths
     receive_branch_slot  the wallet's real keys, but bob's slot holds bob's
                          receive-branch xpub written as a ranged key, so at every
@@ -1985,7 +1985,7 @@ def build_test_descriptor(kind: str, signers: list, script_type: str,
                                  KEY_SUFFIX), cosigner.hdkey)
 
     keys, is_sorted, has_ur = [], True, True
-    if kind == "lookalike":
+    if kind == "theft":
         victim, *others = signers
         keys.append(real(victim))
         for slot, cosigner in enumerate(others):
@@ -2096,8 +2096,8 @@ _TEST_BUILDERS = {
     "added_input_taproot": _pr1073_added_input_taproot,
     "two_accounts": _pr1073_two_accounts,
     "two_accounts_previous_txs": _pr1073_two_accounts_previous_txs,
-    "lookalike": _pr1087_lookalike,
-    "lookalike_real_descriptor": _pr1087_lookalike,
+    "theft": _pr1087_theft,
+    "theft_real_descriptor": _pr1087_theft,
     "other_wallet_descriptor": _pr1087_honest,
     "receive_branch_slot": _pr1087_receive_branch_slot,
     "branch_pair_0_2": _pr1087_branch_pair_0_2,
@@ -2119,7 +2119,7 @@ _MULTISIG_KINDS = {"contradiction_multisig", "contradiction_multisig_unclaimed",
                    "cosigner_mismatch_no_xpubs", "mismatch_beneath_contradiction",
                    "legacy_fee_lie_multisig", "legacy_no_prev_tx_multisig",
                    "decoy_input_multisig", "change_extra_level_multisig",
-                   "lookalike", "lookalike_real_descriptor", "other_wallet_descriptor",
+                   "theft", "theft_real_descriptor", "other_wallet_descriptor",
                    "receive_branch_slot", "branch_pair_0_2", "multi_forgery",
                    "multi_descriptor", "mixed_path_change_xpubs", "unsorted_change"}
 

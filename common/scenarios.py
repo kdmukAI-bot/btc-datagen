@@ -1351,10 +1351,10 @@ _PR1087_SKIP = ("Skip verification still lets you sign it: with no global xpubs,
 
 _PR1087_DEFS = [
     # --- the descriptor scanned against the transaction ---------------------
-    {"kind": "lookalike", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
-     "label": "Look-alike descriptor steals the change", "outcome": "descriptor",
+    {"kind": "theft", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Forged descriptor hides the theft", "outcome": "descriptor",
      "screen": _WRONG_DESCRIPTOR_SCREEN, "expected": _PR1087_SKIP,
-     "descriptor": "lookalike",
+     "descriptor": "theft",
      "descriptor_note": ("Forged: your real xpub, with the attacker's xpubs under the "
                          "other two cosigners' fingerprints."),
      "blurb": ("The change output pays your key plus two attacker keys, each listed "
@@ -1366,7 +1366,7 @@ _PR1087_DEFS = [
                "descriptor's. With the fix the device finds it does not derive the "
                "inputs. Before the fix the device checked it against the change alone "
                "and showed \"Address verified!\".")},
-    {"kind": "lookalike_real_descriptor", "script_type": "P2WSH",
+    {"kind": "theft_real_descriptor", "script_type": "P2WSH",
      "family": "Multisig (2-of-3)",
      "label": "Your real descriptor catches the theft", "outcome": "descriptor",
      "screen": _VERIFICATION_FAILED_SCREEN, "expected": _DESCRIPTOR_REFUSED,
