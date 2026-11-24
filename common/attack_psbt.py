@@ -2024,6 +2024,44 @@ def build_test_descriptor(kind: str, signers: list, script_type: str,
     return TestDescriptor(text=text, hdkeys=hdkeys, is_sorted=is_sorted)
 
 
+# --- PR #1088: unverified multisig change, and a warning before skipping it ----------
+#
+# Nothing is forged here. What changes the change screens is whether the psbt's global
+# xpubs let the device resolve the inputs' cosigners, that is, trace every key in the
+# inputs back to one of them. When they resolve, the device has already checked the
+# change against them. When they don't (no global xpubs, or only some), it can confirm
+# only this seed's key, so the change is unverified until the user scans the descriptor.
+# Every case is the honest 2-of-3 native segwit wallet.
+
+def _pr1088_psbt(signers, num_inputs, threshold, output_shape="change",
+                 xpub_cosigners=()):
+    psbt = build_psbt(signers, "P2WSH", num_inputs, output_shape, threshold=threshold)
+    _add_wallet_xpubs(psbt, xpub_cosigners)
+    return psbt
+
+
+def _pr1088_change_no_xpubs(signers, network, num_inputs, threshold):
+    """Honest change with no global xpubs: unverified."""
+    return _pr1088_psbt(signers, num_inputs, threshold)
+
+
+def _pr1088_change_xpubs(signers, network, num_inputs, threshold):
+    """Honest change with every cosigner's global xpub: the cosigners resolve."""
+    return _pr1088_psbt(signers, num_inputs, threshold, xpub_cosigners=signers)
+
+
+def _pr1088_partial_xpubs(signers, network, num_inputs, threshold):
+    """Honest change with this seed's global xpub and one other cosigner's. The third
+    cosigner's keys trace back to none of them, so the cosigners don't resolve."""
+    return _pr1088_psbt(signers, num_inputs, threshold, xpub_cosigners=signers[:2])
+
+
+def _pr1088_self_transfer(signers, network, num_inputs, threshold):
+    """A self-transfer to the wallet's receive branch, then change, with no global
+    xpubs: both unverified, and the self-transfer's screen comes first."""
+    return _pr1088_psbt(signers, num_inputs, threshold, output_shape="self_transfer")
+
+
 _TEST_BUILDERS = {
     "contradiction_singlesig": _d5_contradiction_singlesig,
     "contradiction_pays_us_claims_other": _d5_contradiction_pays_us_claims_other,
@@ -2105,6 +2143,10 @@ _TEST_BUILDERS = {
     "multi_descriptor": _pr1087_multi_descriptor,
     "mixed_path_change_xpubs": _pr1087_mixed_path_change_xpubs,
     "unsorted_change": _pr1087_unsorted_change,
+    "change_no_xpubs": _pr1088_change_no_xpubs,
+    "change_xpubs": _pr1088_change_xpubs,
+    "partial_xpubs": _pr1088_partial_xpubs,
+    "self_transfer_no_xpubs": _pr1088_self_transfer,
 }
 
 # Kinds that need the wallet threshold passed through (multisig builders).
@@ -2121,7 +2163,9 @@ _MULTISIG_KINDS = {"contradiction_multisig", "contradiction_multisig_unclaimed",
                    "decoy_input_multisig", "change_extra_level_multisig",
                    "theft", "theft_real_descriptor", "other_wallet_descriptor",
                    "receive_branch_slot", "branch_pair_0_2", "multi_forgery",
-                   "multi_descriptor", "mixed_path_change_xpubs", "unsorted_change"}
+                   "multi_descriptor", "mixed_path_change_xpubs", "unsorted_change",
+                   "change_no_xpubs", "change_xpubs", "partial_xpubs",
+                   "self_transfer_no_xpubs"}
 
 # PR #1047's kinds are registered from PR1047_CASES rather than listed by hand, so
 # the builder, the script type and the threshold requirement all come from the one
@@ -2142,8 +2186,9 @@ def build_test_psbt(kind: str, signers: list, script_type: str,
     builders for #1032, #1044, #1040, #1046, and #1047, #995's legacy
     input-amount lies, #1041's negative-fee psbt, #1060's input claims, #1073's
     change paths, #1087's multisig change forgeries (their descriptors come from
-    build_test_descriptor), and the honest OP_RETURN psbts for #1042 and #1043,
-    which common/op_return_psbt builds."""
+    build_test_descriptor), #1088's honest multisig change with and without
+    global xpubs, and the honest OP_RETURN psbts for #1042 and #1043, which
+    common/op_return_psbt builds."""
     if kind in ("fake_change", "bad_input"):
         return build_attack_psbt(kind, signers, script_type, network, num_inputs, threshold)
     if kind == "wrong_seed":

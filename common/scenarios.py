@@ -81,7 +81,8 @@ class Scenario:
     # do so the sample is useful to run on hardware.
     pr: str = None                     # "1013" | "1032" | "1044" | "1040" | "1046"
                                        # | "1047" | "995" | "1041" | "1060" | "1073"
-                                       # | "1042" | "1043" | "1087" | "dev"
+                                       # | "1042" | "1043" | "1087" | "1088"
+                                       # | "dev"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -97,6 +98,9 @@ class Scenario:
     #   display parses fine; the point is what the device puts on screen
     #   descriptor parses fine; the device objects to the descriptor the scenario
     #           presents, once it is scanned (expected_screen names the screen)
+    #   unverified parses fine; the change screen marks the change unverified
+    #           (expected_screen names its title), and skipping verification brings
+    #           up a Caution screen
     outcome: str = None
     # The descriptor the descriptor step presents, where a scenario needs a particular
     # one rather than its own wallet's (PR #1087): "wallet" for the wallet's own,
@@ -287,6 +291,17 @@ TEST_PR_GROUPS = [
                   "hold its keys at one branch and address index."),
     },
     {
+        "pr": "1088",
+        "label": "PR #1088: unverified multisig change",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1088",
+        "blurb": ("A multisig change screen now says whether the change is verified. "
+                  "When the psbt's global xpubs trace every key in the inputs, the "
+                  "device has already checked the change and the screen is unchanged. "
+                  "Without them it can confirm only your own key, so the change is "
+                  "marked unverified and skipping its verification brings up a Caution "
+                  "screen. Builds on PR #1087."),
+    },
+    {
         "pr": "dev",
         "label": "dev: current behavior",
         "url": "https://github.com/seedsigner/seedsigner/tree/dev",
@@ -396,6 +411,8 @@ _UNSUPPORTED = "Device should refuse it as not yet supported."
 _MIXED_WALLETS = "Device should discard it: it cannot tell which of the inputs' wallets is real."
 _DISPLAY = "Device should parse it and show the OP_RETURN screen."
 _DESCRIPTOR_REFUSED = "Device should object to the descriptor once it is scanned."
+_PR1088_UNVERIFIED = ("Device should mark the change unverified and show a Caution "
+                      "screen if you skip verifying it.")
 
 # `expected` serves two readers: whoever maintains these definitions, and the
 # tester holding the device. Most of them only restate `outcome` and the screen
@@ -406,7 +423,7 @@ _DESCRIPTOR_REFUSED = "Device should object to the descriptor once it is scanned
 # what the device just missed.
 _OBVIOUS_EXPECTATIONS = frozenset({
     _REFUSE, _MALFORMED, _ERROR, _SPEND, _CHANGE_OK, _UNVERIFIED, _CANT_SIGN,
-    _UNSUPPORTED, _MIXED_WALLETS, _DISPLAY, _DESCRIPTOR_REFUSED,
+    _UNSUPPORTED, _MIXED_WALLETS, _DISPLAY, _DESCRIPTOR_REFUSED, _PR1088_UNVERIFIED,
 })
 
 
@@ -420,7 +437,7 @@ def tester_note(scenario) -> str:
 # the output leaves as a spend, an info mark where it is (mis)counted as change or
 # where what matters is what a screen shows.
 _ICON = {"refuse": "⚠", "warn": "⚠", "error": "⚠", "spend": "→", "change": "ℹ",
-         "display": "ℹ", "descriptor": "⚠"}
+         "display": "ℹ", "descriptor": "⚠", "unverified": "⚠"}
 
 _PR1032_DEFS = [
     # --- refusals: ownership contradictions (attack warning) -----------------
@@ -1478,6 +1495,75 @@ _PR1087_DEFS = [
 ]
 
 
+# PR #1088: whether a multisig change screen marks the change unverified, which turns on
+# whether the psbt's global xpubs resolve the inputs' cosigners. Nothing is forged: each
+# psbt is the honest 2-of-3 native segwit wallet's, with all, some, or none of its
+# global xpubs.
+_PR1088_SCREEN = "Unverified Change"
+_PR1088_BACK = ("BACK from the Caution screen returns to the change screen, where you "
+                "can still scan your descriptor.")
+_PR1088_NO_CAUTION = ("Skip verification should go straight on to signing, with no "
+                      "Caution screen.")
+_PR1088_BUTTONS = ("The self-transfer screen's verify button should read \"Verify "
+                   "multisig addr\" and the change screen's \"Verify multisig change\". "
+                   "Before the fix both read \"Verify multisig addr\".")
+_PR1088_DESCRIPTOR = ("Your wallet's real descriptor. Scan it from the change screen and "
+                      "every change screen shows \"Address verified!\".")
+_PR1088_DESCRIPTOR_BOTH = ("Your wallet's real descriptor. Scan it from the "
+                           "self-transfer screen and both screens show \"Address "
+                           "verified!\".")
+_PR1088_DESCRIPTOR_OPTIONAL = ("Your wallet's real descriptor. Optional here; scan it "
+                               "and every change screen shows \"Address verified!\".")
+
+_PR1088_DEFS = [
+    {"kind": "change_no_xpubs", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Change, no global xpubs", "outcome": "unverified",
+     "screen": _PR1088_SCREEN, "expected": _PR1088_BACK,
+     "descriptor": "wallet", "descriptor_note": _PR1088_DESCRIPTOR,
+     "blurb": ("Honest change back to your 2-of-3 wallet, but the psbt leaves out the "
+               "optional global xpubs, so the device can confirm only your own key in "
+               "the change output. The other two keys could belong to anyone until you "
+               "scan your descriptor. With the fix the change screen is titled "
+               "Unverified Change, with \"(?)\" after the address index, and Skip "
+               "verification brings up a Caution screen; Proceed anyway goes on to "
+               "signing. Before the fix the screen read Your Change, the same as with "
+               "global xpubs, and Skip verification went straight on.")},
+    {"kind": "change_xpubs", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Change, global xpubs present", "outcome": "display",
+     "screen": "Your Change", "expected": _PR1088_NO_CAUTION,
+     "descriptor": "wallet", "descriptor_note": _PR1088_DESCRIPTOR_OPTIONAL,
+     "blurb": ("Honest change back to your 2-of-3 wallet, and the psbt lists every "
+               "cosigner's global xpub. Every key in the inputs traces back to one of "
+               "them, so the device has already checked that the change goes back to "
+               "the wallet the inputs come from. With the fix this change screen is "
+               "unchanged: titled Your Change, and Skip verification goes on to "
+               "signing with no Caution screen. Scanning your descriptor is still "
+               "offered, as a good habit.")},
+    {"kind": "partial_xpubs", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
+     "label": "Change, two of three global xpubs", "outcome": "unverified",
+     "screen": _PR1088_SCREEN, "expected": _PR1088_UNVERIFIED,
+     "descriptor": "wallet", "descriptor_note": _PR1088_DESCRIPTOR,
+     "blurb": ("Honest change back to your 2-of-3 wallet, but the psbt lists only two "
+               "of the three global xpubs: yours and one other cosigner's. The third "
+               "cosigner's keys trace back to neither, so the device cannot resolve "
+               "the cosigners and can confirm only your own key in the change output. "
+               "With the fix the change is marked unverified, just as with no global "
+               "xpubs: listing some of them is not enough. Before the fix the screen "
+               "read Your Change.")},
+    {"kind": "self_transfer_no_xpubs", "script_type": "P2WSH",
+     "family": "Multisig (2-of-3)", "output_shape": "self_transfer",
+     "label": "Self-transfer and change, no global xpubs", "outcome": "unverified",
+     "screen": "Unverified Self-Transfer", "expected": _PR1088_BUTTONS,
+     "descriptor": "wallet", "descriptor_note": _PR1088_DESCRIPTOR_BOTH,
+     "blurb": ("Pays part of the funds to one of your wallet's receive addresses (a "
+               "self-transfer) and the rest back as change, with no global xpubs. With "
+               "the fix both are unverified: first an Unverified Self-Transfer screen, "
+               "then Unverified Change, and skipping verification on either brings up "
+               "a Caution screen. Before the fix they read Self-Transfer and Your "
+               "Change.")},
+]
+
+
 # Not tied to a PR. The unsupported-script-type abort sat under #1032 while having
 # nothing to do with change ownership, so it belongs here. Its inputs carry their
 # previous transactions so that #995's input-amount check passes and the psbt reaches
@@ -1500,7 +1586,8 @@ def _make_pr_test(pr, d):
     slug = d["kind"].replace("_", "-")
     return Scenario(
         id=f"test-{pr}-{slug}", wallet=base_wallet, script_type=d["script_type"],
-        num_inputs=d.get("num_inputs", DEFAULT_NUM_INPUTS), output_shape="change",
+        num_inputs=d.get("num_inputs", DEFAULT_NUM_INPUTS),
+        output_shape=d.get("output_shape", "change"),
         network="main",
         title=f"{_ICON[d['outcome']]} {d['label']} ({d['family']})",
         blurb=d["blurb"], is_default=False,
@@ -1552,6 +1639,8 @@ def test_scenarios() -> list:
     # PR #1087: a scanned descriptor checked against the inputs, and multisig change
     # whose keys are not BIP-67 sorted.
     out.extend(_make_pr_test("1087", d) for d in _PR1087_DEFS)
+    # PR #1088: multisig change marked unverified when the global xpubs don't resolve.
+    out.extend(_make_pr_test("1088", d) for d in _PR1088_DEFS)
     # Not a PR: what the current dev build does.
     out.extend(_make_pr_test("dev", d) for d in _DEV_DEFS)
     return out

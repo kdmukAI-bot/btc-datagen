@@ -1178,6 +1178,8 @@ function outcomePhrase(s) {
       return `should parse and reach the <b>${scr}</b> screen`;
     case 'descriptor':
       return `should show “<b>${scr}</b>” once you scan the descriptor below`;
+    case 'unverified':
+      return `should show “<b>${scr}</b>”, then a Caution screen if you skip verifying it`;
     default: return `should route to “<b>${scr}</b>”`;
   }
 }
