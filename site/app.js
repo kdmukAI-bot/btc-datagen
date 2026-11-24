@@ -1109,12 +1109,10 @@ async function renderDescriptorStep() {
   } else {
     const entry = state.index.wallets.find((w) => w.name === state.scenario.wallet);
     const data = await getJSON(entry.file);
-    // A fixed build never reaches this step (it rejects the psbt during parse), so
-    // for a test scenario the descriptor is here to reproduce the OLD flow: load it
-    // on a pre-fix build to reach change verification and watch how it behaves.
+    // A test scenario reaches this step only when the device shows its change, but
+    // that change may not be the wallet's own, so the hint can't promise it verifies.
     hint = state.scenario.test
-      ? `This wallet's descriptor, so a build from before the fix reaches its change `
-        + `verification. A fixed build rejects the transaction first and never asks for it.`
+      ? `Your wallet's real descriptor, so the device can check the change against it.`
       : `So the device can verify this ${entry.policy} wallet's own change output.`;
     meta = `${entry.policy} ${entry.script_label}`;
     text = data.descriptor;

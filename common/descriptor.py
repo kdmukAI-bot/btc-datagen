@@ -81,9 +81,9 @@ def crypto_account_ur(threshold, signers: list, script_type: str) -> str:
     SeedSigner's `get_wallet_descriptor()` (`models/decode_qr.py`) can read a
     descriptor out of either, taking `output_descriptors[0]` for the account type.
     But its `is_wallet_descriptor` leaves `crypto-account` out, so `ScanView` sends a
-    scanned one to "Not Yet Implemented" instead of loading it (read from the code
-    at dev 5f321768; not yet tried on a device). TODO: decide whether the site keeps
-    offering it.
+    scanned one to "Not Yet Implemented" instead of loading it. SeedSigner PR #1082
+    adds the type, and with it every crypto-account QR the site ships loads the same
+    descriptor as its crypto-output twin, so the site keeps offering both.
 
     The account's master fingerprint is the first signer's, which is the only
     sensible choice for a multisig wallet that has no single master key.

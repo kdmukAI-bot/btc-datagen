@@ -335,8 +335,8 @@ def verification_data(psbt, signers: list, threshold: int) -> dict:
 
 def wallet_descriptor_formats(wallet: dict) -> dict:
     """A fixture wallet's descriptor QRs, in both UR types; it isn't settled which one
-    Sparrow emits. SeedSigner may not load the crypto-account one: see
-    common/descriptor.crypto_account_ur."""
+    Sparrow emits. A SeedSigner build needs PR #1082 to load the crypto-account one:
+    see common/descriptor.crypto_account_ur."""
     return {
         "crypto-output": {
             "label": "crypto-output",
@@ -364,9 +364,9 @@ def scenario_descriptor(scenario, wallets, signers) -> dict:
     spec = scenario.descriptor
     if spec == "wallet" or spec.startswith("wallet:"):
         wallet = wallets[scenario.wallet if spec == "wallet" else spec.split(":", 1)[1]]
-        # crypto-output only. SeedSigner's DecodeQR can read a descriptor out of a
-        # crypto-account, but its is_wallet_descriptor leaves that type out, so
-        # ScanView sends one to "Not Yet Implemented".
+        # crypto-output only, so these scenarios also work on a build without
+        # SeedSigner PR #1082: such a build sends a scanned crypto-account to "Not
+        # Yet Implemented".
         text = wallet["descriptor"]
         formats = {"crypto-output": wallet_descriptor_formats(wallet)["crypto-output"]}
     else:
@@ -427,14 +427,13 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
     # wrong-seed case is entirely about loading a decoy).
     signing_seeds = [scenario.load_seed] if scenario.load_seed else wallet["cosigners"]
 
-    # The descriptor step earns its place whenever the device would ask for it.
-    # A fixed build rejects a test scenario during parse, before any descriptor,
-    # but a build from BEFORE the PR still walks the multisig change-verification
-    # flow, so the wallet descriptor is offered for every multisig test scenario
-    # to let a tester reproduce that older behavior. For ordinary demos it needs
-    # an on-device change output to check against.
+    # The descriptor step earns its place whenever the device would ask for it. A
+    # multisig test scenario offers it where a build with the fix reaches a change
+    # screen, or where the scenario needs one to show what a build without the fix
+    # does (scenario_defs.offers_descriptor_step). For ordinary demos it needs an
+    # on-device change output to check against.
     if scenario.attack:
-        needs_descriptor = info.is_multisig
+        needs_descriptor = info.is_multisig and scenario_defs.offers_descriptor_step(scenario)
     else:
         has_own_output = any(o["kind"] in ("change", "self_transfer")
                              for o in summary["outputs"])

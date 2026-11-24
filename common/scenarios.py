@@ -108,6 +108,9 @@ class Scenario:
     # for a forgery. `descriptor_note` is the step's hint, saying which one it is.
     descriptor: str = None
     descriptor_note: str = None
+    # Whether a multisig test scenario offers the descriptor step; see
+    # offers_descriptor_step. None follows the outcome.
+    descriptor_step: bool = None
     # Rendered under the site's "What's in this transaction?" table, only where that
     # table gets a number wrong. It reads the psbt's own fields, so for PR #995's
     # amount lies it makes the same mistake a device without the fix makes. The
@@ -432,6 +435,21 @@ def tester_note(scenario) -> str:
     if scenario.expected in _OBVIOUS_EXPECTATIONS:
         return None
     return scenario.expected
+
+
+# Outcomes after which a build with the fix never reaches a change screen, so it never
+# asks for a descriptor
+_NO_CHANGE_SCREEN = frozenset({"refuse", "error", "spend"})
+
+
+def offers_descriptor_step(scenario) -> bool:
+    """Whether a multisig test scenario offers its descriptor step: only where a build
+    with the fix asks for the descriptor, or where the scenario sets descriptor_step
+    because its account of a build without the fix needs one scanned."""
+    if scenario.descriptor_step is not None:
+        return scenario.descriptor_step
+    return scenario.outcome not in _NO_CHANGE_SCREEN
+
 
 # Icon by outcome: a warning triangle where the device stops or warns, an arrow where
 # the output leaves as a spend, an info mark where it is (mis)counted as change or
@@ -1352,13 +1370,12 @@ _PR1043_DEFS = [
 
 # PR #1087: multisig change checked against the descriptor the user scans, and the
 # descriptor checked against the inputs. Most of these hand the device a descriptor of
-# the coordinator's making (common/attack_psbt.build_test_descriptor); where the point
-# is the parse, the descriptor is the wallet's own, for walking a build without the fix
-# through its change verification. Every case is a 2-of-3 native segwit wallet: the
-# PR's own measurements gave the same result on all three multisig script types.
+# the coordinator's making (common/attack_psbt.build_test_descriptor). Where the fix
+# refuses the psbt at parse, there is no descriptor step, except for the multi()
+# forgery, which a build without the fix showed as "Address verified!". Every case is a
+# 2-of-3 native segwit wallet: the PR's own measurements gave the same result on all
+# three multisig script types.
 _PR1087_REAL_NOTE = "Your wallet's real descriptor."
-_PR1087_BEFORE_ONLY = ("Your wallet's real descriptor, for a build without the fix. A "
-                       "fixed build {} and never asks for it.")
 _PR1087_MULTI_NOTE = ("A forged multi() descriptor of your wallet's real xpubs, in the "
                       "order that derives this transaction's one input.")
 _PR1087_RANSOM = ("Nobody else can spend it, but your wallet never derives that "
@@ -1454,12 +1471,12 @@ _PR1087_DEFS = [
     {"kind": "multi_forgery", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Change in a multi() forgery's key order", "outcome": "refuse",
      "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
-     "num_inputs": 1, "descriptor": "multi",
+     "num_inputs": 1, "descriptor": "multi", "descriptor_step": True,
      "descriptor_note": (_PR1087_MULTI_NOTE + " For a build without the fix: a fixed "
                          "build refuses the transaction and never asks for it."),
      "blurb": ("The change output holds your wallet's real keys at m/48'/0'/0'/2'/1/0, "
-               "listed in a fixed order that is not BIP-67 sorted, so your wallet never "
-               "derives that address. " + _PR1087_RANSOM + "With the fix the device "
+               "listed in a fixed order that is not BIP-67 sorted. " + _PR1087_RANSOM +
+               "With the fix the device "
                "refuses any multisig output to your key whose keys are not sorted. The "
                "descriptor below is for a build without the fix: a multi() forgery "
                "listing your real xpubs in the order that derives this transaction's "
@@ -1468,8 +1485,6 @@ _PR1087_DEFS = [
     {"kind": "unsorted_change", "script_type": "P2WSH", "family": "Multisig (2-of-3)",
      "label": "Change keys in reverse order", "outcome": "refuse",
      "screen": _PROBLEM_SCREEN, "expected": _MALFORMED,
-     "descriptor": "wallet",
-     "descriptor_note": _PR1087_BEFORE_ONLY.format("refuses the transaction"),
      "blurb": ("The change output holds your wallet's real keys at its own change "
                "path, m/48'/0'/0'/2'/1/0, but in reverse BIP-67 order, so your wallet "
                "never derives that address. The psbt carries global xpubs, so every key "
@@ -1481,8 +1496,6 @@ _PR1087_DEFS = [
      "family": "Multisig (2-of-3)",
      "label": "Cosigner key moved, global xpubs present", "outcome": "spend",
      "screen": _SPEND_RESULT, "expected": _SPEND,
-     "descriptor": "wallet",
-     "descriptor_note": _PR1087_BEFORE_ONLY.format("shows the output as a payment"),
      "blurb": ("The change output holds your wallet's real keys at address index 0, "
                "but one cosigner's key is on the receive branch, m/48'/0'/0'/2'/0/0. "
                "The psbt carries global xpubs, so every key traces to your wallet's. "
@@ -1596,6 +1609,7 @@ def _make_pr_test(pr, d):
         expected=d["expected"], expected_screen=d["screen"], outcome=d["outcome"],
         summary_note=d.get("summary_note"),
         descriptor=d.get("descriptor"), descriptor_note=d.get("descriptor_note"),
+        descriptor_step=d.get("descriptor_step"),
     )
 
 
