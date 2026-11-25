@@ -1116,6 +1116,310 @@
           }
         ]
       }
+    },
+    {
+      "name": "2of3_p2sh_caravan",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2SH",
+      "script_label": "Legacy multisig",
+      "network": "main",
+      "derivation": "m/45h/0h/0h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "sh(sortedmulti(2,[814d5ff8/45h/0h/0h]xpub6CH9yxbooToafNDekZD7CTvhsWKbA5YbxwNcSoHLE7SjWbQ5q3L9Q5JkUMq1VNBy23hSg23JV4j9BMHDcFpDGGKkSdd5uzS71AmZaAQooNB/<0;1>/*,[02aaa648/45h/0h/0h]xpub6Bps82MHKxcUSLjjeRCniBC989DW8SqxyDajmgGBagtZG8U6sRT6igWeSG65AB1jRq54b5ZVxDpXGBmmaXN11sp4kavcBGrFnkwRohixjt2/<0;1>/*,[5142fc0d/45h/0h/0h]xpub6D9vyvSL9zvWErh9dQBT9SmZAV9M3Z5andHBGGzwYL8iKhdA1knS7Ha2e5K6boQkeNFhpTpYJGAACWyupjnGDY8HiHZS3mEFktX9baHH8FC/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmhtaadmsoeadaoaolstaaddloxaxhdclaxoybsfpteglztmowenlledmgwgaeykpuylseerdoejtntjpzednzthebsbkaxsndiaahdcxadhfndvwmwpteynbbwmuehptwebbotecrtcxhebtrybkcmadbgfywertbywmkobdamtaaddyotadlncsdpykaeykaeykaocylygtheyaaxaxaycygohtghbdtaaddloxaxhdclaxfhnbsahdlfjlurdssfdkclsnoxnniodaesolpmwzzccpvdjktngyhsaekokekejoaahdcxfhmndmnbnbmdprsrmsnttbcalrsphkknvotigmgwhpecvekidesecfcslkesfdbbamtaaddyotadlncsdpykaeykaeykaocyaopkolfdaxaxaycychplrhtktaaddloxaxhdclaodehnimlffpattkdyktcpeyjernjymdiyfmyatodrldgebtvarkosmnktosuebyaeaahdcxtkkocybbcekttseyzmjopkrsgdbbdnfsgyvlntsonttdykkisneyadzeqzlyeydeamtaaddyotadlncsdpykaeykaeykaocygyfwztbtaxaxaycysfkpgendtehptagy",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmhtaadmsoeadaoaolstaaddloxaxhdclaxoybsfpteglztmowenlledmgwgaeykpuylseerdoejtntjpzednzthebsbkaxsndiaahdcxadhfndvwmwpteynbbwmuehptwebbotecrtcxhebtrybkcmadbgfywertbywmkobdamtaaddyotadlncsdpykaeykaeykaocylygtheyaaxaxaycygohtghbdtaaddloxaxhdclaxfhnbsahdlfjlurdssfdkclsnoxnniodaesolpmwzzccpvdjktngyhsaekokekejoaahdcxfhmndmnbnbmdprsrmsnttbcalrsphkknvotigmgwhpecvekidesecfcslkesfdbbamtaaddyotadlncsdpykaeykaeykaocyaopkolfdaxaxaycychplrhtktaaddloxaxhdclaodehnimlffpattkdyktcpeyjernjymdiyfmyatodrldgebtvarkosmnktosuebyaeaahdcxtkkocybbcekttseyzmjopkrsgdbbdnfsgyvlntsonttdykkisneyadzeqzlyeydeamtaaddyotadlncsdpykaeykaeykaocygyfwztbtaxaxaycysfkpgendkocybslb",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/45h/0h/0h",
+          "xpub": "xpub6CH9yxbooToafNDekZD7CTvhsWKbA5YbxwNcSoHLE7SjWbQ5q3L9Q5JkUMq1VNBy23hSg23JV4j9BMHDcFpDGGKkSdd5uzS71AmZaAQooNB"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/45h/0h/0h",
+          "xpub": "xpub6Bps82MHKxcUSLjjeRCniBC989DW8SqxyDajmgGBagtZG8U6sRT6igWeSG65AB1jRq54b5ZVxDpXGBmmaXN11sp4kavcBGrFnkwRohixjt2"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/45h/0h/0h",
+          "xpub": "xpub6D9vyvSL9zvWErh9dQBT9SmZAV9M3Z5andHBGGzwYL8iKhdA1knS7Ha2e5K6boQkeNFhpTpYJGAACWyupjnGDY8HiHZS3mEFktX9baHH8FC"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "3N4HVKTM5kFSKMTvtfR7f8bAbLS7Yr2KcE"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "3NGTpMSo18Rfr3UeTXXaWprYHpTrZCgigG"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "3Qv1zhmuL9H5PTX9tXne7G86haXyWE1FDV"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "3LtdAKC8Sa3cV8ZzR1K5rJ62VMHvBNdGZP"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "372YB54Y817KY4YvijL2QeKUuPiKE4UQsD"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "3FQop723cDHpXJtBfhKWEDoEta3zsZ6GSG"
+          }
+        ]
+      },
+      "test_only": true
+    },
+    {
+      "name": "2of3_p2sh_caravan_testnet",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2SH",
+      "script_label": "Legacy multisig",
+      "network": "test",
+      "derivation": "m/45h/1h/0h",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "sh(sortedmulti(2,[814d5ff8/45h/1h/0h]tpubDDh1MafxCY5rP9mf27kQtvBm3oiPnHk1Ck5Tpq6Jvj4u45hNA713SQUjYmGxzU5FAAUCazXHSSetADNLAJsFVgQCUganm3J7rFdvaUse8cP/<0;1>/*,[02aaa648/45h/1h/0h]tpubDDf8JbnJ92NrpPBgyuBJyMKofgckL53Nex5LYWo6N2sujmJZ9wu4CmJKMRGq2SwDjQRx9M9emRb9uagA4hUANyRcUcJfKgSkFd2pauQNxAN/<0;1>/*,[5142fc0d/45h/1h/0h]tpubDCdSjfHNGq4MXFNgPFjaXky5nhC2fnsbVrxX6SHxapWjSen3bgiKR5rxdsFVGKZg9hWanQe9yfLau5JdSSsFrWbxYdvu8vnfL9WoyTTtcen/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmhtaadmsoeadaoaolstaaddlonaxhdclaxbgfnlsztamcmfldmndfzditncsldvssncwckmtvdvwcwwtcsvwgrhfptdrbwtshgaahdcxvsdldlbdgocmwthgkkfgpsoylninbkluytzcrygaflvdoyndsrlslegwsggooxhpahtaadehoyaoadamtaaddyotadlncsdpykadykaeykaocylygtheyaaxaxaycyvontkodytaaddlonaxhdclaoidgsfthhfxoektkbzopkcywmsgbevomumtaoaykebbdrsslsaoprcsmktordjegraahdcxlftnzmgmcflbnnbkwtwkbwsfbbpsoyuywdttgrbyamehwdfptydmfykerndllosgahtaadehoyaoadamtaaddyotadlncsdpykadykaeykaocyaopkolfdaxaxaycyueeeiyrftaaddlonaxhdclaojodnoessbkhedwmujyweglinbkkglrtdeechqzytbzvschtoaxmyplatgefyoldlaahdcxftktguolttimcejttpbajyvamhcftsrtknfdvacyflwniykbwnwniypdoyfgbzkeahtaadehoyaoadamtaaddyotadlncsdpykadykaeykaocygyfwztbtaxaxaycygmecdtdylgfygrkt",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmhtaadmsoeadaoaolstaaddlonaxhdclaxbgfnlsztamcmfldmndfzditncsldvssncwckmtvdvwcwwtcsvwgrhfptdrbwtshgaahdcxvsdldlbdgocmwthgkkfgpsoylninbkluytzcrygaflvdoyndsrlslegwsggooxhpahtaadehoyaoadamtaaddyotadlncsdpykadykaeykaocylygtheyaaxaxaycyvontkodytaaddlonaxhdclaoidgsfthhfxoektkbzopkcywmsgbevomumtaoaykebbdrsslsaoprcsmktordjegraahdcxlftnzmgmcflbnnbkwtwkbwsfbbpsoyuywdttgrbyamehwdfptydmfykerndllosgahtaadehoyaoadamtaaddyotadlncsdpykadykaeykaocyaopkolfdaxaxaycyueeeiyrftaaddlonaxhdclaojodnoessbkhedwmujyweglinbkkglrtdeechqzytbzvschtoaxmyplatgefyoldlaahdcxftktguolttimcejttpbajyvamhcftsrtknfdvacyflwniykbwnwniypdoyfgbzkeahtaadehoyaoadamtaaddyotadlncsdpykadykaeykaocygyfwztbtaxaxaycygmecdtdykbmovdwf",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/45h/1h/0h",
+          "xpub": "tpubDDh1MafxCY5rP9mf27kQtvBm3oiPnHk1Ck5Tpq6Jvj4u45hNA713SQUjYmGxzU5FAAUCazXHSSetADNLAJsFVgQCUganm3J7rFdvaUse8cP"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/45h/1h/0h",
+          "xpub": "tpubDDf8JbnJ92NrpPBgyuBJyMKofgckL53Nex5LYWo6N2sujmJZ9wu4CmJKMRGq2SwDjQRx9M9emRb9uagA4hUANyRcUcJfKgSkFd2pauQNxAN"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/45h/1h/0h",
+          "xpub": "tpubDCdSjfHNGq4MXFNgPFjaXky5nhC2fnsbVrxX6SHxapWjSen3bgiKR5rxdsFVGKZg9hWanQe9yfLau5JdSSsFrWbxYdvu8vnfL9WoyTTtcen"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "2N2RV9gpvPhCzEzgvspPR9NHBSSb62PVjC2"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "2N46vkUib7SALXQvSCTzzUBDHcDStqPmrwo"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "2N1fBhWQFGEQvGvQe8BdJC2Dr3Hh45UwCwP"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "2Mt8Gvv5v1zrKLnbVNARK9HyMfWzQMyWQ3A"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "2ND52wwquEwQg1NuyDHhKKGMiXC1rbw4HwW"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "2MyPdxiB42F4GFboKqKzJMp5DzKWMmJp3fH"
+          }
+        ]
+      },
+      "test_only": true
+    },
+    {
+      "name": "2of3_p2wsh_unchained",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2WSH",
+      "script_label": "Native SegWit multisig",
+      "network": "main",
+      "derivation": "m/45h/0/0/0",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "wsh(sortedmulti(2,[814d5ff8/45h/0/0/0]xpub6EkHy26FtDyzZ87ceosba8RSSLL6Rku6SHLnWzthFqFrSaqEr6ezevtdN4RFKLyEwpgAAECNpK1qBrtqMJqforxHXSsctzTE7J8umXgg8uF/<0;1>/*,[02aaa648/45h/0/0/0]xpub6DyRX9fmK6apXSobu3N33XmvFatJe89CqyNYRMxnobnXcLBeCx4b2wsgWUizDqrXaNf7XacfTYuDqRsMb9xUHiBU5yyeS7s735cKncaCBWG/<0;1>/*,[5142fc0d/45h/0/0/0]xpub6EjrANdYfivCkv5ZRZb3C6op4NiEDxq54ApjdMByykaWFFoKGot8okfWmRhaGbTTHNEbDK7fJyBcykHAtV1Tx9nJgTPUn6VvwgWnTeeyjG3/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmetaadmsoeadaoaolstaaddloxaxhdclaxgenbnecentcejlhfcwlypmtppmrtdyttdajkjyetnbmuwpgydkaowyjylfgyghleaahdcxkptaryjybbzeamswdmzsrlaozcsrcxsolbbwrpfprdecvspabkiyrhurloosvobgamtaaddyotadlocsdpykaewkaewkaewkaocylygtheyaaxaaaycyoncepymktaaddloxaxhdclaokotoryltgtkpvdlrdyhlieuymorocxnstehdykpaspdeenhycyvttidsjtlrluttaahdcxaxlfaamepfnlqzlkztottafsoyaacfjeswemonotrkeodmryetwehlykvwchnebbamtaaddyotadlocsdpykaewkaewkaewkaocyaopkolfdaxaaaycyfruogmpttaaddloxaxhdclaxhdamdwueimhlrpfzntpmolrpykynmnreplpddigawlnslrfetidpfrjzpkdlvyyaaahdcxcejlfwwfatltamassoatweztayfhchtecxkiltloeycyrnrpsfzcrnamryrtsogmamtaaddyotadlocsdpykaewkaewkaewkaocygyfwztbtaxaaaycyoxbylysaaowshgbe",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmetaadmsoeadaoaolstaaddloxaxhdclaxgenbnecentcejlhfcwlypmtppmrtdyttdajkjyetnbmuwpgydkaowyjylfgyghleaahdcxkptaryjybbzeamswdmzsrlaozcsrcxsolbbwrpfprdecvspabkiyrhurloosvobgamtaaddyotadlocsdpykaewkaewkaewkaocylygtheyaaxaaaycyoncepymktaaddloxaxhdclaokotoryltgtkpvdlrdyhlieuymorocxnstehdykpaspdeenhycyvttidsjtlrluttaahdcxaxlfaamepfnlqzlkztottafsoyaacfjeswemonotrkeodmryetwehlykvwchnebbamtaaddyotadlocsdpykaewkaewkaewkaocyaopkolfdaxaaaycyfruogmpttaaddloxaxhdclaxhdamdwueimhlrpfzntpmolrpykynmnreplpddigawlnslrfetidpfrjzpkdlvyyaaahdcxcejlfwwfatltamassoatweztayfhchtecxkiltloeycyrnrpsfzcrnamryrtsogmamtaaddyotadlocsdpykaewkaewkaewkaocygyfwztbtaxaaaycyoxbylysaskvdcfke",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/45h/0/0/0",
+          "xpub": "xpub6EkHy26FtDyzZ87ceosba8RSSLL6Rku6SHLnWzthFqFrSaqEr6ezevtdN4RFKLyEwpgAAECNpK1qBrtqMJqforxHXSsctzTE7J8umXgg8uF"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/45h/0/0/0",
+          "xpub": "xpub6DyRX9fmK6apXSobu3N33XmvFatJe89CqyNYRMxnobnXcLBeCx4b2wsgWUizDqrXaNf7XacfTYuDqRsMb9xUHiBU5yyeS7s735cKncaCBWG"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/45h/0/0/0",
+          "xpub": "xpub6EjrANdYfivCkv5ZRZb3C6op4NiEDxq54ApjdMByykaWFFoKGot8okfWmRhaGbTTHNEbDK7fJyBcykHAtV1Tx9nJgTPUn6VvwgWnTeeyjG3"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "bc1qjv77vmwtna6ufmvs3zm3u6ne3hlpp96ls8uz3uzgu3vpg6z67f9scq49d3"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "bc1qry2q7990s36tfq9zq59qzjaek5uq98l64h09k8wwy299k562dk6sz049hj"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "bc1qc5995ep4vm9u5jzg6nxx2ankezd8pysnetuffy3t42908jh0cu0q8958m3"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "bc1q2fnm8cldc925wpfumjcvgh3xh70xsyd7gewx9kfte086j34lnqqq3px6az"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "bc1q7c8594uy02kxr95kr4x990vj46x3e8p57gfp3ls8e06klvgshu8qv2ldz4"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "bc1qwsfv5fhlycrjq4ap45mtrc7qelpkt52rg3jjgyv6jzdcah2q8saqyvcszk"
+          }
+        ]
+      },
+      "test_only": true
+    },
+    {
+      "name": "2of3_p2wsh_unchained_testnet",
+      "sig_type": "multisig",
+      "policy": "2-of-3",
+      "threshold": 2,
+      "total": 3,
+      "script_type": "P2WSH",
+      "script_label": "Native SegWit multisig",
+      "network": "test",
+      "derivation": "m/45h/0/0/0",
+      "cosigners": [
+        "alice",
+        "bob",
+        "carol"
+      ],
+      "descriptor": "wsh(sortedmulti(2,[814d5ff8/45h/0/0/0]tpubDF7vVFuwbVwSpvJU6zrgn3komTRkR9Q9yuw5sYwqbk1kBsVwvKW5oNZTc6W2qqvUjjD4moiFMQqst3PSkAguhJQab3cvaX7ThFjKXSfc6QN/<0;1>/*,[02aaa648/45h/0/0/0]tpubDEM43PVT2NYGoEzTMEM8FT7HahyxdWeGPbxqmv1w9WYRMcrMHAugBPYWkWomkLomNHC29A8XzejGXcMxz1oiB9dm9aix7eXLd3CjYdJjMBQ/<0;1>/*,[5142fc0d/45h/0/0/0]tpubDF7UgcTENzsf2iGQska8Q29BPVotDML8boR2yuF8KfLPzYU2M2jDxCLM1TnMo6Qh5GmVptdXr51ffvmnHLrhqbEbk48nTdAAXe7CDgUrdpr/<0;1>/*))",
+      "ur_crypto_output": "ur:crypto-output/taadmetaadmsoeadaoaolstaaddlonaxhdclaxgenbnecentcejlhfcwlypmtppmrtdyttdajkjyetnbmuwpgydkaowyjylfgyghleaahdcxkptaryjybbzeamswdmzsrlaozcsrcxsolbbwrpfprdecvspabkiyrhurloosvobgahtaadehoyaoadamtaaddyotadlocsdpykaewkaewkaewkaocylygtheyaaxaaaycyoncepymktaaddlonaxhdclaokotoryltgtkpvdlrdyhlieuymorocxnstehdykpaspdeenhycyvttidsjtlrluttaahdcxaxlfaamepfnlqzlkztottafsoyaacfjeswemonotrkeodmryetwehlykvwchnebbahtaadehoyaoadamtaaddyotadlocsdpykaewkaewkaewkaocyaopkolfdaxaaaycyfruogmpttaaddlonaxhdclaxhdamdwueimhlrpfzntpmolrpykynmnreplpddigawlnslrfetidpfrjzpkdlvyyaaahdcxcejlfwwfatltamassoatweztayfhchtecxkiltloeycyrnrpsfzcrnamryrtsogmahtaadehoyaoadamtaaddyotadlocsdpykaewkaewkaewkaocygyfwztbtaxaaaycyoxbylysababkjnvo",
+      "ur_crypto_account": "ur:crypto-account/oeadcylygtheyaaolytaadmetaadmsoeadaoaolstaaddlonaxhdclaxgenbnecentcejlhfcwlypmtppmrtdyttdajkjyetnbmuwpgydkaowyjylfgyghleaahdcxkptaryjybbzeamswdmzsrlaozcsrcxsolbbwrpfprdecvspabkiyrhurloosvobgahtaadehoyaoadamtaaddyotadlocsdpykaewkaewkaewkaocylygtheyaaxaaaycyoncepymktaaddlonaxhdclaokotoryltgtkpvdlrdyhlieuymorocxnstehdykpaspdeenhycyvttidsjtlrluttaahdcxaxlfaamepfnlqzlkztottafsoyaacfjeswemonotrkeodmryetwehlykvwchnebbahtaadehoyaoadamtaaddyotadlocsdpykaewkaewkaewkaocyaopkolfdaxaaaycyfruogmpttaaddlonaxhdclaxhdamdwueimhlrpfzntpmolrpykynmnreplpddigawlnslrfetidpfrjzpkdlvyyaaahdcxcejlfwwfatltamassoatweztayfhchtecxkiltloeycyrnrpsfzcrnamryrtsogmahtaadehoyaoadamtaaddyotadlocsdpykaewkaewkaewkaocygyfwztbtaxaaaycyoxbylysalefpidkt",
+      "cosigner_keys": [
+        {
+          "name": "alice",
+          "master_fingerprint": "814d5ff8",
+          "derivation": "m/45h/0/0/0",
+          "xpub": "tpubDF7vVFuwbVwSpvJU6zrgn3komTRkR9Q9yuw5sYwqbk1kBsVwvKW5oNZTc6W2qqvUjjD4moiFMQqst3PSkAguhJQab3cvaX7ThFjKXSfc6QN"
+        },
+        {
+          "name": "bob",
+          "master_fingerprint": "02aaa648",
+          "derivation": "m/45h/0/0/0",
+          "xpub": "tpubDEM43PVT2NYGoEzTMEM8FT7HahyxdWeGPbxqmv1w9WYRMcrMHAugBPYWkWomkLomNHC29A8XzejGXcMxz1oiB9dm9aix7eXLd3CjYdJjMBQ"
+        },
+        {
+          "name": "carol",
+          "master_fingerprint": "5142fc0d",
+          "derivation": "m/45h/0/0/0",
+          "xpub": "tpubDF7UgcTENzsf2iGQska8Q29BPVotDML8boR2yuF8KfLPzYU2M2jDxCLM1TnMo6Qh5GmVptdXr51ffvmnHLrhqbEbk48nTdAAXe7CDgUrdpr"
+        }
+      ],
+      "addresses": {
+        "receive": [
+          {
+            "index": 0,
+            "path": "0/0",
+            "address": "tb1qjv77vmwtna6ufmvs3zm3u6ne3hlpp96ls8uz3uzgu3vpg6z67f9s0gr2h7"
+          },
+          {
+            "index": 1,
+            "path": "0/1",
+            "address": "tb1qry2q7990s36tfq9zq59qzjaek5uq98l64h09k8wwy299k562dk6s48r2da"
+          },
+          {
+            "index": 2,
+            "path": "0/2",
+            "address": "tb1qc5995ep4vm9u5jzg6nxx2ankezd8pysnetuffy3t42908jh0cu0qsdzgp7"
+          }
+        ],
+        "change": [
+          {
+            "index": 0,
+            "path": "1/0",
+            "address": "tb1q2fnm8cldc925wpfumjcvgh3xh70xsyd7gewx9kfte086j34lnqqqxfs48d"
+          },
+          {
+            "index": 1,
+            "path": "1/1",
+            "address": "tb1q7c8594uy02kxr95kr4x990vj46x3e8p57gfp3ls8e06klvgshu8qmzfzc6"
+          },
+          {
+            "index": 2,
+            "path": "1/2",
+            "address": "tb1qwsfv5fhlycrjq4ap45mtrc7qelpkt52rg3jjgyv6jzdcah2q8saqnywlce"
+          }
+        ]
+      },
+      "test_only": true
     }
   ]
 }

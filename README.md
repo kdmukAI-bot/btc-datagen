@@ -370,6 +370,19 @@ serialization bug can't hide behind correct intermediate values. Per scenario it
 3. asserts the PSBT still signs with its intended seed;
 4. parses it with **SeedSigner's own `PSBTParser`** and checks policy and amounts.
 
+Step 4 needs a SeedSigner checkout: pass its `src` folder as `--seedsigner PATH`, or
+set `$SEEDSIGNER_SRC`. The Validate derivations test group has a check of its own:
+
+```bash
+.venv/bin/python -m tools.verify --derivations --seedsigner ~/seedsigner/src
+```
+
+Every psbt in the group must parse with no validator, as `dev` parses it. On a checkout
+that has the validator it must also come out exactly as its scenario def says: the
+refusal, the validator's result and the path the screen draws, or a clean parse and
+whether the change gets the Distant Address warning. See
+[docs/knowledge/derivation-standards.md](docs/knowledge/derivation-standards.md).
+
 And because correct data can still be served by a broken page:
 
 ```bash

@@ -1613,7 +1613,10 @@ function showScanError(message) {
  * SeedSigner does not support importing one. Offering it anyway sent people
  * looking for a device screen that does not exist. */
 async function renderVerifyView() {
-  const wallets = state.index.wallets.filter((w) => w.network === state.filters.network);
+  // Test-only wallets exist so a test scenario can offer its descriptor; they are not
+  // part of the demo.
+  const wallets = state.index.wallets.filter(
+    (w) => w.network === state.filters.network && !w.test_only);
   const select = $('verify-wallet');
   if (!state.verifyWallet || !wallets.some((w) => w.name === state.verifyWallet)) {
     state.verifyWallet = wallets[0].name;

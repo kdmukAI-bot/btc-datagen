@@ -420,7 +420,10 @@ def build_scenario(scenario, wallets, seeds) -> tuple:
                           scenario.output_shape, threshold=wallet["threshold"])
     raw = psbt.serialize()
     b64 = psbt.to_string()
-    summary = summarize(psbt, wallet["network"])
+    # Addresses as the device shows them, which is the scenario's network. That is the
+    # wallet's own network except where a testnet wallet's psbt is scanned on a mainnet
+    # device (the Validate derivations group's Network Mismatch case).
+    summary = summarize(psbt, scenario.network)
 
     info = script_types.get(scenario.script_type)
     # Which seed the "Load the seed" step presents. Test scenarios override it (the
@@ -551,6 +554,9 @@ def build_wallet_files(wallets) -> tuple:
             "sig_type": info.sig_type, "threshold": wallet["threshold"],
             "cosigners": wallet["cosigners"], "derivation": wallet["derivation"],
             "file": f"data/wallet/{name}.json",
+            # Built only so a test scenario can offer its descriptor; the address
+            # verification list leaves it out.
+            "test_only": wallet.get("test_only", False),
         })
     return entries, written
 

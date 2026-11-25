@@ -18,7 +18,7 @@ Both are built for both networks.
 from dataclasses import dataclass, field
 
 from common import script_types
-from common.attack_psbt import (NEGATIVE_FEE_OVERRUN, PR1047_CASES,
+from common.attack_psbt import (PR1090_CASES, NEGATIVE_FEE_OVERRUN, PR1047_CASES,
                                 PR995_CLAIMED_INPUT_VALUE, PR995_REAL_INPUT_VALUE,
                                 PR995_TAMPER_DELTA)
 from common.op_return_psbt import BURNED_SATS
@@ -81,8 +81,8 @@ class Scenario:
     # do so the sample is useful to run on hardware.
     pr: str = None                     # "1013" | "1032" | "1044" | "1040" | "1046"
                                        # | "1047" | "995" | "1041" | "1060" | "1073"
-                                       # | "1042" | "1043" | "1087" | "1088"
-                                       # | "dev"
+                                       # | "1090" | "1042" | "1043" | "1087"
+                                       # | "1088" | "dev"
     attack: str = None
     load_seed: str = None
     expected: str = None
@@ -116,6 +116,9 @@ class Scenario:
     # amount lies it makes the same mistake a device without the fix makes. The
     # blurb, shown in the banner above the QR, stays about the device.
     summary_note: str = None
+    # The Validate derivations group only: what SeedSigner's parser should find, which
+    # tools/verify.py --derivations checks. Not shipped to the site.
+    derivation_check: dict = None
 
 
 def _make(script_type, shape, num_inputs, network, is_default=False):
@@ -262,6 +265,18 @@ TEST_PR_GROUPS = [
                   "index. Change far past the inputs' address indexes gets a warning."),
     },
     {
+        "pr": "1090",
+        "label": "PR #1090: standard derivation paths",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1090",
+        "blurb": ("With Validate derivations on, the default, SeedSigner signs only when "
+                  "every input of this seed's is at a standard derivation path: a known "
+                  "wallet base path, branch 0 or 1, and an ordinary address index. These "
+                  "psbts check the layouts it accepts, the screen it shows for each one it "
+                  "refuses, and the dust input attack it stops, where a coordinator "
+                  "holding the account xpub sends a small coin to a path no wallet scans "
+                  "and hides change under it."),
+    },
+    {
         "pr": "1042",
         "label": "PR #1042: OP_RETURN push encodings",
         "url": "https://github.com/seedsigner/seedsigner/pull/1042",
@@ -307,7 +322,7 @@ TEST_PR_GROUPS = [
     {
         "pr": "dev",
         "label": "dev: current behavior",
-        "url": "https://github.com/seedsigner/seedsigner/tree/dev",
+        "url": "https://github.com/seedsigner/seedsigner/pull/1090",
         "blurb": ("Not tied to a hardening PR. These record what the current dev build "
                   "does with a psbt, so what they document can change as PRs land."),
     },
@@ -393,6 +408,9 @@ _CANT_SIGN_SCREEN = "Seed Can't Sign"
 _NOT_YET_SCREEN = "Not Yet Implemented"
 _UNSAFE_PATH_SCREEN = "Suspicious Transaction / Unsafe Derivation Path"
 _DISTANT_SCREEN = "Distant Address"
+_NONSTANDARD_PATH_SCREEN = "Transaction Problem / Nonstandard Path"
+_SCRIPT_TYPE_MISMATCH_SCREEN = "Transaction Problem / Script Type Mismatch"
+_NETWORK_MISMATCH_SCREEN = "Transaction Problem / Network Mismatch"
 _SPEND_RESULT = "Shown as a payment, not change"
 _CHANGE_RESULT = "Shown as change (a limitation)"
 _CHANGE_OK_RESULT = "Shown as change (correct)"
@@ -1228,6 +1246,222 @@ _PR1073_DEFS = [
 ]
 
 
+# PR #1090, Validate derivations: with the setting on, SeedSigner signs only when every
+# input of this seed's is at a standard derivation path. Each psbt here is built so that
+# check is the only thing the device finds, so with the setting off, which is what dev
+# does, every one of them signs. The kinds and their script types come from
+# PR1090_CASES in common/attack_psbt.py.
+#
+# `check` is what tools/verify.py --derivations holds SeedSigner's parser to, and the
+# expectation shown to a tester is written from it, so the two cannot drift. `status` is
+# the refusal; `offending_level_index`, `indicated_network` and `indicated_policy_type`
+# are the validator's result for the path the screen shows, and `path_status` is that
+# result's status when it differs from `status`. `text` is the path exactly as the
+# refusal screen draws it, a line break where it takes two lines.
+_PR1090_SCREENS = {
+    "nonstandard": _NONSTANDARD_PATH_SCREEN,
+    "another_script_type": _SCRIPT_TYPE_MISMATCH_SCREEN,
+    "another_network": _NETWORK_MISMATCH_SCREEN,
+    # Change that follows an input that isn't standard, the dust attack. The screen
+    # shows the change's path.
+    "change_follows_nonstandard": _UNSAFE_PATH_SCREEN,
+}
+_PR1090_OFF = "With Validate derivations off it signs, as dev does."
+_PR1090_OFF_MULTISIG = (
+    "With Validate derivations off it signs, as dev does, once change verification is "
+    "skipped; with this wallet's descriptor loaded, dev stops on Address Verification "
+    "Failed.")
+_PR1090_SIGNS = "Device should sign it, with Validate derivations on or off."
+_PR1090_PROVEN = "Every input carries its previous transaction."
+
+
+def _pr1090_shown(text):
+    """The refusal screen's path, as a sentence can say it."""
+    lines = text.split("\n")
+    if len(lines) == 1:
+        return lines[0]
+    return f"{lines[0]} on one line and {lines[1]} on the next"
+
+
+def _pr1090_def(kind, label, blurb, *, outcome, screen, expected, check, **extra):
+    script_type = PR1090_CASES[kind][0]
+    family = extra.pop("family", script_types.get(script_type).label)
+    return {"kind": kind, "script_type": script_type, "family": family, "label": label,
+            "outcome": outcome, "screen": screen, "expected": expected, "blurb": blurb,
+            "check": check, **extra}
+
+
+def _pr1090_refusal(kind, label, blurb, *, status, offending, text, explanation=None,
+                         network=None, policy=None, then=None, path_status=None, **extra):
+    """A psbt the setting refuses. `then` is what the tester does next, if anything."""
+    screen = _PR1090_SCREENS[status]
+    shown = _pr1090_shown(text)
+    if explanation:
+        shown += f' and "{explanation}"'
+    multisig = script_types.get(PR1090_CASES[kind][0]).is_multisig
+    expected = " ".join(part for part in (
+        f"Device should refuse it on {screen}, showing {shown}.",
+        then,
+        _PR1090_OFF_MULTISIG if multisig else _PR1090_OFF) if part)
+    check = {"status": status, "offending_level_index": offending,
+             "indicated_network": network, "indicated_policy_type": policy, "text": text}
+    if path_status:
+        check["path_status"] = path_status
+    return _pr1090_def(kind, label, blurb, outcome="refuse", screen=screen,
+                            expected=expected, check=check, **extra)
+
+
+def _pr1090_dust_def(kind, base, index, text, offending):
+    """The dust input attack: dust at a hidden level under the account, change under it.
+    `text` and `offending` are for the change's path, which the refusal screen shows."""
+    level = PR1090_CASES[kind][2]["level"]
+    multisig = script_types.get(PR1090_CASES[kind][0]).is_multisig
+    dust, change = f"{base}/{level}/0/{index}", f"{base}/{level}/1/{index}"
+    who = "the cosigners' xpubs" if multisig else "your account xpub"
+    pays = "every cosigner's key" if multisig else "your seed"
+    if index == 0:
+        where = ("Without the setting the change screen reads \"change address #0\", "
+                 "the same as ordinary change.")
+    else:
+        where = (f"The dust and the change are both at address index {index:,}. The "
+                 f"distant address window counts from the smallest input index at the "
+                 f"change's base path, and only the dust is there, so without the setting "
+                 f"no warning fires.")
+    blurb = (f"A coordinator holding {who} sent 1,000 sats to {dust}, a path no wallet "
+             f"scans, and spends that coin beside your own. The change goes to {change}, "
+             f"under the dust's path. It still pays {pays}, but your wallet never looks "
+             f"there, so the change vanishes from your balance until whoever chose the "
+             f"path says where it is. {_PR1090_PROVEN} {where}")
+    return _pr1090_refusal(
+        kind, "Dust at a hidden path, change under it" if index == 0
+        else "Distant dust at a hidden path, change under it", blurb,
+        status="change_follows_nonstandard", path_status="nonstandard",
+        offending=offending, text=text, explanation="failed derivation checks",
+        summary_note=(f"The dust is at {dust}. The refusal screen shows the change's "
+                      f"path, {change}."))
+
+
+_PR1090_DEFS = [
+    # --- the dust input attack, which dev signs -------------------------------
+    _pr1090_dust_def("dust_p2wpkh", "m/84'/0'/0'", 0, "m/84'/0'/0'/7777/1/0", 3),
+    _pr1090_dust_def("dust_p2wpkh_distant", "m/84'/0'/0'", 5_000_123,
+                      "m/84'/0'/0'/7777/1/\n5000123", 3),
+    _pr1090_dust_def("dust_p2sh_p2wpkh", "m/49'/0'/0'", 0, "m/49'/0'/0'/7778/1/0", 3),
+    _pr1090_dust_def("dust_p2tr", "m/86'/0'/0'", 0, "m/86'/0'/0'/7779/1/0", 3),
+    _pr1090_dust_def("dust_p2pkh", "m/44'/0'/0'", 0, "m/44'/0'/0'/7780/1/0", 3),
+    _pr1090_dust_def("dust_p2wsh", "m/48'/0'/0'/2'", 0, "m/48'/0'/0'/2'/7781/\n1/0", 4),
+    _pr1090_dust_def("dust_p2wsh_distant", "m/48'/0'/0'/2'", 5_000_123,
+                      "m/48'/0'/0'/2'/7781/\n1/5000123", 4),
+    _pr1090_dust_def("dust_p2sh_p2wsh", "m/48'/0'/0'/1'", 0, "m/48'/0'/0'/1'/7782/\n1/0", 4),
+    _pr1090_dust_def("dust_p2sh", "m/45'", 0, "m/45'/7783/1/0", 1),
+
+    # --- a standard path, for another network or script type -----------------
+    _pr1090_refusal(
+        "network_testnet", "Testnet psbt on a mainnet device",
+        ("An ordinary native segwit spend from a testnet wallet, at m/84'/1'/0', scanned "
+         "on a device set to mainnet. Coin type 1' is the one every test network uses, "
+         "so this psbt is for another network than the device's. Without the setting it "
+         "parses anyway and shows mainnet addresses."),
+        status="another_network", offending=1, text="m/84'/1'/0'/0/0",
+        explanation="Path is for Testnet", network="test",
+        then="Choose Change Setting, pick Testnet, and scan it again: it signs.",
+        wallet="ss_native_segwit_testnet", family="Native SegWit, testnet"),
+    _pr1090_refusal(
+        "script_legacy_at_taproot", "Legacy coins at taproot's path",
+        ("An ordinary legacy spend from a wallet whose coins sit at m/86'/0'/0', the path "
+         "for taproot, as in SeedSigner issue #1055. A wallet restoring this seed looks "
+         "for legacy coins at m/44'/0'/0', so it would not find them."),
+        status="another_script_type", offending=0, text="m/86'/0'/0'/0/0",
+        explanation="Path is for Taproot", policy="p2tr"),
+    _pr1090_refusal(
+        "script_single_at_multisig", "Single sig at a multisig path",
+        ("An ordinary native segwit single sig spend from m/48'/0'/0'/2', the path BIP-48 "
+         "gives native segwit multisig. The screen names the script type that path is "
+         "for, Native Segwit, even though what differs is single sig versus multisig."),
+        status="another_script_type", offending=0, text="m/48'/0'/0'/2'/0/0",
+        explanation="Path is for Native Segwit", policy="p2wsh"),
+
+    # --- other nonstandard paths ----------------------------------------------
+    _pr1090_refusal(
+        "account_10", "Spend from account 10",
+        ("An ordinary native segwit spend from your seed's account 10, m/84'/0'/10'. The "
+         "setting allows accounts 0 to 9, where wallets commonly stop looking when they "
+         "restore a seed."),
+        status="nonstandard", offending=2, text="m/84'/0'/10'/0/0"),
+    _pr1090_refusal(
+        "custom_wallet", "Honest custom wallet",
+        ("An honest spend with nothing added: every input and the change are at "
+         "m/84'/0'/0'/7777, a custom wallet's account path. A wallet restoring this seed "
+         "at the standard paths would not find these coins, so the device refuses it all "
+         "the same. Not every refusal in this group is an attack."),
+        status="nonstandard", offending=3, text="m/84'/0'/0'/7777/0/0"),
+    _pr1090_refusal(
+        "branch_2", "Coin on branch 2",
+        ("Input 0 pays your key at m/84'/0'/0'/2/0. Wallets scan only branch 0 (receive) "
+         "and branch 1 (change), so a wallet restoring this seed would never find the "
+         "coin, and anyone with your account xpub can derive keys there. The other inputs "
+         "and the change are ordinary."),
+        status="nonstandard", offending=3, text="m/84'/0'/0'/2/0"),
+    _pr1090_refusal(
+        "electrum", "Electrum's seed path",
+        ("An ordinary native segwit spend at m/0'/0/n, with change at m/0'/1/0: the paths "
+         "Electrum derives for its own segwit seeds. This is a BIP-39 seed at those paths, "
+         "which the check judges just as it does an Electrum seed. Electrum seeds are one "
+         "of the honest wallets the setting turns away."),
+        status="nonstandard", offending=0, text="m/0'/0/0"),
+
+    # --- wallet layouts the setting accepts -----------------------------------
+    _pr1090_def(
+        "whirlpool_postmix", "Whirlpool Postmix spend",
+        ("An ordinary native segwit spend from the Whirlpool Postmix account, "
+         "m/84'/0'/2147483646'. Sparrow scans the Whirlpool accounts when it restores a "
+         "seed, and people still spend Postmix coins, so for native segwit they are "
+         "standard."),
+        outcome="change", screen=_CHANGE_OK_RESULT, expected=_PR1090_SIGNS,
+        check={"status": "standard", "distant": False}),
+    _pr1090_def(
+        "caravan", "Caravan legacy multisig",
+        ("An ordinary 2-of-3 legacy multisig spend at m/45'/0'/0', Caravan's default for "
+         "legacy multisig. Load this wallet's descriptor below so the device can verify "
+         "the change."),
+        outcome="change", screen=_CHANGE_OK_RESULT, expected=_PR1090_SIGNS,
+        check={"status": "standard", "distant": False}, wallet="2of3_p2sh_caravan"),
+    _pr1090_def(
+        "unchained", "Unchained vault",
+        ("An ordinary 2-of-3 native segwit multisig spend at m/45'/0/0/0, the layout "
+         "SeedSigner accepts for Unchained's vaults, at vault 0. Load this wallet's "
+         "descriptor below so the device can verify the change."),
+        outcome="change", screen=_CHANGE_OK_RESULT, expected=_PR1090_SIGNS,
+        check={"status": "standard", "distant": False}, wallet="2of3_p2wsh_unchained"),
+
+    # --- what the setting does not catch ---------------------------------------
+    _pr1090_def(
+        "dust_other_account", "Dust in another standard account",
+        ("The dust input attack at standard paths: 1,000 sats at m/84'/0'/7'/0/0, your "
+         "seed's account 7, spent beside your coins in account 0, with the change at "
+         f"m/84'/0'/7'/1/1. {_PR1090_PROVEN} Every path is standard, and a wallet "
+         "that scans accounts 0 to 9 when it restores the seed finds the change."),
+        outcome="change", screen=_CHANGE_RESULT,
+        expected=("Device signs it with no warning, with Validate derivations on or off: a "
+                  "known limit of the setting. The overview shows 4 inputs where you spent "
+                  "3."),
+        check={"status": "standard", "distant": False}),
+    _pr1090_def(
+        "distant_cross_account", "Change measured across accounts",
+        ("Your coins at m/84'/0'/1'/0/5 to 0/7, in account 1, plus 1,000 sats at "
+         "m/84'/0'/0'/0/999999 in account 0, with the change at m/84'/0'/0'/1/1000000. "
+         f"{_PR1090_PROVEN} Within account 0 the change sits next to the dust, so dev "
+         "shows no warning. With the setting on, the device also measures from the "
+         "smallest address index among all your inputs, 5, which puts the change far past "
+         "any address in use."),
+        outcome="warn", screen=_DISTANT_SCREEN,
+        expected=("The change screen then marks it \"Distant index #1000000\", and signing "
+                  "is allowed. With Validate derivations off there is no warning, as on "
+                  "dev."),
+        check={"status": "standard", "distant": True}),
+]
+
+
 # PR #1042: an OP_RETURN payload read correctly however it is pushed, and refused when
 # it is not made of complete pushes. Nothing here is forged: all that varies is how the
 # OP_RETURN output is encoded and how much it carries. The builder
@@ -1595,10 +1829,12 @@ _DEV_DEFS = [
 
 def _make_pr_test(pr, d):
     info = script_types.get(d["script_type"])
-    base_wallet = WALLET_FOR_SCRIPT_TYPE[d["script_type"]]
+    # A def may name its own wallet fixture: a testnet wallet's psbt scanned on a mainnet
+    # device, or a multisig layout whose descriptor the site should offer.
+    wallet = d.get("wallet", WALLET_FOR_SCRIPT_TYPE[d["script_type"]])
     slug = d["kind"].replace("_", "-")
     return Scenario(
-        id=f"test-{pr}-{slug}", wallet=base_wallet, script_type=d["script_type"],
+        id=f"test-{pr}-{slug}", wallet=wallet, script_type=d["script_type"],
         num_inputs=d.get("num_inputs", DEFAULT_NUM_INPUTS),
         output_shape=d.get("output_shape", "change"),
         network="main",
@@ -1607,7 +1843,7 @@ def _make_pr_test(pr, d):
         tags=["test", d["label"], info.label],
         pr=pr, attack=d["kind"], load_seed=d.get("load_seed", TEST_VICTIM_SEED),
         expected=d["expected"], expected_screen=d["screen"], outcome=d["outcome"],
-        summary_note=d.get("summary_note"),
+        summary_note=d.get("summary_note"), derivation_check=d.get("check"),
         descriptor=d.get("descriptor"), descriptor_note=d.get("descriptor_note"),
         descriptor_step=d.get("descriptor_step"),
     )
@@ -1646,6 +1882,8 @@ def test_scenarios() -> list:
     out.extend(_make_pr_test("1060", d) for d in _PR1060_DEFS)
     # PR #1073: change has to come back to a path the inputs' wallet scans.
     out.extend(_make_pr_test("1073", d) for d in _PR1073_DEFS)
+    # PR #1090: every input of this seed's at a standard derivation path.
+    out.extend(_make_pr_test("1090", d) for d in _PR1090_DEFS)
     # PR #1042: an OP_RETURN payload read correctly however it is pushed.
     out.extend(_make_pr_test("1042", d) for d in _PR1042_DEFS)
     # PR #1043: what the device does with an OP_RETURN once it has parsed it.
