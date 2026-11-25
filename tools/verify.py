@@ -33,11 +33,19 @@ a correctness gate here.
 
 Run:  python -m tools.verify              # representative sample, fast
       python -m tools.verify --all        # every scenario and every frame
+      python -m tools.verify --derivations --seedsigner ~/seedsigner/src
+
+The SeedSigner checkout is --seedsigner, else $SEEDSIGNER_SRC, else SEEDSIGNER_SRC
+below. --derivations checks only the Validate derivations test group: each psbt must
+parse with no validator, as dev parses it, and, on a checkout that has the validator,
+come out exactly as its scenario def says (the refusal, its validator result and the
+path the screen draws, or a clean parse and whether the change is marked distant).
 """
 import argparse
 import json
 import os
 import sys
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -50,6 +58,7 @@ from embit.psbt import PSBT
 from urtypes.crypto import PSBT as URPSBT
 
 from common import bbqr
+from common import scenarios as scenario_defs
 from common.fixtures import load_seeds
 from common.keys import root_key
 from common.qr import qr_matrix
@@ -314,11 +323,11 @@ def verify_scenario_descriptor(entry):
     return problems
 
 
-def load_seedsigner():
-    """SeedSigner's PSBTParser, if a checkout is available."""
-    if not os.path.isdir(SEEDSIGNER_SRC):
+def load_seedsigner(src: str):
+    """SeedSigner's PSBTParser, if a checkout is available at `src`."""
+    if not os.path.isdir(src):
         return None, None, None
-    sys.path.insert(0, SEEDSIGNER_SRC)
+    sys.path.insert(0, src)
     try:
         from seedsigner.models.psbt_parser import PSBTParser
         from seedsigner.models.seed import Seed
@@ -331,10 +340,135 @@ def load_seedsigner():
     return PSBTParser, Seed, network
 
 
+def load_derivation_checks():
+    """SeedSigner's derivation path validator and the refusals it raises, or None on a
+    checkout from before Validate derivations. Call after load_seedsigner."""
+    try:
+        from seedsigner.helpers.embit_utils import get_display_derivation_path
+        from seedsigner.models import psbt_parser
+        from seedsigner.models.derivation_path_validator import DerivationPathValidator
+    except ImportError:
+        return None
+    refusals = {
+        DerivationPathValidator.STATUS__NONSTANDARD:
+            psbt_parser.PSBTNonstandardDerivationPathError,
+        DerivationPathValidator.STATUS__ANOTHER_SCRIPT_TYPE:
+            psbt_parser.PSBTDerivationPathScriptTypeMismatchError,
+        DerivationPathValidator.STATUS__ANOTHER_NETWORK:
+            psbt_parser.PSBTDerivationPathNetworkMismatchError,
+    }
+    # Refusals added later in the branch's life; an older checkout lacks them
+    for status, name in (("change_follows_nonstandard", "PSBTChangeFollowsNonstandardInputError"),
+                         ("mixed_networks", "PSBTDerivationPathMixedNetworksError")):
+        if hasattr(psbt_parser, name):
+            refusals[status] = getattr(psbt_parser, name)
+    return SimpleNamespace(
+        validator=DerivationPathValidator,
+        display=get_display_derivation_path,
+        refusals=refusals)
+
+
+def verify_derivations(entry, check, seeds, parser_cls, seed_cls, ss_network, dv) -> list:
+    """Hold one Validate derivations scenario to its def's `check`."""
+    data = load(f"data/scenario/{entry['id']}.json")
+    seed = seed_cls(seeds[entry["signing_seeds"][0]]["mnemonic"].split())
+    network = ss_network(entry["network"])
+
+    def parse(**kwargs):
+        return parser_cls(PSBT.from_string(data["psbt_base64"]), seed, network, **kwargs)
+
+    def distant(p):
+        return any(c["address_index_beyond_window"] for c in p.change_data)
+
+    problems = []
+    # With the setting off the parser gets no validator, which is what dev does: every
+    # psbt in the group parses, and none is marked distant.
+    try:
+        if distant(parse()):
+            problems.append("without a validator: change marked distant, which dev does not do")
+    except Exception as e:
+        problems.append(f"without a validator: {type(e).__name__}: {e}")
+    if dv is None:
+        return problems
+
+    expected = dv.refusals.get(check["status"])
+    try:
+        p = parse(derivation_path_validator=dv.validator())
+    except tuple(dv.refusals.values()) as e:
+        if expected is None or type(e) is not expected:
+            want = expected.__name__ if expected else "a clean parse"
+            return problems + [f"with a validator: {type(e).__name__}, expected {want}"]
+        result = getattr(e, "validation_result", None)
+        if result is None:
+            # A refusal with no single path to show, such as mixed networks
+            return problems
+        for field in ("status", "offending_level_index", "indicated_network",
+                      "indicated_policy_type"):
+            want = check[field]
+            if field == "status":
+                # The refusal can differ from the shown path's own status: change that
+                # follows a nonstandard input shows the change's nonstandard path
+                want = check.get("path_status", want)
+            if field == "indicated_network" and want is not None:
+                want = ss_network(want)
+            if getattr(result, field) != want:
+                problems.append(f"with a validator: {field} {getattr(result, field)!r}, "
+                                f"expected {want!r}")
+        # Nonstandard Path and the change refusal show a long path on two lines
+        two_lines = (result.status == dv.validator.STATUS__NONSTANDARD
+                     or check["status"] == "change_follows_nonstandard")
+        max_lines = 2 if two_lines else 1
+        text = dv.display(result.derivation_path, result.offending_level_index,
+                          max_lines=max_lines)
+        if text != check["text"]:
+            problems.append(f"with a validator: screen shows {text!r}, expected "
+                            f"{check['text']!r}")
+        return problems
+    except Exception as e:
+        return problems + [f"with a validator: {type(e).__name__}: {e}"]
+
+    if expected is not None:
+        problems.append(f"with a validator: parsed, expected {expected.__name__}")
+    elif distant(p) != check["distant"]:
+        problems.append(f"with a validator: change marked distant is {distant(p)}, "
+                        f"expected {check['distant']}")
+    return problems
+
+
+def main_derivations(index, seeds, parser_cls, seed_cls, ss_network):
+    if parser_cls is None:
+        sys.exit("--derivations needs a SeedSigner checkout; pass --seedsigner PATH.")
+    dv = load_derivation_checks()
+    if dv is None:
+        print("This checkout has no derivation path validator, so only the parse without "
+              "one, as dev parses, is checked.\n")
+    checks = {s.id: s.derivation_check for s in scenario_defs.test_scenarios()
+              if s.pr == "1090"}
+    entries = [s for s in index["scenarios"] if s["id"] in checks]
+    if len(entries) != len(checks):
+        sys.exit(f"site/dist has {len(entries)} of the group's {len(checks)} scenarios; "
+                 f"rebuild the site.")
+    failures = 0
+    for i, entry in enumerate(entries, 1):
+        problems = verify_derivations(entry, checks[entry["id"]], seeds, parser_cls,
+                                      seed_cls, ss_network, dv)
+        print(f"  [{i:>2}/{len(entries)}] {entry['id']:<46s} {'OK' if not problems else 'FAIL'}")
+        for problem in problems:
+            failures += 1
+            print(f"        - {problem}")
+    print(f"\n{'PASS: no problems found' if not failures else f'FAILED: {failures} problem(s)'}")
+    return 1 if failures else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--all", action="store_true",
                     help="verify every scenario and every QR variant (slow)")
+    ap.add_argument("--seedsigner", metavar="PATH",
+                    help="SeedSigner's src directory (default: $SEEDSIGNER_SRC, then "
+                         f"{SEEDSIGNER_SRC})")
+    ap.add_argument("--derivations", action="store_true",
+                    help="check only the Validate derivations group against SeedSigner")
     args = ap.parse_args()
 
     if not os.path.isdir(DIST):
@@ -342,7 +476,10 @@ def main():
 
     index = load("data/index.json")
     seeds = load_seeds()
-    parser_cls, seed_cls, ss_network = load_seedsigner()
+    src = args.seedsigner or os.environ.get("SEEDSIGNER_SRC") or SEEDSIGNER_SRC
+    parser_cls, seed_cls, ss_network = load_seedsigner(os.path.expanduser(src))
+    if args.derivations:
+        return main_derivations(index, seeds, parser_cls, seed_cls, ss_network)
     if parser_cls:
         print("Cross-checking against SeedSigner's PSBTParser\n")
 

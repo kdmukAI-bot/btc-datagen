@@ -47,7 +47,7 @@ from common import script_types
 from common.keys import make_cosigner
 from common.op_return_psbt import OP_RETURN_CASES, build_op_return_psbt
 from common.psbt import (build_psbt, _funding_tx, _path_ints, _ScriptContext,
-                         CHANGE_BRANCH, RECEIVE_BRANCH)
+                         CHANGE_BRANCH, RECEIVE_BRANCH, IN_VALUE)
 
 # A key nobody in the fixtures owns. Deterministic so builds are reproducible;
 # domain-separated so it can never collide with a real fixture seed.
@@ -2062,6 +2062,187 @@ def _pr1088_self_transfer(signers, network, num_inputs, threshold):
     return _pr1088_psbt(signers, num_inputs, threshold, output_shape="self_transfer")
 
 
+# --- PR #1090: standard derivation paths ------------------------------------
+#
+# SeedSigner's Validate derivations setting signs only when every input of this seed's
+# is at a standard derivation path: a known wallet base path, branch 0 or 1, and an
+# ordinary address index. These builders make the psbts for its test group.
+#
+# The dust input attack: a coordinator holding the account xpub sends a small coin to a
+# path it derives and no wallet scans, such as m/84h/0h/0h/7777/0/0. It then spends that
+# coin beside the user's own and sends the change to m/84h/0h/0h/7777/1/0. The change
+# path rules accept change at the base path of any input this seed signs, so without the
+# setting the change goes where the user's wallet never looks. The dust and the change
+# sit at index 0, or at 5,000,123 in the distant variants.
+#
+# Each psbt is built so the standardness check is the only thing the device finds. Single
+# sig segwit v0 inputs at more than one base path must each carry their previous
+# transaction, so wherever a builder mixes base paths every input carries one. Legacy
+# inputs always do.
+
+_PR1090_DUST = 1_000
+_PR1090_DISTANT_INDEX = 5_000_123
+_PR1090_FUNDING_NONCE = 20_001
+_PR1090_DUST_NONCE = _PR1090_FUNDING_NONCE + 100
+# One hidden level per script type, so no two scenarios reuse an address.
+_PR1090_LEVELS = {
+    "P2WPKH": 7777,
+    "P2SH-P2WPKH": 7778,
+    "P2TR": 7779,
+    "P2PKH": 7780,
+    "P2WSH": 7781,
+    "P2SH-P2WSH": 7782,
+    "P2SH": 7783,
+}
+# Dust in another standard account: the account the coordinator picks.
+_PR1090_DUST_ACCOUNT = 7
+# Change measured across accounts: the user's coins at account 1 from receive index 5,
+# the dust at account 0 one index below the change.
+_PR1090_SPEND_ACCOUNT = 1
+_PR1090_SPEND_FIRST_INDEX = 5
+_PR1090_FAR_INDEX = 1_000_000
+
+
+def _pr1090_fund_input(inp, signers, script_type, threshold, path, value, nonce):
+    """Point `inp` at the key at `path` under each signer's account, funded by a real
+    previous transaction that it carries as its non-witness UTXO and spends by txid."""
+    inp.partial_sigs.clear()
+    inp.bip32_derivations.clear()
+    inp.taproot_bip32_derivations.clear()
+    inp.non_witness_utxo = None
+    inp.witness_utxo = None
+    inp.redeem_script = None
+    inp.witness_script = None
+
+    ctx = _ScriptContext(signers, threshold, script_type, *path)
+    tx = _funding_tx(ctx, value, nonce)
+    ctx.apply_to_input(inp, value, tx)
+    inp.non_witness_utxo = tx
+    inp.txid = tx.txid()
+    inp.vout = 0
+
+
+def _pr1090_prove_inputs(psbt, signers, script_type, threshold=None):
+    """Give each of build_psbt's inputs its real previous transaction, as a coordinator
+    does for inputs of the user's at more than one base path."""
+    for i, inp in enumerate(psbt.inputs):
+        ctx = _ScriptContext(signers, threshold, script_type, RECEIVE_BRANCH, i)
+        tx = _funding_tx(ctx, IN_VALUE, _PR1090_FUNDING_NONCE + i)
+        inp.non_witness_utxo = tx
+        inp.txid = tx.txid()
+        inp.vout = 0
+
+
+def _pr1090_add_input(psbt, signers, script_type, threshold, path, value, nonce):
+    """Append a coin paying our key at `path` under each signer's account. Its value is
+    added to the payment, so the fee is unchanged."""
+    added = deepcopy(psbt.inputs[0])
+    _pr1090_fund_input(added, signers, script_type, threshold, path, value, nonce)
+    psbt.inputs.append(added)
+    psbt.outputs[0].value += value
+
+
+def _pr1090_dust(signers, network, num_inputs, threshold=None, *, script_type,
+                      level=None, address_index=0, dust_account=None):
+    """The user's ordinary spend, every input with its previous transaction, plus 1,000
+    sats of dust and the change moved under the dust's base path.
+
+    The dust sits at `level`/0/`address_index` under the account and the change at
+    `level`/1/`address_index`. With `dust_account` (single sig only) both go to that
+    standard account instead: the dust at 0/0 and the change at 1/1."""
+    psbt = build_psbt(signers, script_type, num_inputs, "change", threshold=threshold)
+    _pr1090_prove_inputs(psbt, signers, script_type, threshold)
+    if dust_account is None:
+        dust_signers = signers
+        dust_path = (level, RECEIVE_BRANCH, address_index)
+        change_path = (level, CHANGE_BRANCH, address_index)
+    else:
+        dust_signers = [_other_account(s, dust_account) for s in signers]
+        dust_path = (RECEIVE_BRANCH, 0)
+        change_path = (CHANGE_BRANCH, 1)
+    _pr1090_add_input(psbt, dust_signers, script_type, threshold, dust_path,
+                           _PR1090_DUST, _PR1090_DUST_NONCE)
+    _pr1073_move_change(psbt, dust_signers, script_type, threshold, *change_path)
+    return psbt
+
+
+def _pr1090_wallet(signers, network, num_inputs, threshold=None, *, script_type,
+                        derivation=None, account=None):
+    """An ordinary spend, every input and the change, from the seed at another account
+    path: `derivation` in full, or `account` in place of the account number (single sig
+    only). With neither, the wallet fixture's own spend."""
+    if derivation is not None:
+        signers = [make_cosigner(s.name, s.mnemonic, derivation, s.network) for s in signers]
+    elif account is not None:
+        signers = [_other_account(s, account) for s in signers]
+    return build_psbt(signers, script_type, num_inputs, "change", threshold=threshold)
+
+
+def _pr1090_branch_2(signers, network, num_inputs, *, script_type):
+    """An ordinary spend with input 0 moved to branch 2 of the same account. The base
+    path is unchanged, so the inputs need no previous transactions."""
+    psbt = build_psbt(signers, script_type, num_inputs, "change")
+    _pr1073_move_input(psbt.inputs[0], signers, script_type, 2, 0)
+    return psbt
+
+
+def _pr1090_cross_account(signers, network, num_inputs, *, script_type):
+    """The user's coins at account 1 from receive index 5, plus dust at account 0 receive
+    index 999,999, with the change at account 0 change index 1,000,000. Every input
+    carries its previous transaction. Within account 0 the change sits next to the dust;
+    measured from the user's own coins it is a million indexes away."""
+    spend_signers = [_other_account(s, _PR1090_SPEND_ACCOUNT) for s in signers]
+    psbt = build_psbt(signers, script_type, num_inputs, "change")
+    for i, inp in enumerate(psbt.inputs):
+        _pr1090_fund_input(inp, spend_signers, script_type, None,
+                                (RECEIVE_BRANCH, _PR1090_SPEND_FIRST_INDEX + i),
+                                IN_VALUE, _PR1090_FUNDING_NONCE + i)
+    _pr1090_add_input(psbt, signers, script_type, None,
+                           (RECEIVE_BRANCH, _PR1090_FAR_INDEX - 1),
+                           _PR1090_DUST, _PR1090_DUST_NONCE)
+    _pr1073_move_change(psbt, signers, script_type, None, CHANGE_BRANCH, _PR1090_FAR_INDEX)
+    return psbt
+
+
+def _dust_case(script_type, address_index=0):
+    return (script_type, _pr1090_dust,
+            {"level": _PR1090_LEVELS[script_type], "address_index": address_index})
+
+
+# kind -> (script type, builder, keyword arguments). Registered below with the other
+# test builders; common/scenarios.py reads each case's script type from here.
+PR1090_CASES = {
+    # the dust input attack
+    "dust_p2wpkh": _dust_case("P2WPKH"),
+    "dust_p2wpkh_distant": _dust_case("P2WPKH", _PR1090_DISTANT_INDEX),
+    "dust_p2sh_p2wpkh": _dust_case("P2SH-P2WPKH"),
+    "dust_p2tr": _dust_case("P2TR"),
+    "dust_p2pkh": _dust_case("P2PKH"),
+    "dust_p2wsh": _dust_case("P2WSH"),
+    "dust_p2wsh_distant": _dust_case("P2WSH", _PR1090_DISTANT_INDEX),
+    "dust_p2sh_p2wsh": _dust_case("P2SH-P2WSH"),
+    "dust_p2sh": _dust_case("P2SH"),
+    # a standard path for another network or script type
+    "network_testnet": ("P2WPKH", _pr1090_wallet, {}),
+    "script_legacy_at_taproot": ("P2PKH", _pr1090_wallet, {"derivation": "m/86h/0h/0h"}),
+    "script_single_at_multisig": ("P2WPKH", _pr1090_wallet,
+                                  {"derivation": "m/48h/0h/0h/2h"}),
+    # nonstandard paths
+    "account_10": ("P2WPKH", _pr1090_wallet, {"account": 10}),
+    "custom_wallet": ("P2WPKH", _pr1090_wallet, {"derivation": "m/84h/0h/0h/7777"}),
+    "branch_2": ("P2WPKH", _pr1090_branch_2, {}),
+    "electrum": ("P2WPKH", _pr1090_wallet, {"derivation": "m/0h"}),
+    # wallet layouts the setting accepts
+    "whirlpool_postmix": ("P2WPKH", _pr1090_wallet, {"account": 2147483646}),
+    "caravan": ("P2SH", _pr1090_wallet, {}),
+    "unchained": ("P2WSH", _pr1090_wallet, {}),
+    # what the setting does not catch
+    "dust_other_account": ("P2WPKH", _pr1090_dust,
+                           {"dust_account": _PR1090_DUST_ACCOUNT}),
+    "distant_cross_account": ("P2WPKH", _pr1090_cross_account, {}),
+}
+
+
 _TEST_BUILDERS = {
     "contradiction_singlesig": _d5_contradiction_singlesig,
     "contradiction_pays_us_claims_other": _d5_contradiction_pays_us_claims_other,
@@ -2178,6 +2359,12 @@ for _kind, (_script_type, _builder, _field) in PR1047_CASES.items():
     if script_types.get(_script_type).is_multisig:
         _MULTISIG_KINDS.add(_kind)
 
+# The Validate derivations kinds, likewise registered from their table.
+for _kind, (_script_type, _builder, _kwargs) in PR1090_CASES.items():
+    _TEST_BUILDERS[_kind] = partial(_builder, script_type=_script_type, **_kwargs)
+    if script_types.get(_script_type).is_multisig:
+        _MULTISIG_KINDS.add(_kind)
+
 
 def build_test_psbt(kind: str, signers: list, script_type: str,
                     network: str = "main", num_inputs: int = 3, threshold: int = None):
@@ -2187,8 +2374,9 @@ def build_test_psbt(kind: str, signers: list, script_type: str,
     input-amount lies, #1041's negative-fee psbt, #1060's input claims, #1073's
     change paths, #1087's multisig change forgeries (their descriptors come from
     build_test_descriptor), #1088's honest multisig change with and without
-    global xpubs, and the honest OP_RETURN psbts for #1042 and #1043, which
-    common/op_return_psbt builds."""
+    global xpubs, the Validate derivations group's derivation paths, and the
+    honest OP_RETURN psbts for #1042 and #1043, which common/op_return_psbt
+    builds."""
     if kind in ("fake_change", "bad_input"):
         return build_attack_psbt(kind, signers, script_type, network, num_inputs, threshold)
     if kind == "wrong_seed":

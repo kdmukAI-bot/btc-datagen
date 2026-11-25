@@ -69,6 +69,16 @@ WALLET_DEFS = [
      "signers": ["alice", "bob", "carol"]},
     {"name": "2of3_p2sh", "script_type": "P2SH", "threshold": 2,
      "signers": ["alice", "bob", "carol"]},
+    # Test only: multisig layouts the Validate derivations test group signs at, so the
+    # site can offer each one's descriptor. `derivation` replaces the script type's
+    # account path, and `test_only` keeps them out of the site's address verification
+    # list. Caravan's legacy multisig default, and Unchained's vault layout (vault 0).
+    {"name": "2of3_p2sh_caravan", "script_type": "P2SH", "threshold": 2,
+     "signers": ["alice", "bob", "carol"], "derivation": "m/45h/{coin}h/0h",
+     "test_only": True},
+    {"name": "2of3_p2wsh_unchained", "script_type": "P2WSH", "threshold": 2,
+     "signers": ["alice", "bob", "carol"], "derivation": "m/45h/0/0/0",
+     "test_only": True},
 ]
 
 
@@ -91,7 +101,10 @@ def build_seeds() -> list:
 
 def build_wallet(wd: dict, network: str, seeds_by_name: dict) -> dict:
     info = script_types.get(wd["script_type"])
-    derivation = script_types.derivation_for(wd["script_type"], network)
+    if "derivation" in wd:
+        derivation = wd["derivation"].format(coin=script_types.COIN_TYPE[network])
+    else:
+        derivation = script_types.derivation_for(wd["script_type"], network)
     threshold = wd.get("threshold")
     signers = [make_signer(n, seeds_by_name[n]["mnemonic"], derivation, network)
                for n in wd["signers"]]
@@ -107,7 +120,7 @@ def build_wallet(wd: dict, network: str, seeds_by_name: dict) -> dict:
             for i in range(ADDRESSES_PER_BRANCH)
         ]
 
-    return {
+    wallet = {
         "name": name,
         "sig_type": info.sig_type,
         "policy": policy,
@@ -126,6 +139,9 @@ def build_wallet(wd: dict, network: str, seeds_by_name: dict) -> dict:
                            "derivation": s.derivation, "xpub": s.xpub} for s in signers],
         "addresses": addresses,
     }
+    if wd.get("test_only"):
+        wallet["test_only"] = True
+    return wallet
 
 
 def build_wallets(seeds_by_name: dict) -> list:
